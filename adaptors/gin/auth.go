@@ -8,6 +8,13 @@ import (
 )
 
 func IsAuth(c *gin.Context) {
+	authHeader := c.Request.Header["Authorization"]
+
+	if len(authHeader) < 1 {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "UNAUTHORIZED"})
+		return
+	}
+
 	token := strings.Split(c.Request.Header["Authorization"][0], " ")[1]
 	err := auth.VerifyToken(token)
 
