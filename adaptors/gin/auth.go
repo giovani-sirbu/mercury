@@ -2,7 +2,7 @@ package ginAdaptors
 
 import (
 	"github.com/gin-gonic/gin"
-	"mercury/auth"
+	"github.com/giovani-sirbu/mercury/auth"
 	"net/http"
 	"strings"
 )
