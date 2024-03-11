@@ -8,13 +8,22 @@ import (
 
 var secretKey = []byte("secret-key")
 
+type UserClaims struct {
+	jwt.RegisteredClaims
+	Id    string
+	Email string
+	Role  string
+	Exp   int64
+}
+
 // createToken generate an access token
-func createToken(id string, email string, role string) (string, error) {
+func createToken(user UserClaims) (string, error) {
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
 		jwt.MapClaims{
-			"id":    id,
-			"email": email,
-			"role":  role,
+			"id":    user.Id,
+			"email": user.Email,
+			"role":  user.Role,
 			"exp":   time.Now().Add(time.Hour * 24).Unix(),
 		})
 
@@ -43,21 +52,6 @@ func VerifyToken(tokenString string) error {
 	return nil
 }
 
-// createRefreshToken generate an access token used to refresh the access token
-func createRefreshToken(email string) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
-		jwt.MapClaims{
-			"exp": time.Now().Add(time.Hour * 24 * 7).Unix(),
-		})
-
-	tokenString, err := token.SignedString(secretKey)
-	if err != nil {
-		return "", err
-	}
-
-	return tokenString, nil
-}
-
 type Tokens struct {
 	Token        string
 	RefreshToken string
@@ -65,14 +59,31 @@ type Tokens struct {
 
 // GenerateTokens generate refresh and access tokens
 func GenerateTokens(id string, email string, role string) (Tokens, error) {
-	token, createError := createToken(id, email, role)
+	token, createError := createToken(UserClaims{Id: id, Email: email, Role: role, Exp: time.Now().Add(time.Hour * 24).Unix()})
 	if createError != nil {
 		return Tokens{}, createError
 	}
-	refreshToken, createRefreshError := createRefreshToken(email)
+	refreshToken, createRefreshError := createToken(UserClaims{Email: email, Exp: time.Now().Add(time.Hour * 24 * 7).Unix()})
 	if createRefreshError != nil {
 		return Tokens{}, createRefreshError
 	}
 
 	return Tokens{Token: token, RefreshToken: refreshToken}, nil
+}
+
+func ParseToken(jwtToken string) (UserClaims, error) {
+	var userClaim UserClaims
+	token, err := jwt.ParseWithClaims(jwtToken, &userClaim, func(token *jwt.Token) (interface{}, error) {
+		return []byte(secretKey), nil
+	})
+	if err != nil {
+		return userClaim, err
+	}
+
+	// Checking token validity
+	if !token.Valid {
+		return userClaim, fmt.Errorf("invalid token")
+	}
+
+	return userClaim, nil
 }
