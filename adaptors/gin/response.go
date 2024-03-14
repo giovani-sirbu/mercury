@@ -8,9 +8,8 @@ import (
 	"strings"
 )
 
-type Error struct {
-	Code  int    `json:"code"`
-	Error string `json:"error"`
+type Data struct {
+	Message string `json:"message"`
 }
 
 type ValidationErrors struct {
@@ -18,17 +17,12 @@ type ValidationErrors struct {
 	Errors  interface{} `json:"errors"`
 }
 
-type Data struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
-
-type Errors struct {
+type ValidationError struct {
 	Field   string `json:"field"`
 	Message string `json:"message"`
 }
 
-func (e Errors) Error() string {
+func (e ValidationError) Error() string {
 	return "VALIDATION_ERROR"
 }
 
@@ -64,39 +58,30 @@ func Response(c *gin.Context, statusCode int, data interface{}) error {
 
 func MessageResponse(c *gin.Context, statusCode int, message string) error {
 	return Response(c, statusCode, Data{
-		Code:    statusCode,
 		Message: message,
 	})
 }
 
-func ErrorResponse(c *gin.Context, statusCode int, message string) error {
-	return Response(c, statusCode, Error{
-		Code:  statusCode,
-		Error: message,
-	})
-}
-
 func ValidationResponse(c *gin.Context, _err error) {
-	var errors []Errors
+	var errors []ValidationError
 
 	switch err := _err.(type) {
 	case validator.ValidationErrors:
 		for _, e := range err {
-			//field := e.Field()
-			//msg := checkTagRules(e)
-			//errors[strings.ToLower(field)] = append(errors[field], msg)
-			errors = append(errors, Errors{
+			errors = append(errors, ValidationError{
 				Field:   strings.ToLower(e.Field()),
 				Message: checkTagRules(e),
 			})
 		}
 	default:
-		errors = append(errors, Errors{Field: "non_field_error", Message: err.Error()})
-		//errors["non_field_error"] = append(errors["non_field_error"], err.Error())
+		errors = append(errors, ValidationError{
+			Field:   "common",
+			Message: err.Error(),
+		})
 	}
 
 	err := Response(c, http.StatusUnprocessableEntity, ValidationErrors{
-		Message: "VALIDATION_ERROR",
+		Message: _err.Error(),
 		Errors:  errors,
 	})
 

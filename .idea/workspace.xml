@@ -5,6 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="b2e94f2f-0d9d-44bd-a6a1-b96202137336" name="Changes" comment="fix: add strategy handler">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/adaptors/gin/response.go" beforeDir="false" afterPath="$PROJECT_DIR$/adaptors/gin/response.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
