@@ -95,7 +95,11 @@ func ValidationResponse(c *gin.Context, _err error) {
 		//errors["non_field_error"] = append(errors["non_field_error"], err.Error())
 	}
 
-	err := Response(c, http.StatusUnprocessableEntity, errors)
+	err := Response(c, http.StatusUnprocessableEntity, ValidationErrors{
+		Message: "VALIDATION_ERROR",
+		Errors:  errors,
+	})
+
 	if err != nil {
 		return
 	}
