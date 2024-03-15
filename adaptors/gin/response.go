@@ -22,10 +22,6 @@ type ValidationError struct {
 	Message string `json:"message"`
 }
 
-func (e ValidationError) Error() string {
-	return "VALIDATION_ERROR"
-}
-
 func checkTagRules(e validator.FieldError) (errMsg string) {
 	tag, field, param, value := e.ActualTag(), e.Field(), e.Param(), e.Value()
 
@@ -75,13 +71,13 @@ func ValidationResponse(c *gin.Context, _err error) {
 		}
 	default:
 		errors = append(errors, ValidationError{
-			Field:   "common",
-			Message: err.Error(),
+			Field:   "all",
+			Message: "invalid payload",
 		})
 	}
 
 	err := Response(c, http.StatusUnprocessableEntity, ValidationErrors{
-		Message: _err.Error(),
+		Message: "VALIDATION_ERROR",
 		Errors:  errors,
 	})
 
