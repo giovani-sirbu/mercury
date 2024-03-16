@@ -48,14 +48,15 @@ func checkTagRules(e validator.FieldError) (errMsg string) {
 }
 
 func Response(c *gin.Context, statusCode int, data interface{}) error {
-	c.JSON(statusCode, data)
-	return nil
-}
+	if _, ok := data.(string); ok {
+		c.JSON(statusCode, Data{
+			Message: data.(string),
+		})
+	} else {
+		c.JSON(statusCode, data)
+	}
 
-func MessageResponse(c *gin.Context, statusCode int, message string) error {
-	return Response(c, statusCode, Data{
-		Message: message,
-	})
+	return nil
 }
 
 func ValidationResponse(c *gin.Context, _err error) {

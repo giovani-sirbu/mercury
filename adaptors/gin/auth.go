@@ -9,9 +9,11 @@ import (
 
 func IsAuth(c *gin.Context) {
 	authHeader := c.Request.Header["Authorization"]
+	userId := c.Param("userId")
 
 	if len(authHeader) < 1 {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "UNAUTHORIZED"})
+		c.Abort()
+		Response(c, http.StatusUnauthorized, Data{Message: "UNAUTHORIZED"})
 		return
 	}
 
@@ -19,9 +21,20 @@ func IsAuth(c *gin.Context) {
 	err := auth.VerifyToken(token)
 
 	if err != nil {
-		// User is not logged in
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "UNAUTHORIZED"})
+		c.Abort()
+		Response(c, http.StatusUnauthorized, Data{Message: "UNAUTHORIZED"})
 		return
+	}
+
+	// if userId exist in url, compare it with userId stored in token and return error if different
+	// TODO - bypass if role is admin/superAdmin
+	if len(userId) != 0 {
+		userInfo, _ := auth.ParseToken(token)
+		if userInfo.Id != userId {
+			c.Abort()
+			Response(c, http.StatusUnauthorized, Data{Message: "UNAUTHORIZED"})
+			return
+		}
 	}
 
 	// Continue down the chain, user is logged in
