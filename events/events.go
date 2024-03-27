@@ -1,7 +1,6 @@
 package events
 
 import (
-	"encoding/json"
 	"github.com/giovani-sirbu/mercury/exchange"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
@@ -13,7 +12,7 @@ type (
 		Exchange    exchange.Exchange
 		Trade       aggragates.Trade
 		EventsNames []string
-		Events      map[string]func([]byte)
+		Events      map[string]func(Events) (Events, error)
 	}
 	EventPayload struct {
 		Storage     interface{}
@@ -41,15 +40,17 @@ func (e Events) Run() {
 	if e.Events[e.EventsNames[0]] == nil {
 		return
 	}
-	eventInBytes, _ := json.Marshal(EventPayload{e.Storage, e.Broker, e.Exchange, e.Trade, e.EventsNames})
 
-	e.Events[e.EventsNames[0]](eventInBytes)
-	e.Next()
+	newEvent, err := e.Events[e.EventsNames[0]](e)
+	if err != nil {
+		return
+	}
+	newEvent.Next()
 }
 
 // Add Function to register a new event or replace a default one
-func (e Events) Add(event string, action func([]byte)) Events {
-	var newEvent = make(map[string]func([]byte))
+func (e Events) Add(event string, action func(Events) (Events, error)) Events {
+	var newEvent = make(map[string]func(Events) (Events, error))
 	for key, value := range e.Events {
 		newEvent[key] = value
 	}
