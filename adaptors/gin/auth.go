@@ -4,12 +4,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/giovani-sirbu/mercury/auth"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
+func stringToUint(s string) uint {
+	i, _ := strconv.Atoi(s)
+	return uint(i)
+}
+
 func IsAuth(c *gin.Context) {
 	authHeader := c.Request.Header["Authorization"]
-	userId := c.Param("userId")
+	userId := stringToUint(c.Param("userId"))
 
 	if len(authHeader) < 1 {
 		c.Abort()
@@ -27,8 +33,7 @@ func IsAuth(c *gin.Context) {
 	}
 
 	// if userId exist in url, compare it with userId stored in token and return error if different
-	// TODO - bypass if role is admin/superAdmin
-	if len(userId) != 0 {
+	if userId != 0 {
 		userInfo, _ := auth.ParseToken(token)
 		if userInfo.Id != userId {
 			c.Abort()
