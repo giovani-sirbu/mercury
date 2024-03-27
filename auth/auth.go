@@ -10,7 +10,7 @@ var secretKey = []byte("secret-key")
 
 type UserClaims struct {
 	jwt.RegisteredClaims
-	Id    string
+	Id    uint
 	Email string
 	Role  string
 	Exp   int64
@@ -53,12 +53,12 @@ func VerifyToken(tokenString string) error {
 }
 
 type Tokens struct {
-	Token        string
-	RefreshToken string
+	AccessToken  string `form:"accessToken" json:"accessToken" xml:"accessToken"`
+	RefreshToken string `form:"refreshToken" json:"refreshToken" xml:"refreshToken"`
 }
 
 // GenerateTokens generate refresh and access tokens
-func GenerateTokens(id string, email string, role string) (Tokens, error) {
+func GenerateTokens(id uint, email string, role string) (Tokens, error) {
 	token, createError := createToken(UserClaims{Id: id, Email: email, Role: role, Exp: time.Now().Add(time.Hour * 24).Unix()})
 	if createError != nil {
 		return Tokens{}, createError
@@ -68,7 +68,7 @@ func GenerateTokens(id string, email string, role string) (Tokens, error) {
 		return Tokens{}, createRefreshError
 	}
 
-	return Tokens{Token: token, RefreshToken: refreshToken}, nil
+	return Tokens{AccessToken: token, RefreshToken: refreshToken}, nil
 }
 
 func ParseToken(jwtToken string) (UserClaims, error) {
