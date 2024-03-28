@@ -2,6 +2,7 @@ package events
 
 import (
 	"github.com/giovani-sirbu/mercury/exchange"
+	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/messagebroker"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
@@ -37,6 +38,7 @@ func (e Events) Run() {
 
 	newEvent, err := e.Events[e.EventsNames[0]](e)
 	if err != nil {
+		log.Error(err.Error(), "Run events", "")
 		return
 	}
 	newEvent.Next()
