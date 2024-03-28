@@ -69,7 +69,6 @@ func HasFunds(event events.Events) (events.Events, error) {
 	return event, nil
 }
 
-// TODO: action to to verify if trade is on profit
 func HasProfit(event events.Events) (events.Events, error) {
 	simulateHistory := event.Trade.History
 	_, feeInQuote := CalculateFees(event.Trade.History, event.Trade.Symbol)
@@ -77,7 +76,8 @@ func HasProfit(event events.Events) (events.Events, error) {
 	simulateHistory = append(simulateHistory, aggragates.History{Type: "sell", Quantity: buyQuantity})
 	profit := GetProfit(simulateHistory)
 	if profit-feeInQuote < 0 {
-		return events.Events{}, fmt.Errorf("profit is smaller then min profit")
+		msg := fmt.Sprintf("profit: %f is smaller then min profit", profit)
+		return events.Events{}, fmt.Errorf(msg)
 	}
 	return event, nil
 }
