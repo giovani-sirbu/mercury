@@ -2,24 +2,18 @@ package events
 
 import (
 	"github.com/giovani-sirbu/mercury/exchange"
+	"github.com/giovani-sirbu/mercury/messagebroker"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
 type (
 	Events struct {
 		Storage     interface{}
-		Broker      interface{}
+		Broker      messagebroker.MessageBroker
 		Exchange    exchange.Exchange
 		Trade       aggragates.Trade
 		EventsNames []string
 		Events      map[string]func(Events) (Events, error)
-	}
-	EventPayload struct {
-		Storage     interface{}
-		Broker      interface{}
-		Exchange    exchange.Exchange
-		Trade       aggragates.Trade
-		EventsNames []string
 	}
 )
 

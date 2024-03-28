@@ -8,22 +8,23 @@ import (
 	commonLog "github.com/giovani-sirbu/mercury/log"
 	"github.com/segmentio/kafka-go"
 	"os"
-	"strings"
 	"time"
 )
 
 // Produce messages
-func Producer(topic string, parent context.Context, key, value []byte) (err error) {
-	brokerAddress := strings.Split(os.Getenv("BROKERS"), ",")
+func (m MessageBroker) Producer(topic string, parent context.Context, key, value []byte) (err error) {
 	// intialize the writer with the broker addresses, and the topic
+	serviceCert := fmt.Sprintf("%s/service.cert", m.CertsPath)
+	serviceKey := fmt.Sprintf("%s/service.key", m.CertsPath)
+	caCerts := fmt.Sprintf("%s/ca.pem", m.CertsPath)
 
-	keypair, err := tls.LoadX509KeyPair("/app/common/service.cert", "/app/common/service.key")
+	keypair, err := tls.LoadX509KeyPair(serviceCert, serviceKey)
 
 	if err != nil {
 		commonLog.Error(fmt.Sprintf("Failed to load Access Key and/or Access Certificate: %s", err), "", "Producer")
 	}
 
-	caCert, err := os.ReadFile("/app/common/ca.pem")
+	caCert, err := os.ReadFile(caCerts)
 	if err != nil {
 		commonLog.Error(fmt.Sprintf("Failed to read CA Certificate file: %s", err), "", "Producer")
 	}
@@ -36,7 +37,7 @@ func Producer(topic string, parent context.Context, key, value []byte) (err erro
 	}
 
 	dialer := &kafka.Dialer{
-		Timeout:   10 * time.Second,
+		Timeout:   m.Timeout,
 		DualStack: true,
 		TLS: &tls.Config{
 			Certificates: []tls.Certificate{keypair},
@@ -44,10 +45,10 @@ func Producer(topic string, parent context.Context, key, value []byte) (err erro
 		},
 	}
 
-	topicWithPrefix := fmt.Sprintf("%s-%s", os.Getenv("TOPIC_PREFIX"), topic)
+	topicWithPrefix := fmt.Sprintf("%s%s", os.Getenv("TOPIC_PREFIX"), topic)
 
 	w := kafka.NewWriter(kafka.WriterConfig{
-		Brokers: brokerAddress,
+		Brokers: m.Address,
 		Topic:   topicWithPrefix,
 		Dialer:  dialer,
 	})

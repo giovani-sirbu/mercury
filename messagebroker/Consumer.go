@@ -8,26 +8,25 @@ import (
 	commonLog "github.com/giovani-sirbu/mercury/log"
 	"github.com/segmentio/kafka-go"
 	"os"
-	"strings"
-	"time"
 )
 
 // Handler response func type
 type fn func([]byte)
 
 // Consumer messages
-func Consumer(topic string, handler fn) {
-	brokerAddress := strings.Split(os.Getenv("BROKERS"), ",")
-
+func (m MessageBroker) Consumer(topic string, handler fn) {
 	// intialize the writer with the broker addresses, and the topic
+	serviceCert := fmt.Sprintf("%s/service.cert", m.CertsPath)
+	serviceKey := fmt.Sprintf("%s/service.key", m.CertsPath)
+	caCerts := fmt.Sprintf("%s/ca.pem", m.CertsPath)
 
-	keypair, err := tls.LoadX509KeyPair("/app/common/service.cert", "/app/common/service.key")
+	keypair, err := tls.LoadX509KeyPair(serviceCert, serviceKey)
 
 	if err != nil {
 		commonLog.Error(fmt.Sprintf("Failed to load Access Key and/or Access Certificate: %s", err), "", "Producer")
 	}
 
-	caCert, err := os.ReadFile("/app/common/ca.pem")
+	caCert, err := os.ReadFile(caCerts)
 	if err != nil {
 		commonLog.Error(fmt.Sprintf("Failed to read CA Certificate file: %s", err), "", "Producer")
 	}
@@ -40,7 +39,7 @@ func Consumer(topic string, handler fn) {
 	}
 
 	dialer := &kafka.Dialer{
-		Timeout:   10 * time.Second,
+		Timeout:   m.Timeout,
 		DualStack: true,
 		TLS: &tls.Config{
 			Certificates: []tls.Certificate{keypair},
@@ -48,12 +47,12 @@ func Consumer(topic string, handler fn) {
 		},
 	}
 
-	topicWithPrefix := fmt.Sprintf("%s-%s", os.Getenv("TOPIC_PREFIX"), topic)
+	topicWithPrefix := fmt.Sprintf("%s%s", os.Getenv("TOPIC_PREFIX"), topic)
 	commonLog.Info(fmt.Sprintf("Consumer started on topic: %s, on brokers: %s", topicWithPrefix, os.Getenv("BROKERS")), "", "Consumer")
 
 	// initialize a new reader with the brokers and topic
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:  brokerAddress,   // Broker list
+		Brokers:  m.Address,       // Broker list
 		Topic:    topicWithPrefix, // Topic to consume
 		MinBytes: 1,
 		MaxBytes: 57671680,

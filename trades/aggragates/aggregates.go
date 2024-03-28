@@ -8,16 +8,15 @@ type (
 		Price float64 `bson:"price" json:"price"`
 	}
 	FeeDetails struct {
-		Asset string  `bson:"asset" json:"asset"`
-		Fee   float64 `bson:"fee" json:"fee"`
+		Asset      string  `bson:"asset" json:"asset"`
+		Fee        float64 `bson:"fee" json:"fee"`
+		FeeInQuote float64 `bson:"feeInQuote" json:"feeInQuote"`
 	}
 	History struct {
 		ID         string       `bson:"_id" json:"_id"`
 		Type       string       `bson:"type" json:"type"`
 		Quantity   float64      `bson:"quantity" json:"quantity"`
 		Price      float64      `bson:"price" json:"price"`
-		Fee        float64      `bson:"fee" json:"fee"`
-		FeeAsset   string       `bson:"feeAsset" json:"feeAsset"`
 		FeeDetails []FeeDetails `bson:"feeDetails" json:"feeDetails"`
 		OrderId    int64        `bson:"orderId" json:"orderId"`
 		Status     string       `bson:"status" json:"status"`
