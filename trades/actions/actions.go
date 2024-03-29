@@ -9,6 +9,7 @@ import (
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -90,6 +91,7 @@ func Buy(event events.Events) (events.Events, error) {
 	}
 	buyQuantity, _ := trades.GetQuantities(event.Trade.History)
 	priceInString := strconv.FormatFloat(event.Trade.Position.Price, 'f', -1, 64)
+	buyQuantity = ToFixed(buyQuantity, event.TradeSettings.LotSize)
 
 	var response aggregates.CreateOrderResponse
 	var err error
@@ -116,9 +118,10 @@ func Sell(event events.Events) (events.Events, error) {
 	}
 	buyQuantity, _ := trades.GetQuantities(event.Trade.History)
 	feeInBase, _ := CalculateFees(event.Trade.History, event.Trade.Symbol)
+	quantity := ToFixed(buyQuantity-feeInBase, event.TradeSettings.LotSize)
 	priceInString := strconv.FormatFloat(event.Trade.Position.Price, 'f', -1, 64)
 
-	response, err := client.Sell(event.Trade.Symbol, buyQuantity-feeInBase, priceInString)
+	response, err := client.Sell(event.Trade.Symbol, quantity, priceInString)
 
 	event.Trade.PendingOrder = response.OrderID
 
@@ -168,4 +171,9 @@ func GetProfit(history []aggragates.History) float64 {
 		}
 	}
 	return sellTotal - buyTotal
+}
+
+func ToFixed(num float64, precision int) float64 {
+	output := math.Pow(10, float64(precision))
+	return math.Round(num*output) / output
 }

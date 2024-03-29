@@ -83,6 +83,11 @@ type (
 		UpdatedAt       time.Time   `bson:"updatedAt" json:"updatedAt"`
 	}
 
+	TradeSettings struct {
+		LotSize   int
+		MinNotion float64
+	}
+
 	TradeResponse struct {
 		ID              string    `bson:"_id" json:"_id"`
 		UserId          string    `bson:"userId" json:"userId"`
