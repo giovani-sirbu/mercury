@@ -36,22 +36,20 @@ func (m MessageBroker) Producer(topic string, parent context.Context, key, value
 		commonLog.Error(fmt.Sprintf("Failed to parse CA Certificate file: %s", err), "", "Producer")
 	}
 
-	dialer := &kafka.Dialer{
-		Timeout:   m.Timeout,
-		DualStack: true,
-		TLS: &tls.Config{
-			Certificates: []tls.Certificate{keypair},
-			RootCAs:      caCertPool,
-		},
-	}
-
 	topicWithPrefix := fmt.Sprintf("%s%s", os.Getenv("TOPIC_PREFIX"), topic)
 
-	w := kafka.NewWriter(kafka.WriterConfig{
-		Brokers: m.Address,
-		Topic:   topicWithPrefix,
-		Dialer:  dialer,
-	})
+	w := &kafka.Writer{
+		Addr:         kafka.TCP(m.Address[0]),
+		Topic:        topicWithPrefix,
+		BatchTimeout: m.Timeout,
+		Transport: &kafka.Transport{
+			TLS: &tls.Config{
+				Certificates: []tls.Certificate{keypair},
+				RootCAs:      caCertPool,
+			},
+		},
+		AllowAutoTopicCreation: true,
+	}
 
 	// Define messages
 	msg := kafka.Message{

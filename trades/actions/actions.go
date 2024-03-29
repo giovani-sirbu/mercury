@@ -45,7 +45,7 @@ func HasFunds(event events.Events) (events.Events, error) {
 	assets, assetsErr := client.GetUserAssets() // Get user balance
 
 	if assetsErr != nil {
-		return events.Events{}, fmt.Errorf("could not fetch user assets")
+		return events.Events{}, assetsErr
 	}
 
 	var remainedQuantity float64 // Init needed quantity
@@ -73,7 +73,7 @@ func HasProfit(event events.Events) (events.Events, error) {
 	simulateHistory := event.Trade.History
 	_, feeInQuote := CalculateFees(event.Trade.History, event.Trade.Symbol)
 	buyQuantity, _ := trades.GetQuantities(event.Trade.History)
-	simulateHistory = append(simulateHistory, aggragates.History{Type: "sell", Quantity: buyQuantity})
+	simulateHistory = append(simulateHistory, aggragates.History{Type: "sell", Quantity: buyQuantity, Price: event.Trade.Position.Price})
 	profit := GetProfit(simulateHistory)
 	if profit-feeInQuote < 0 {
 		msg := fmt.Sprintf("profit: %f is smaller then min profit", profit)
