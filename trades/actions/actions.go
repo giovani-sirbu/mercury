@@ -41,6 +41,9 @@ func CancelPendingOrder(event events.Events) (events.Events, error) {
 }
 
 func HasFunds(event events.Events) (events.Events, error) {
+	if event.Exchange.TestNet {
+		return event, nil
+	}
 	exchangeInit := exchange.Exchange{Name: event.Exchange.Name, ApiKey: event.Exchange.ApiKey, ApiSecret: event.Exchange.ApiSecret, TestNet: event.Exchange.TestNet}
 	client, _ := exchangeInit.Client()
 	assets, assetsErr := client.GetUserAssets() // Get user balance
@@ -90,6 +93,11 @@ func Buy(event events.Events) (events.Events, error) {
 		return events.Events{}, clientError
 	}
 	buyQuantity, _ := trades.GetQuantities(event.Trade.History)
+
+	if buyQuantity == 0 {
+		buyQuantity = event.TradeSettings.MinNotion / event.Trade.Position.Price
+	}
+
 	priceInString := strconv.FormatFloat(event.Trade.Position.Price, 'f', -1, 64)
 	buyQuantity = ToFixed(buyQuantity, event.TradeSettings.LotSize)
 
