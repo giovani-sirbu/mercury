@@ -2,7 +2,6 @@ package memory
 
 import (
 	"context"
-	"crypto/tls"
 	"github.com/go-redis/cache/v8"
 	"github.com/go-redis/redis/v8"
 	"time"
@@ -16,10 +15,9 @@ type Memory struct {
 
 func (m Memory) Init() (*cache.Cache, context.Context) {
 	client := redis.NewUniversalClient(&redis.UniversalOptions{
-		Addrs:     m.Address,
-		Password:  m.Password,
-		Username:  m.User,
-		TLSConfig: &tls.Config{},
+		Addrs:    m.Address,
+		Password: m.Password,
+		Username: m.User,
 	})
 
 	cacheHandler := cache.New(&cache.Options{
