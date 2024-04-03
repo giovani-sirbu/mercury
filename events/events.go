@@ -20,29 +20,31 @@ type (
 )
 
 // Next Function to run the next event if we have multiple events
-func (e Events) Next() {
+func (e Events) Next() error {
 	if len(e.EventsNames) == 1 {
-		return
+		return nil
 	}
 	e.EventsNames = e.EventsNames[1:]
-	e.Run()
+	err := e.Run()
+	return err
 }
 
 // Run Function to run events
-func (e Events) Run() {
+func (e Events) Run() error {
 	if len(e.EventsNames) == 0 {
-		return
+		return nil
 	}
 	if e.Events[e.EventsNames[0]] == nil {
-		return
+		return nil
 	}
 
 	newEvent, err := e.Events[e.EventsNames[0]](e)
 	if err != nil {
 		log.Error(err.Error(), "Run events", "")
-		return
+		return err
 	}
-	newEvent.Next()
+	err = newEvent.Next()
+	return err
 }
 
 // Add Function to register a new event or replace a default one
