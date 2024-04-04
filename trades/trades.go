@@ -21,6 +21,10 @@ func GetQuantities(history []aggragates.History) (float64, float64) {
 }
 
 func GetQuantityByHistory(history []aggragates.History) float64 {
+	if len(history) == 0 {
+		return 0
+	}
+
 	var buyQty float64
 	var sellQty float64
 
