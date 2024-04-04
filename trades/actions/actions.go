@@ -63,10 +63,10 @@ func HasFunds(event events.Events) (events.Events, error) {
 		}
 	}
 
-	buyQuantity, _ := trades.GetQuantities(event.Trade.History)
-	if remainedQuantity < buyQuantity*event.Trade.Position.Price {
+	quantity := trades.GetQuantityByHistory(event.Trade.History)
+	if remainedQuantity < quantity*event.Trade.Position.Price {
 		// If nou enough funds log and return
-		msg := fmt.Sprintf("Not enough funds to buy, available qty: %f, necessary qty: %f", remainedQuantity, buyQuantity*event.Trade.Position.Price)
+		msg := fmt.Sprintf("Not enough funds to buy, available qty: %f, necessary qty: %f", remainedQuantity, quantity*event.Trade.Position.Price)
 		return events.Events{}, fmt.Errorf(msg)
 	}
 
@@ -76,8 +76,8 @@ func HasFunds(event events.Events) (events.Events, error) {
 func HasProfit(event events.Events) (events.Events, error) {
 	simulateHistory := event.Trade.History
 	_, feeInQuote := CalculateFees(event.Trade.History, event.Trade.Symbol)
-	buyQuantity, _ := trades.GetQuantities(event.Trade.History)
-	simulateHistory = append(simulateHistory, aggragates.History{Type: "sell", Quantity: buyQuantity, Price: event.Trade.Position.Price})
+	quantity := trades.GetQuantityByHistory(event.Trade.History)
+	simulateHistory = append(simulateHistory, aggragates.History{Type: "sell", Quantity: quantity, Price: event.Trade.Position.Price})
 	profit := GetProfit(simulateHistory)
 	if profit-feeInQuote < 0 {
 		msg := fmt.Sprintf("profit: %f is smaller then min profit", profit)
@@ -92,22 +92,22 @@ func Buy(event events.Events) (events.Events, error) {
 	if clientError != nil {
 		return events.Events{}, clientError
 	}
-	buyQuantity, _ := trades.GetQuantities(event.Trade.History)
+	quantity := trades.GetQuantityByHistory(event.Trade.History)
 
-	if buyQuantity == 0 {
-		buyQuantity = event.TradeSettings.MinNotion / event.Trade.Position.Price
+	if quantity == 0 {
+		quantity = event.TradeSettings.MinNotion / event.Trade.Position.Price
 	}
 
 	priceInString := strconv.FormatFloat(event.Trade.Position.Price, 'f', -1, 64)
-	buyQuantity = ToFixed(buyQuantity, event.TradeSettings.LotSize)
+	quantity = ToFixed(quantity, event.TradeSettings.LotSize)
 
 	var response aggregates.CreateOrderResponse
 	var err error
 
 	if len(event.Trade.History) > 0 {
-		response, err = client.Buy(event.Trade.Symbol, buyQuantity, priceInString)
+		response, err = client.Buy(event.Trade.Symbol, quantity, priceInString)
 	} else {
-		response, err = client.MarketBuy(event.Trade.Symbol, buyQuantity)
+		response, err = client.MarketBuy(event.Trade.Symbol, quantity)
 	}
 
 	event.Trade.PendingOrder = response.OrderID
@@ -124,9 +124,9 @@ func Sell(event events.Events) (events.Events, error) {
 	if clientError != nil {
 		return events.Events{}, clientError
 	}
-	buyQuantity, _ := trades.GetQuantities(event.Trade.History)
+	buyQuantity, sellQuantity := trades.GetQuantities(event.Trade.History)
 	feeInBase, _ := CalculateFees(event.Trade.History, event.Trade.Symbol)
-	quantity := ToFixed(buyQuantity-feeInBase, event.TradeSettings.LotSize)
+	quantity := ToFixed(buyQuantity-sellQuantity-feeInBase, event.TradeSettings.LotSize)
 	priceInString := strconv.FormatFloat(event.Trade.Position.Price, 'f', -1, 64)
 
 	response, err := client.Sell(event.Trade.Symbol, quantity, priceInString)

@@ -19,3 +19,21 @@ func GetQuantities(history []aggragates.History) (float64, float64) {
 
 	return buyTotal, sellTotal
 }
+
+func GetQuantityByHistory(history []aggragates.History) float64 {
+	var buyQty float64
+	var sellQty float64
+
+	for _, historyData := range history {
+		if strings.ToLower(historyData.Type) == "sell" {
+			sellQty = sellQty + historyData.Quantity
+		} else {
+			buyQty = buyQty + historyData.Quantity
+		}
+	}
+
+	if strings.ToLower(history[len(history)-1].Type) == "sell" {
+		return buyQty - sellQty
+	}
+	return history[len(history)-1].Quantity
+}
