@@ -99,7 +99,7 @@ func Buy(event events.Events) (events.Events, error) {
 	}
 
 	priceInString := strconv.FormatFloat(event.Trade.Position.Price, 'f', -1, 64)
-	quantity = ToFixed(quantity, event.TradeSettings.LotSize)
+	quantity = ToFixed(quantity*event.Trade.Settings.Multiplier, event.TradeSettings.LotSize)
 
 	var response aggregates.CreateOrderResponse
 	var err error

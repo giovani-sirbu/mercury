@@ -14,6 +14,7 @@ type (
 		Tolerance          float64 `bson:"tolerance" json:"tolerance"`
 		TrailingTakeProfit float64 `bson:"trailingTakeProfit" json:"trailingTakeProfit"`
 		Percentage         float64 `bson:"percentage" json:"percentage"`
+		Multiplier         float64 `bson:"multiplier" json:"multiplier"`
 	}
 	Strategy struct {
 		Type     string
