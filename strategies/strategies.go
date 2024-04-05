@@ -13,6 +13,7 @@ type (
 	Settings struct {
 		Tolerance          float64 `bson:"tolerance" json:"tolerance"`
 		TrailingTakeProfit float64 `bson:"trailingTakeProfit" json:"trailingTakeProfit"`
+		InitialBid         float64 `bson:"initialBid" json:"initialBid"`
 		Percentage         float64 `bson:"percentage" json:"percentage"`
 		Multiplier         float64 `bson:"multiplier" json:"multiplier"`
 	}

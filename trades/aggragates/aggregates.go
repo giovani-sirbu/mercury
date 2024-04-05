@@ -63,28 +63,28 @@ type (
 	}
 
 	Trade struct {
-		ID              string              `bson:"_id" json:"_id"`
-		UserId          string              `bson:"userId" json:"userId"`
-		DeviceId        string              `bson:"deviceId" json:"deviceId"`
-		Symbol          string              `bson:"symbol" json:"symbol"`
-		Position        Position            `bson:"position" json:"position"`
-		Strategy        interface{}         `bson:"strategy" json:"strategy"`
-		Settings        strategies.Settings `bson:"settings" json:"settings"`
-		Exchange        Exchange            `bson:"exchange" json:"exchange"`
-		USDProfit       float64             `bson:"usdProfit" json:"usdProfit"`
-		Profit          float64             `bson:"profit" json:"profit"`
-		ProfitAsset     string              `bson:"profitAsset" json:"profitAsset"`
-		Commission      float64             `bson:"commission" json:"commission"`
-		CommissionAsset string              `bson:"commissionAsset" json:"commissionAsset"`
-		Closed          bool                `bson:"closed" json:"closed"`
-		Paused          bool                `bson:"paused" json:"paused"`
-		PreventNewTrade bool                `bson:"preventNewTrade" json:"preventNewTrade"`
-		Inverse         bool                `bson:"inverse" json:"inverse"`
-		History         []History           `bson:"history" json:"history"`
-		Logs            []Logs              `bson:"logs" json:"logs"`
-		PendingOrder    int64               `bson:"pendingOrder" json:"pendingOrder"`
-		CreatedAt       time.Time           `bson:"createdAt" json:"createdAt"`
-		UpdatedAt       time.Time           `bson:"updatedAt" json:"updatedAt"`
+		ID              string                `bson:"_id" json:"_id"`
+		UserId          string                `bson:"userId" json:"userId"`
+		DeviceId        string                `bson:"deviceId" json:"deviceId"`
+		Symbol          string                `bson:"symbol" json:"symbol"`
+		Position        Position              `bson:"position" json:"position"`
+		Strategy        interface{}           `bson:"strategy" json:"strategy"`
+		Settings        []strategies.Settings `bson:"settings" json:"settings"`
+		Exchange        Exchange              `bson:"exchange" json:"exchange"`
+		USDProfit       float64               `bson:"usdProfit" json:"usdProfit"`
+		Profit          float64               `bson:"profit" json:"profit"`
+		ProfitAsset     string                `bson:"profitAsset" json:"profitAsset"`
+		Commission      float64               `bson:"commission" json:"commission"`
+		CommissionAsset string                `bson:"commissionAsset" json:"commissionAsset"`
+		Closed          bool                  `bson:"closed" json:"closed"`
+		Paused          bool                  `bson:"paused" json:"paused"`
+		PreventNewTrade bool                  `bson:"preventNewTrade" json:"preventNewTrade"`
+		Inverse         bool                  `bson:"inverse" json:"inverse"`
+		History         []History             `bson:"history" json:"history"`
+		Logs            []Logs                `bson:"logs" json:"logs"`
+		PendingOrder    int64                 `bson:"pendingOrder" json:"pendingOrder"`
+		CreatedAt       time.Time             `bson:"createdAt" json:"createdAt"`
+		UpdatedAt       time.Time             `bson:"updatedAt" json:"updatedAt"`
 	}
 
 	TradeSettings struct {

@@ -94,17 +94,33 @@ func Buy(event events.Events) (events.Events, error) {
 	}
 	quantity := trades.GetQuantityByHistory(event.Trade.History)
 
+	historyCount := len(event.Trade.History)
+	var settingsIndex int
+
+	if historyCount > len(event.Trade.Settings) {
+		settingsIndex = len(event.Trade.Settings) - 1
+	} else {
+		settingsIndex = historyCount - 1
+	}
+
+	if historyCount == 0 {
+		settingsIndex = 0
+	}
+
+	initialBid := event.Trade.Settings[settingsIndex].InitialBid
+	multiplier := event.Trade.Settings[settingsIndex].Multiplier
+
 	if quantity == 0 {
-		quantity = event.TradeSettings.MinNotion / event.Trade.Position.Price
+		quantity = (event.TradeSettings.MinNotion / event.Trade.Position.Price) * initialBid
 	}
 
 	priceInString := strconv.FormatFloat(event.Trade.Position.Price, 'f', -1, 64)
-	quantity = ToFixed(quantity*event.Trade.Settings.Multiplier, event.TradeSettings.LotSize)
+	quantity = ToFixed(quantity*multiplier, event.TradeSettings.LotSize)
 
 	var response aggregates.CreateOrderResponse
 	var err error
 
-	if len(event.Trade.History) > 0 {
+	if historyCount > 0 {
 		response, err = client.Buy(event.Trade.Symbol, quantity, priceInString)
 	} else {
 		response, err = client.MarketBuy(event.Trade.Symbol, quantity)
