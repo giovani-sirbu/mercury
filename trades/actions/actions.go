@@ -76,7 +76,7 @@ func HasFunds(event events.Events) (events.Events, error) {
 func HasProfit(event events.Events) (events.Events, error) {
 	simulateHistory := event.Trade.History
 	_, feeInQuote := CalculateFees(event.Trade.History, event.Trade.Symbol)
-	quantity := trades.GetQuantityByHistory(event.Trade.History)
+	quantity, _ := trades.GetQuantities(event.Trade.History)
 	simulateHistory = append(simulateHistory, aggragates.History{Type: "sell", Quantity: quantity, Price: event.Trade.Position.Price})
 	profit := GetProfit(simulateHistory)
 	if profit-feeInQuote < 0 {
