@@ -65,12 +65,12 @@ type (
 	}
 
 	Strategy struct {
-		Tolerance          float64   `bson:"tolerance" json:"tolerance"`
-		TrailingTakeProfit float64   `bson:"trailingTakeProfit" json:"trailingTakeProfit"`
-		InitialBid         float64   `bson:"initialBid" json:"initialBid"`
-		Name               string    `bson:"name" json:"name"`
-		Percentage         float64   `bson:"percentage" json:"percentage"`
-		Progressive        []float64 `bson:"progressive" json:"progressive"`
+		Tolerance          float64 `bson:"tolerance" json:"tolerance"`
+		TrailingTakeProfit float64 `bson:"trailingTakeProfit" json:"trailingTakeProfit"`
+		InitialBid         float64 `bson:"initialBid" json:"initialBid"`
+		Name               string  `bson:"name" json:"name"`
+		Percentage         float64 `bson:"percentage" json:"percentage"`
+		Multiplier         float64 `bson:"multiplier" json:"multiplier"`
 	}
 
 	Trade struct {
