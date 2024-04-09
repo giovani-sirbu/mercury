@@ -59,6 +59,7 @@ type (
 
 	Exchange struct {
 		ID        uint   `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
+		TradeID   uint   `form:"tradeId" json:"tradeId" xml:"tradeId"`
 		Label     string `gorm:"type:varchar(50)" bson:"label" json:"label" form:"label" xml:"label" validate:"required,min=3,max=50"`
 		Name      string `gorm:"type:varchar(50)" bson:"name" json:"name" form:"name" xml:"name" validate:"required,min=3,max=50"`
 		ApiKey    string `gorm:"type:varchar(200)" bson:"apiKey" json:"apiKey" form:"apiKey" xml:"apiKey" validate:"omitempty,min=10,max=150"`
@@ -76,28 +77,25 @@ type (
 	}
 
 	Trade struct {
-		ID                uint           `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
-		UserID            uint           `form:"userId" json:"userId" xml:"userId"`
-		Symbol            string         `gorm:"type:varchar(10)" bson:"symbol" json:"symbol"`
-		Status            Status         `gorm:"default:new" bson:"status" json:"status"`
-		PositionType      string         `gorm:"type:varchar(50)" bson:"type" json:"type"`
-		PositionPrice     float64        `bson:"price" json:"price"`
-		ExchangeName      string         `gorm:"type:varchar(50)" bson:"exchangeName" json:"exchangeName"`
-		ExchangeApiKey    string         `gorm:"type:varchar(200)" bson:"exchangeApiKey" json:"exchangeApiKey"`
-		ExchangeApiSecret string         `gorm:"type:varchar(200)" bson:"exchangeApiSecret" json:"exchangeApiSecret"`
-		ExchangeTestNet   bool           `gorm:"type:boolean;default:false" bson:"exchangeTestNet" json:"exchangeTestNet"`
-		StrategySettings  string         `gorm:"type:text" bson:"strategySettings" json:"strategySettings"`
-		USDProfit         float64        `bson:"usdProfit" json:"usdProfit"`
-		Profit            float64        `bson:"profit" json:"profit"`
-		ProfitAsset       string         `bson:"profitAsset" json:"profitAsset"`
-		PreventNewTrade   bool           `gorm:"type:boolean;default:false" bson:"preventNewTrade" json:"preventNewTrade"`
-		Inverse           bool           `gorm:"type:boolean;default:false" bson:"inverse" json:"inverse"`
-		PendingOrder      int64          `bson:"pendingOrder" json:"pendingOrder"`
-		History           []History      `bson:"history" json:"history"`
-		Logs              []Logs         `bson:"logs" json:"logs"`
-		CreatedAt         time.Time      `form:"createdAt" json:"createdAt" xml:"createdAt"`
-		UpdatedAt         time.Time      `form:"updatedAt" json:"updatedAt" xml:"updatedAt"`
-		DeletedAt         gorm.DeletedAt `form:"deletedAt" json:"deletedAt" xml:"deletedAt"`
+		ID               uint           `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
+		UserID           uint           `form:"userId" json:"userId" xml:"userId"`
+		Symbol           string         `gorm:"type:varchar(10)" bson:"symbol" json:"symbol"`
+		Status           Status         `gorm:"default:new" bson:"status" json:"status"`
+		PositionType     string         `gorm:"type:varchar(50)" bson:"type" json:"type"`
+		PositionPrice    float64        `bson:"price" json:"price"`
+		ExchangeInfo     Exchange       `form:"exchangeInfo" json:"exchangeInfo" xml:"exchangeInfo"`
+		StrategySettings string         `gorm:"type:text" bson:"strategySettings" json:"strategySettings"`
+		USDProfit        float64        `bson:"usdProfit" json:"usdProfit"`
+		Profit           float64        `bson:"profit" json:"profit"`
+		ProfitAsset      string         `bson:"profitAsset" json:"profitAsset"`
+		PreventNewTrade  bool           `gorm:"type:boolean;default:false" bson:"preventNewTrade" json:"preventNewTrade"`
+		Inverse          bool           `gorm:"type:boolean;default:false" bson:"inverse" json:"inverse"`
+		PendingOrder     int64          `bson:"pendingOrder" json:"pendingOrder"`
+		History          []History      `bson:"history" json:"history"`
+		Logs             []Logs         `bson:"logs" json:"logs"`
+		CreatedAt        time.Time      `form:"createdAt" json:"createdAt" xml:"createdAt"`
+		UpdatedAt        time.Time      `form:"updatedAt" json:"updatedAt" xml:"updatedAt"`
+		DeletedAt        gorm.DeletedAt `form:"deletedAt" json:"deletedAt" xml:"deletedAt"`
 	}
 
 	TradeSettings struct {
