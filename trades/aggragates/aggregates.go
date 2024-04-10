@@ -8,11 +8,11 @@ import (
 type Status string
 
 const (
-	New     Status = "new"
 	Active  Status = "active"
 	Blocked Status = "blocked"
 	Paused  Status = "paused"
 	Closed  Status = "closed"
+	Impasse Status = "impasse"
 )
 
 type (
@@ -38,7 +38,7 @@ type (
 		Type       string       `bson:"type" json:"type"`
 		Quantity   float64      `bson:"quantity" json:"quantity"`
 		Price      float64      `bson:"price" json:"price"`
-		FeeDetails []FeeDetails `bson:"feeDetails" json:"feeDetails"`
+		FeeDetails []FeeDetails `gorm:"foreignKey:TradeID;references:ID"  bson:"feeDetails" json:"feeDetails"`
 		OrderId    int64        `bson:"orderId" json:"orderId"`
 		Status     string       `bson:"status" json:"status"`
 		CreatedAt  time.Time    `json:"createdAt"`
@@ -59,7 +59,7 @@ type (
 
 	Exchange struct {
 		ID        uint   `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
-		TradeID   uint   `form:"tradeId" json:"tradeId" xml:"tradeId"`
+		UserID    uint   `form:"userId" json:"userId" xml:"userId"`
 		Label     string `gorm:"type:varchar(50)" bson:"label" json:"label" form:"label" xml:"label" validate:"required,min=3,max=50"`
 		Name      string `gorm:"type:varchar(50)" bson:"name" json:"name" form:"name" xml:"name" validate:"required,min=3,max=50"`
 		ApiKey    string `gorm:"type:varchar(200)" bson:"apiKey" json:"apiKey" form:"apiKey" xml:"apiKey" validate:"omitempty,min=10,max=150"`
@@ -68,6 +68,12 @@ type (
 	}
 
 	Strategy struct {
+		ID     uint   `gorm:"primarykey" form:"id" json:"id" xml:"id"`
+		Name   string `gorm:"type:varchar(50)" bson:"name" json:"name" form:"name" xml:"name" validate:"required,min=3,max=50"`
+		Params string `gorm:"type:text" bson:"params" json:"params"`
+	}
+
+	StrategyParams struct {
 		Tolerance          float64 `bson:"tolerance" json:"tolerance"`
 		TrailingTakeProfit float64 `bson:"trailingTakeProfit" json:"trailingTakeProfit"`
 		InitialBid         float64 `bson:"initialBid" json:"initialBid"`
@@ -77,25 +83,27 @@ type (
 	}
 
 	Trade struct {
-		ID               uint           `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
-		UserID           uint           `form:"userId" json:"userId" xml:"userId"`
-		Symbol           string         `gorm:"type:varchar(10)" bson:"symbol" json:"symbol"`
-		Status           Status         `gorm:"default:new" bson:"status" json:"status"`
-		PositionType     string         `gorm:"type:varchar(50)" bson:"type" json:"type"`
-		PositionPrice    float64        `bson:"price" json:"price"`
-		ExchangeInfo     Exchange       `form:"exchangeInfo" json:"exchangeInfo" xml:"exchangeInfo"`
-		StrategySettings string         `gorm:"type:text" bson:"strategySettings" json:"strategySettings"`
-		USDProfit        float64        `bson:"usdProfit" json:"usdProfit"`
-		Profit           float64        `bson:"profit" json:"profit"`
-		ProfitAsset      string         `bson:"profitAsset" json:"profitAsset"`
-		PreventNewTrade  bool           `gorm:"type:boolean;default:false" bson:"preventNewTrade" json:"preventNewTrade"`
-		Inverse          bool           `gorm:"type:boolean;default:false" bson:"inverse" json:"inverse"`
-		PendingOrder     int64          `bson:"pendingOrder" json:"pendingOrder"`
-		History          []History      `bson:"history" json:"history"`
-		Logs             []Logs         `bson:"logs" json:"logs"`
-		CreatedAt        time.Time      `form:"createdAt" json:"createdAt" xml:"createdAt"`
-		UpdatedAt        time.Time      `form:"updatedAt" json:"updatedAt" xml:"updatedAt"`
-		DeletedAt        gorm.DeletedAt `form:"deletedAt" json:"deletedAt" xml:"deletedAt"`
+		ID              uint           `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
+		UserID          uint           `gorm:"index" form:"userId" json:"userId" xml:"userId"`
+		Symbol          string         `gorm:"type:varchar(10); index" bson:"symbol" json:"symbol"`
+		PositionType    string         `gorm:"type:varchar(50); default:new" bson:"positionType" json:"positionType"`
+		PositionPrice   float64        `bson:"positionPrice" json:"positionPrice"`
+		ExchangeID      int            `form:"exchangeId" json:"exchangeId" xml:"exchangeId"`
+		Exchange        Exchange       `form:"exchange" json:"exchange" xml:"exchange"`
+		StrategyID      int            `form:"strategyId" json:"strategyId" xml:"strategyId"`
+		Strategy        Strategy       `gorm:"foreignKey:StrategyID;references:ID"  form:"strategy" json:"strategy" xml:"strategy"`
+		USDProfit       float64        `bson:"usdProfit" json:"usdProfit"`
+		Profit          float64        `bson:"profit" json:"profit"`
+		ProfitAsset     string         `bson:"profitAsset" json:"profitAsset"`
+		PreventNewTrade bool           `gorm:"type:boolean;default:false" bson:"preventNewTrade" json:"preventNewTrade"`
+		Inverse         bool           `gorm:"type:boolean;default:false" bson:"inverse" json:"inverse"`
+		PendingOrder    int64          `bson:"pendingOrder" json:"pendingOrder"`
+		History         []History      `gorm:"foreignKey:TradeID;references:ID" bson:"history" json:"history"`
+		Logs            []Logs         `gorm:"foreignKey:TradeID;references:ID" bson:"logs" json:"logs"`
+		Status          Status         `gorm:"default:active" bson:"status" json:"status"`
+		CreatedAt       time.Time      `form:"createdAt" json:"createdAt" xml:"createdAt"`
+		UpdatedAt       time.Time      `form:"updatedAt" json:"updatedAt" xml:"updatedAt"`
+		DeletedAt       gorm.DeletedAt `form:"deletedAt" json:"deletedAt" xml:"deletedAt"`
 	}
 
 	TradeSettings struct {
