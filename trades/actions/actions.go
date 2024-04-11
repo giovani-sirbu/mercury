@@ -95,8 +95,8 @@ func Buy(event events.Events) (events.Events, error) {
 	quantity := trades.GetQuantityByHistory(event.Trade.History)
 
 	historyCount := len(event.Trade.History)
-	settings := []byte(event.Trade.StrategySettings)
-	var StrategySettings []aggragates.Strategy
+	settings := []byte(event.Trade.Strategy.Params)
+	var StrategySettings []aggragates.StrategyParams
 	var settingsIndex int
 
 	json.Unmarshal(settings, &StrategySettings)
