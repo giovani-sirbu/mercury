@@ -8,6 +8,7 @@ import (
 	commonLog "github.com/giovani-sirbu/mercury/log"
 	"github.com/segmentio/kafka-go"
 	"os"
+	"time"
 )
 
 // Handler response func type
@@ -52,11 +53,12 @@ func (m MessageBroker) Consumer(topic string, handler fn) {
 
 	// initialize a new reader with the brokers and topic
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:  m.Address,       // Broker list
-		Topic:    topicWithPrefix, // Topic to consume
-		MinBytes: 1,
-		MaxBytes: 57671680,
-		Dialer:   dialer,
+		Brokers:        m.Address,       // Broker list
+		Topic:          topicWithPrefix, // Topic to consume
+		MinBytes:       1,
+		MaxBytes:       57671680,
+		Dialer:         dialer,
+		CommitInterval: time.Second,
 	})
 
 	for {
