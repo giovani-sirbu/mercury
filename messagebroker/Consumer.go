@@ -77,7 +77,7 @@ func (m MessageBroker) Consumer(topic string, handler fn) {
 
 		commonLog.Info(fmt.Sprintf("Consumed on topic: %s", topic), "", "Consumer")
 
-		//reader.CommitMessages(ctx, m)
+		reader.CommitMessages(ctx, m)
 
 		// Handle response callback
 		go handler(value)
