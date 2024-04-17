@@ -55,17 +55,19 @@ func (m MessageBroker) Consumer(topic string, handler fn) {
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:        m.Address,       // Broker list
 		Topic:          topicWithPrefix, // Topic to consume
-		StartOffset:    kafka.LastOffset,
 		MinBytes:       1,
 		MaxBytes:       57671680,
 		Dialer:         dialer,
 		CommitInterval: time.Second,
 	})
 
+	reader.SetOffset(kafka.LastOffset)
+
 	for {
 		// read message
 		ctx := context.Background()
 		m, err := reader.ReadMessage(ctx)
+		fmt.Println(m)
 		defer ctx.Done()
 
 		if err != nil {
@@ -77,8 +79,6 @@ func (m MessageBroker) Consumer(topic string, handler fn) {
 		value := m.Value
 
 		commonLog.Info(fmt.Sprintf("Consumed on topic: %s", topic), "", "Consumer")
-
-		reader.CommitMessages(ctx, m)
 
 		// Handle response callback
 		go handler(value)
