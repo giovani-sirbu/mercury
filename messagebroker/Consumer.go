@@ -55,6 +55,7 @@ func (m MessageBroker) Consumer(topic string, handler fn) {
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:        m.Address,       // Broker list
 		Topic:          topicWithPrefix, // Topic to consume
+		StartOffset:    kafka.FirstOffset,
 		MinBytes:       1,
 		MaxBytes:       57671680,
 		Dialer:         dialer,
