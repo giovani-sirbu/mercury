@@ -67,7 +67,7 @@ func (m MessageBroker) Consumer(topic string, handler fn) {
 		// read message
 		ctx := context.Background()
 		m, err := reader.ReadMessage(ctx)
-		fmt.Println(m)
+
 		defer ctx.Done()
 
 		if err != nil {
