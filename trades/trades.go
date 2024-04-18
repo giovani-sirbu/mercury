@@ -20,7 +20,7 @@ func GetQuantities(history []aggragates.History) (float64, float64) {
 	return buyTotal, sellTotal
 }
 
-func GetQuantityByHistory(history []aggragates.History) float64 {
+func GetQuantityByHistory(history []aggragates.History, inverse bool) float64 {
 	if len(history) == 0 {
 		return 0
 	}
@@ -36,8 +36,13 @@ func GetQuantityByHistory(history []aggragates.History) float64 {
 		}
 	}
 
-	if strings.ToLower(history[len(history)-1].Type) == "sell" {
+	if !inverse && strings.ToLower(history[len(history)-1].Type) == "sell" {
 		return buyQty - sellQty
 	}
+
+	if inverse && strings.ToLower(history[len(history)-1].Type) == "buy" {
+		return sellQty - buyQty
+	}
+
 	return history[len(history)-1].Quantity
 }

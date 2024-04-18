@@ -63,7 +63,7 @@ func HasFunds(event events.Events) (events.Events, error) {
 		}
 	}
 
-	quantity := trades.GetQuantityByHistory(event.Trade.History)
+	quantity := trades.GetQuantityByHistory(event.Trade.History, event.Trade.Inverse)
 	if remainedQuantity < quantity*event.Trade.PositionPrice {
 		// If nou enough funds log and return
 		msg := fmt.Sprintf("Not enough funds to buy, available qty: %f, necessary qty: %f", remainedQuantity, quantity*event.Trade.PositionPrice)
@@ -96,7 +96,7 @@ func Buy(event events.Events) (events.Events, error) {
 	if clientError != nil {
 		return events.Events{}, clientError
 	}
-	quantity := trades.GetQuantityByHistory(event.Trade.History)
+	quantity := trades.GetQuantityByHistory(event.Trade.History, event.Trade.Inverse)
 
 	historyCount := len(event.Trade.History)
 	settings := []byte(event.Trade.Strategy.Params)
