@@ -125,9 +125,17 @@ func Buy(event events.Events) (events.Events, error) {
 	var err error
 
 	if historyCount > 0 {
-		response, err = client.Buy(event.Trade.Symbol, quantity, priceInString)
+		if event.Trade.Inverse {
+			response, err = client.Sell(event.Trade.Symbol, quantity, priceInString)
+		} else {
+			response, err = client.Buy(event.Trade.Symbol, quantity, priceInString)
+		}
 	} else {
-		response, err = client.MarketBuy(event.Trade.Symbol, quantity)
+		if event.Trade.Inverse {
+			response, err = client.MarketSell(event.Trade.Symbol, quantity)
+		} else {
+			response, err = client.MarketBuy(event.Trade.Symbol, quantity)
+		}
 	}
 
 	event.Trade.PendingOrder = response.OrderID
@@ -149,7 +157,14 @@ func Sell(event events.Events) (events.Events, error) {
 	quantity := ToFixed(buyQuantity-sellQuantity-feeInBase, event.TradeSettings.LotSize)
 	priceInString := strconv.FormatFloat(event.Trade.PositionPrice, 'f', -1, 64)
 
-	response, err := client.Sell(event.Trade.Symbol, quantity, priceInString)
+	var response aggregates.CreateOrderResponse
+	var err error
+
+	if event.Trade.Inverse {
+		response, err = client.Buy(event.Trade.Symbol, quantity, priceInString)
+	} else {
+		response, err = client.Sell(event.Trade.Symbol, quantity, priceInString)
+	}
 
 	event.Trade.PendingOrder = response.OrderID
 
