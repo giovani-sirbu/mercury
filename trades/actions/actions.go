@@ -78,9 +78,13 @@ func HasProfit(event events.Events) (events.Events, error) {
 	_, feeInQuote := CalculateFees(event.Trade.History, event.Trade.Symbol)
 	quantity, _ := trades.GetQuantities(event.Trade.History)
 	simulateHistory = append(simulateHistory, aggragates.History{Type: "sell", Quantity: quantity, Price: event.Trade.PositionPrice})
-	profit := GetProfit(simulateHistory)
+	sellTotal, buyTotal := GetProfit(simulateHistory)
+	profit := sellTotal - buyTotal
+	if event.Trade.Inverse {
+		profit = buyTotal - sellTotal
+	}
 	if profit-feeInQuote < 0 {
-		msg := fmt.Sprintf("profit: %f is smaller then min profit", profit)
+		msg := fmt.Sprintf("profit: %f is smaller then min profit", profit-feeInQuote)
 		return events.Events{}, fmt.Errorf(msg)
 	}
 	return event, nil
@@ -201,7 +205,7 @@ func CalculateFees(history []aggragates.History, symbol string) (float64, float6
 	return feeInBase, feeInQuote
 }
 
-func GetProfit(history []aggragates.History) float64 {
+func GetProfit(history []aggragates.History) (float64, float64) {
 	var buyTotal float64
 	var sellTotal float64
 	for _, historyData := range history {
@@ -213,7 +217,7 @@ func GetProfit(history []aggragates.History) float64 {
 			sellTotal += sellPerHistory
 		}
 	}
-	return sellTotal - buyTotal
+	return sellTotal, buyTotal
 }
 
 func ToFixed(num float64, precision int) float64 {
