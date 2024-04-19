@@ -46,3 +46,11 @@ func GetQuantityByHistory(history []aggragates.History, inverse bool) float64 {
 
 	return history[len(history)-1].Quantity
 }
+
+func GetQuantityInQuote(history []aggragates.History) float64 {
+	var quantity float64
+	for _, historyData := range history {
+		quantity = quantity + historyData.Quantity*historyData.Price
+	}
+	return quantity
+}

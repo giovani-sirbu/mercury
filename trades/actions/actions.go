@@ -75,24 +75,28 @@ func HasFunds(event events.Events) (events.Events, error) {
 
 func HasProfit(event events.Events) (events.Events, error) {
 	simulateHistory := event.Trade.History
-	_, feeInQuote := CalculateFees(event.Trade.History, event.Trade.Symbol)
-	buyQty, sellQty := trades.GetQuantities(event.Trade.History)
+	feeInBase, feeInQuote := CalculateFees(event.Trade.History, event.Trade.Symbol)
+	buyQty, _ := trades.GetQuantities(event.Trade.History)
 	quantity := buyQty
 	historyType := "sell"
 
 	if event.Trade.Inverse {
-		quantity = sellQty
+		quantity = trades.GetQuantityInQuote(event.Trade.History)
+		quantity = quantity / event.Trade.PositionPrice
+		quantity = ToFixed(quantity, event.TradeSettings.LotSize)
 		historyType = "buy"
 	}
 
 	simulateHistory = append(simulateHistory, aggragates.History{Type: historyType, Quantity: quantity, Price: event.Trade.PositionPrice})
 	sellTotal, buyTotal := GetProfit(simulateHistory)
 	profit := sellTotal - buyTotal
+	fee := feeInQuote
 	if event.Trade.Inverse {
-		profit = buyTotal - sellTotal
+		fee = feeInBase
+		_, profit = GetProfitInBase(simulateHistory)
 	}
-	if profit-feeInQuote < 0 {
-		msg := fmt.Sprintf("profit: %f is smaller then min profit", profit-feeInQuote)
+	if profit-fee < 0 {
+		msg := fmt.Sprintf("profit: %f is smaller then min profit", profit-fee)
 		return events.Events{}, fmt.Errorf(msg)
 	}
 	return event, nil
@@ -166,7 +170,14 @@ func Sell(event events.Events) (events.Events, error) {
 	}
 	buyQuantity, sellQuantity := trades.GetQuantities(event.Trade.History)
 	feeInBase, _ := CalculateFees(event.Trade.History, event.Trade.Symbol)
-	quantity := ToFixed(buyQuantity-sellQuantity-feeInBase, event.TradeSettings.LotSize)
+	quantity := buyQuantity - sellQuantity - feeInBase
+
+	if event.Trade.Inverse {
+		quantity = trades.GetQuantityInQuote(event.Trade.History)
+		quantity = quantity / event.Trade.PositionPrice
+	}
+
+	quantity = ToFixed(quantity, event.TradeSettings.LotSize)
 	priceInString := strconv.FormatFloat(event.Trade.PositionPrice, 'f', -1, 64)
 
 	var response aggregates.CreateOrderResponse
@@ -223,6 +234,19 @@ func GetProfit(history []aggragates.History) (float64, float64) {
 		} else {
 			sellPerHistory := historyData.Price * historyData.Quantity
 			sellTotal += sellPerHistory
+		}
+	}
+	return sellTotal, buyTotal
+}
+
+func GetProfitInBase(history []aggragates.History) (float64, float64) {
+	var buyTotal float64
+	var sellTotal float64
+	for _, historyData := range history {
+		if strings.ToLower(historyData.Type) == "buy" {
+			buyTotal += historyData.Quantity
+		} else {
+			sellTotal += historyData.Quantity
 		}
 	}
 	return sellTotal, buyTotal
