@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func GetProfit(history []aggragates.History) (float64, float64) {
+func GetProfit(history []aggragates.TradesHistory) (float64, float64) {
 	var buyTotal float64
 	var sellTotal float64
 	for _, historyData := range history {
@@ -20,7 +20,7 @@ func GetProfit(history []aggragates.History) (float64, float64) {
 	return sellTotal, buyTotal
 }
 
-func GetProfitInBase(history []aggragates.History) (float64, float64) {
+func GetProfitInBase(history []aggragates.TradesHistory) (float64, float64) {
 	var buyTotal float64
 	var sellTotal float64
 	for _, historyData := range history {

@@ -12,7 +12,7 @@ type (
 		Storage       interface{}
 		Broker        messagebroker.MessageBroker
 		Exchange      exchange.Exchange
-		Trade         aggragates.Trade
+		Trade         aggragates.Trades
 		EventsNames   []string
 		TradeSettings aggragates.TradeSettings
 		Events        map[string]func(Events) (Events, error)

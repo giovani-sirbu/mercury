@@ -11,6 +11,5 @@ func GetDefaultActions() map[string]func(events.Events) (events.Events, error) {
 	newActions["buy"] = Buy
 	newActions["sell"] = Sell
 	newActions["hasProfit"] = HasProfit
-	newActions["duplicateTrade"] = DuplicateTrade
 	return newActions
 }

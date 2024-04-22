@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func GetQuantities(history []aggragates.History) (float64, float64) {
+func GetQuantities(history []aggragates.TradesHistory) (float64, float64) {
 	var buyTotal float64
 	var sellTotal float64
 
@@ -20,7 +20,7 @@ func GetQuantities(history []aggragates.History) (float64, float64) {
 	return buyTotal, sellTotal
 }
 
-func GetQuantityByHistory(history []aggragates.History, inverse bool) float64 {
+func GetQuantityByHistory(history []aggragates.TradesHistory, inverse bool) float64 {
 	if len(history) == 0 {
 		return 0
 	}
@@ -47,7 +47,7 @@ func GetQuantityByHistory(history []aggragates.History, inverse bool) float64 {
 	return history[len(history)-1].Quantity
 }
 
-func GetQuantityInQuote(history []aggragates.History) float64 {
+func GetQuantityInQuote(history []aggragates.TradesHistory) float64 {
 	var quantity float64
 	for _, historyData := range history {
 		quantity = quantity + historyData.Quantity*historyData.Price

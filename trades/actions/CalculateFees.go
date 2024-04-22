@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func CalculateFees(history []aggragates.History, symbol string) (float64, float64) {
+func CalculateFees(history []aggragates.TradesHistory, symbol string) (float64, float64) {
 	var feeInBase = 0.0
 	var feeInQuote = 0.0
 

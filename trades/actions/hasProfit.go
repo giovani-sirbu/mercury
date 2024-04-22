@@ -21,7 +21,7 @@ func HasProfit(event events.Events) (events.Events, error) {
 		historyType = "buy"
 	}
 
-	simulateHistory = append(simulateHistory, aggragates.History{Type: historyType, Quantity: quantity, Price: event.Trade.PositionPrice})
+	simulateHistory = append(simulateHistory, aggragates.TradesHistory{Type: historyType, Quantity: quantity, Price: event.Trade.PositionPrice})
 	sellTotal, buyTotal := GetProfit(simulateHistory)
 	profit := sellTotal - buyTotal
 	fee := feeInQuote
