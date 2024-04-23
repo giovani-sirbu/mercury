@@ -8,6 +8,7 @@ import (
 type Trades struct {
 	ID              uint            `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
 	UserID          uint            `gorm:"index" form:"userId" json:"userId" xml:"userId"`
+	ParentID        uint            `gorm:"index" form:"parentId" json:"parentId" xml:"parentId"`
 	Symbol          string          `gorm:"type:varchar(10); index" bson:"symbol" json:"symbol"`
 	PositionType    string          `gorm:"type:varchar(50); default:new" bson:"positionType" json:"positionType"`
 	PositionPrice   float64         `bson:"positionPrice" json:"positionPrice"`
