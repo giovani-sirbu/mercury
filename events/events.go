@@ -9,14 +9,15 @@ import (
 
 type (
 	Events struct {
-		Storage        interface{}
-		Broker         messagebroker.MessageBroker
-		Exchange       exchange.Exchange
-		Trade          aggragates.Trades
-		ChildrenTrades []aggragates.Trades
-		EventsNames    []string
-		TradeSettings  aggragates.TradeSettings
-		Events         map[string]func(Events) (Events, error)
+		Storage               interface{}
+		Broker                messagebroker.MessageBroker
+		Exchange              exchange.Exchange
+		Trade                 aggragates.Trades
+		ChildrenTrades        []aggragates.Trades
+		EventsNames           []string
+		TradeSettings         aggragates.TradeSettings
+		ChildrenTradeSettings []aggragates.TradeSettings
+		Events                map[string]func(Events) (Events, error)
 	}
 )
 

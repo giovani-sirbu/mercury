@@ -13,5 +13,6 @@ func CreateChildrenTrades(event events.Events) (events.Events, error) {
 	tradeInBytes, _ := json.Marshal(event.Trade)
 	topic := "create-children-trades"
 	event.Broker.Producer(topic, context.Background(), nil, tradeInBytes)
+
 	return event, nil
 }

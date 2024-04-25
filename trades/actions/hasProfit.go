@@ -30,9 +30,13 @@ func HasProfit(event events.Events) (events.Events, error) {
 		sellTotal, buyTotal = GetProfitInBase(simulateHistory)
 		profit = buyTotal - sellTotal
 	}
+
+	event.Trade.Profit = profit
+
 	if profit-fee < 0 {
 		msg := fmt.Sprintf("profit: %f is smaller then min profit", profit-fee)
-		return events.Events{}, fmt.Errorf(msg)
+		return event, fmt.Errorf(msg)
 	}
+
 	return event, nil
 }

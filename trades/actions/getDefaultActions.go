@@ -10,6 +10,9 @@ func GetDefaultActions() map[string]func(events.Events) (events.Events, error) {
 	newActions["hasFunds"] = HasFunds
 	newActions["buy"] = Buy
 	newActions["sell"] = Sell
+	newActions["sellAll"] = SellAll
 	newActions["hasProfit"] = HasProfit
+	newActions["createChildrenTrades"] = CreateChildrenTrades
+	newActions["parentTradeHasProfit"] = ParentTradeHasProfit
 	return newActions
 }

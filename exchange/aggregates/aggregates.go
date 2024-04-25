@@ -138,6 +138,7 @@ type (
 		GetTrades       func(orderId int64, symbol string) ([]Trade, error)
 		GetExchangeInfo func(symbol string) (ExchangeInfo, error)
 		GetFees         func(symbol string) (TradeFeeDetails, error)
+		GetPrice        func(symbol string) (float64, error)
 		GetProfile      func() (Account, error)
 		GetUserAssets   func() ([]UserAssetRecord, error)
 	}
