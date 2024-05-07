@@ -7,7 +7,7 @@ import (
 
 type TradesExchanges struct {
 	ID        uint           `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
-	UserID    uint           `form:"userId" json:"-" xml:"userId"`
+	UserID    uint           `form:"userId" json:"userId" xml:"userId"`
 	Label     string         `gorm:"type:varchar(50)" bson:"label" json:"label" form:"label" xml:"label" validate:"required,min=3,max=50"`
 	Name      string         `gorm:"type:varchar(50)" bson:"name" json:"name" form:"name" xml:"name" validate:"required,min=3,max=50"`
 	ApiKey    string         `gorm:"type:varchar(200)" bson:"apiKey" json:"apiKey" form:"apiKey" xml:"apiKey" validate:"required,min=10,max=150"`
