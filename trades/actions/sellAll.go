@@ -10,10 +10,14 @@ func SellAll(event events.Events) (events.Events, error) {
 			Trade:         childrenTrade,
 			Broker:        event.Broker,
 			Events:        event.Events,
+			Exchange:      event.Exchange,
 			EventsNames:   []string{"sell", "updateTrade"},
 			TradeSettings: event.ChildrenTradeSettings[index],
 		}
-		newEvent.Run()
+		err := newEvent.Run()
+		if err != nil {
+			return events.Events{}, err
+		}
 	}
 
 	event.Trade.PositionType = "sellParent"
