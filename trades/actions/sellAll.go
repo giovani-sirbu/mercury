@@ -6,6 +6,7 @@ import (
 
 func SellAll(event events.Events) (events.Events, error) {
 	for index, childrenTrade := range event.ChildrenTrades {
+		childrenTrade.PreventNewTrade = true
 		newEvent := events.Events{
 			Trade:         childrenTrade,
 			Broker:        event.Broker,
