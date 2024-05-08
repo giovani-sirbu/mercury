@@ -11,7 +11,7 @@ type TradesHistory struct {
 	Quantity   float64      `bson:"quantity" json:"quantity"`
 	Price      float64      `bson:"price" json:"price"`
 	FeeDetails []TradesFees `gorm:"foreignKey:HistoryID;references:ID"  bson:"feeDetails" json:"feeDetails"`
-	OrderId    int64        `gorm:"index" bson:"orderId" json:"orderId"`
+	OrderId    int64        `gorm:"uniqueIndex:unique_index" bson:"orderId" json:"orderId"`
 	Status     string       `bson:"status" json:"status"`
 	CreatedAt  time.Time    `json:"createdAt"`
 	UpdatedAt  time.Time    `json:"updatedAt"`
