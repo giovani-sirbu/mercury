@@ -6,12 +6,12 @@ import (
 
 type TradesHistory struct {
 	ID         uint         `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
-	TradeID    uint         `form:"tradeId" json:"tradeId" xml:"tradeId"`
+	TradeID    uint         `gorm:"uniqueIndex:idx_trade_id_order_id" form:"tradeId" json:"tradeId" xml:"tradeId"`
 	Type       string       `bson:"type" json:"type"`
 	Quantity   float64      `bson:"quantity" json:"quantity"`
 	Price      float64      `bson:"price" json:"price"`
 	FeeDetails []TradesFees `gorm:"foreignKey:HistoryID;references:ID"  bson:"feeDetails" json:"feeDetails"`
-	OrderId    int64        `gorm:"uniqueIndex:unique_index" bson:"orderId" json:"orderId"`
+	OrderId    int64        `gorm:"uniqueIndex:idx_trade_id_order_id" bson:"orderId" json:"orderId"`
 	Status     string       `bson:"status" json:"status"`
 	CreatedAt  time.Time    `json:"createdAt"`
 	UpdatedAt  time.Time    `json:"updatedAt"`
