@@ -47,10 +47,12 @@ func GetQuantityByHistory(history []aggragates.TradesHistory, inverse bool) floa
 	return history[len(history)-1].Quantity
 }
 
-func GetQuantityInQuote(history []aggragates.TradesHistory) float64 {
+func GetQuantityInQuote(history []aggragates.TradesHistory, typeFilter string) float64 {
 	var quantity float64
 	for _, historyData := range history {
-		quantity = quantity + historyData.Quantity*historyData.Price
+		if historyData.Type != typeFilter {
+			quantity = quantity + historyData.Quantity*historyData.Price
+		}
 	}
 	return quantity
 }

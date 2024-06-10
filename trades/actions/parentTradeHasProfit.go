@@ -22,7 +22,12 @@ func ParentTradeHasProfit(event events.Events) (events.Events, error) {
 
 	for index, childrenTrade := range event.ChildrenTrades {
 		client, _ := event.Exchange.Client()
-		childrenPrice, _ := client.GetPrice(childrenTrade.Symbol)
+		childrenPrice, priceErr := client.GetPrice(childrenTrade.Symbol)
+
+		if priceErr != nil || childrenPrice == 0 {
+			return events.Events{}, fmt.Errorf("failed to get children price")
+		}
+
 		childrenTrade.PositionPrice = childrenPrice
 		newEvent := events.Events{Trade: childrenTrade, Events: event.Events, EventsNames: []string{"hasProfit"}, TradeSettings: event.ChildrenTradeSettings[index]}
 		newEvent, _ = HasProfit(newEvent)

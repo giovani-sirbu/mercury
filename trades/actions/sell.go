@@ -19,8 +19,11 @@ func Sell(event events.Events) (events.Events, error) {
 	quantity := buyQuantity - sellQuantity - feeInBase
 
 	if event.Trade.Inverse {
-		quantity = trades.GetQuantityInQuote(event.Trade.History)
+		sellQuantity = trades.GetQuantityInQuote(event.Trade.History, "BUY")
+		buyQuantity = trades.GetQuantityInQuote(event.Trade.History, "SELL")
+		quantity = sellQuantity - buyQuantity
 		quantity = quantity / event.Trade.PositionPrice
+		quantity = quantity - feeInBase
 	}
 
 	quantity = ToFixed(quantity, event.TradeSettings.LotSize)
