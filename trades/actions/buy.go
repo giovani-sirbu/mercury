@@ -41,7 +41,6 @@ func Buy(event events.Events) (events.Events, error) {
 	pairInitialBid := StrategySettings[settingsIndex].InitialBid
 
 	if quantity == 0 {
-		multiplier = 1
 		var initialBid float64
 		if pairInitialBid > 0 {
 			initialBid = pairInitialBid
@@ -62,7 +61,7 @@ func Buy(event events.Events) (events.Events, error) {
 
 			quantity = trades.GetInitialBid(amount, depths, multiplier)
 		}
-
+		multiplier = 1
 	}
 
 	priceInString := strconv.FormatFloat(event.Trade.PositionPrice, 'f', -1, 64)
