@@ -8,6 +8,7 @@ type (
 	}
 	StrategyParams struct {
 		Tolerance          float64 `bson:"tolerance" json:"tolerance"`
+		Depths             float64 `bson:"depths" json:"depths"`
 		TrailingTakeProfit float64 `bson:"trailingTakeProfit" json:"trailingTakeProfit"`
 		InitialBid         float64 `bson:"initialBid" json:"initialBid"`
 		Name               string  `bson:"name" json:"name"`

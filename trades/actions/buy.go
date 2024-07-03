@@ -8,6 +8,7 @@ import (
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"strconv"
+	"strings"
 )
 
 func Buy(event events.Events) (events.Events, error) {
@@ -35,11 +36,33 @@ func Buy(event events.Events) (events.Events, error) {
 		settingsIndex = 0
 	}
 
-	initialBid := StrategySettings[settingsIndex].InitialBid
 	multiplier := StrategySettings[settingsIndex].Multiplier
+	depths := StrategySettings[settingsIndex].Depths
+	pairInitialBid := StrategySettings[settingsIndex].InitialBid
 
 	if quantity == 0 {
-		quantity = (event.TradeSettings.MinNotion / event.Trade.PositionPrice) * initialBid
+		multiplier = 1
+		var initialBid float64
+		if pairInitialBid > 0 {
+			initialBid = pairInitialBid
+			quantity = (event.TradeSettings.MinNotion / event.Trade.PositionPrice) * initialBid
+		} else {
+			assets, assetsErr := client.GetUserAssets() // Get user balance
+			if assetsErr != nil {
+				return events.Events{}, assetsErr
+			}
+			pairSymbols := strings.Split(event.Trade.Symbol, "/")
+			assetSymbol := pairSymbols[1]
+
+			if event.Trade.Inverse {
+				assetSymbol = pairSymbols[0]
+			}
+
+			amount := GetAssetBudget(assets, assetSymbol)
+
+			quantity = trades.GetInitialBid(amount, depths, multiplier)
+		}
+
 	}
 
 	priceInString := strconv.FormatFloat(event.Trade.PositionPrice, 'f', -1, 64)

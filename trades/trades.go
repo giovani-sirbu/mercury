@@ -2,6 +2,7 @@ package trades
 
 import (
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"math"
 	"strings"
 )
 
@@ -55,4 +56,9 @@ func GetQuantityInQuote(history []aggragates.TradesHistory, typeFilter string) f
 		}
 	}
 	return quantity
+}
+
+func GetInitialBid(amount float64, minDepth float64, multiplier float64) float64 {
+	rationPowDepth := math.Pow(multiplier, minDepth)
+	return amount / rationPowDepth
 }
