@@ -17,6 +17,7 @@ type (
 		EventsNames           []string
 		TradeSettings         aggragates.TradeSettings
 		ChildrenTradeSettings []aggragates.TradeSettings
+		Params                aggragates.Params
 		Events                map[string]func(Events) (Events, error)
 	}
 )
