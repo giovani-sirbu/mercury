@@ -35,5 +35,7 @@ type (
 		OldPositionPrice float64
 		Percentage       float64
 		OldPosition      string
+		PreventInfoLog   bool
+		Quantity         float64
 	}
 )

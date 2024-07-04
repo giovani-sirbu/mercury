@@ -48,7 +48,7 @@ func Buy(event events.Events) (events.Events, error) {
 		} else {
 			assets, assetsErr := client.GetUserAssets() // Get user balance
 			if assetsErr != nil {
-				return events.Events{}, assetsErr
+				return SaveError(event, assetsErr)
 			}
 			pairSymbols := strings.Split(event.Trade.Symbol, "/")
 			assetSymbol := pairSymbols[1]
@@ -66,6 +66,7 @@ func Buy(event events.Events) (events.Events, error) {
 
 	priceInString := strconv.FormatFloat(event.Trade.PositionPrice, 'f', -1, 64)
 	quantity = ToFixed(quantity*multiplier, event.TradeSettings.LotSize)
+	event.Params.Quantity = quantity
 
 	var response aggregates.CreateOrderResponse
 	var err error
@@ -87,7 +88,7 @@ func Buy(event events.Events) (events.Events, error) {
 	event.Trade.PendingOrder = response.OrderID
 
 	if err != nil {
-		return events.Events{}, err
+		return SaveError(event, err)
 	}
 	return event, nil
 }

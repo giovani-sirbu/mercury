@@ -4,6 +4,9 @@ import (
 	"time"
 )
 
+const LOG_INFO = "INFO"
+const LOG_WARNING = "WARNING"
+
 type TradesLogs struct {
 	ID         uint      `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
 	TradeID    uint      `form:"tradeId" json:"tradeId" xml:"tradeId"`

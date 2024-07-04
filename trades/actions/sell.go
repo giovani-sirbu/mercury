@@ -12,7 +12,7 @@ func Sell(event events.Events) (events.Events, error) {
 	exchangeInit := exchange.Exchange{Name: event.Exchange.Name, ApiKey: event.Exchange.ApiKey, ApiSecret: event.Exchange.ApiSecret, TestNet: event.Exchange.TestNet}
 	client, clientError := exchangeInit.Client()
 	if clientError != nil {
-		return events.Events{}, clientError
+		return SaveError(event, clientError)
 	}
 	buyQuantity, sellQuantity := trades.GetQuantities(event.Trade.History)
 	feeInBase, _ := CalculateFees(event.Trade.History, event.Trade.Symbol)
@@ -28,6 +28,7 @@ func Sell(event events.Events) (events.Events, error) {
 
 	quantity = ToFixed(quantity, event.TradeSettings.LotSize)
 	priceInString := strconv.FormatFloat(event.Trade.PositionPrice, 'f', -1, 64)
+	event.Params.Quantity = quantity
 
 	var response aggregates.CreateOrderResponse
 	var err error
@@ -41,7 +42,7 @@ func Sell(event events.Events) (events.Events, error) {
 	event.Trade.PendingOrder = response.OrderID
 
 	if err != nil {
-		return events.Events{}, err
+		return SaveError(event, err)
 	}
 	return event, nil
 }

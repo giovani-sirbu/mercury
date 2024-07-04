@@ -15,7 +15,7 @@ func CancelPendingOrder(event events.Events) (events.Events, error) {
 		_, err := client.CancelOrder(event.Trade.PendingOrder, event.Trade.Symbol)
 
 		if err != nil {
-			return events.Events{}, err
+			return SaveError(event, err)
 		}
 		return event, nil
 	} else {
