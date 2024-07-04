@@ -6,7 +6,7 @@ import (
 )
 
 func SaveError(event events.Events, err error) (events.Events, error) {
-	if event.Trade.Logs[len(event.Trade.Logs)-1].Type == aggragates.LOG_WARNING {
+	if len(event.Trade.Logs) > 0 && event.Trade.Logs[len(event.Trade.Logs)-1].Type == aggragates.LOG_WARNING {
 		return event, err
 	}
 	// Reset price and position to allow only the error update
