@@ -34,6 +34,6 @@ type (
 	Params struct {
 		OldPositionPrice float64
 		Percentage       float64
-		OldPosition      float64
+		OldPosition      string
 	}
 )
