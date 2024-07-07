@@ -7,14 +7,19 @@ import (
 
 // Exchange structure to init exchange
 type Exchange struct {
-	Name      string `bson:"name" json:"name"`
-	ApiKey    string `bson:"apiKey" json:"apiKey"`
-	ApiSecret string `bson:"apiSecret" json:"apiSecret"`
-	TestNet   bool   `bson:"testNet" json:"testNet"`
+	Name          string             `json:"name"`
+	ApiKey        string             `json:"apiKey"`
+	ApiSecret     string             `json:"apiSecret"`
+	TestNet       bool               `json:"testNet"`
+	CustomActions aggregates.Actions `json:"customActions"`
+	IsCustom      bool               `json:"isCustom"`
 }
 
 // Client Add client method to receive exchange actions
 func (e Exchange) Client() (aggregates.Actions, error) {
+	if e.IsCustom {
+		return e.CustomActions, nil
+	}
 	var initExchange = aggregates.Exchange{Name: e.Name, ApiKey: e.ApiKey, ApiSecret: e.ApiSecret, TestNet: e.TestNet}
 	exchangeActions, err := adaptors.GetExchangeActions(initExchange)
 	return exchangeActions, err
