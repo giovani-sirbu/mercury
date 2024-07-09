@@ -8,7 +8,7 @@ import (
 
 // GetExchangeActions method to fetch actions by exchange name
 func GetExchangeActions(e aggregates.Exchange) (aggregates.Actions, error) {
-	if e.Name == "" || e.ApiKey == "" || e.ApiSecret == "" {
+	if e.Name == "" {
 		return aggregates.Actions{}, fmt.Errorf("missing required payload")
 	}
 	if e.Name == "binance" {
