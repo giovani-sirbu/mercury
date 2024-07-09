@@ -80,13 +80,24 @@ type (
 		IntervalNum   int64  `json:"intervalNum"`
 		Limit         int64  `json:"limit"`
 	}
+	// Symbol market symbol
+	Symbol struct {
+		Symbol              string                   `json:"symbol"`
+		BaseAsset           string                   `json:"baseAsset"`
+		BaseAssetPrecision  int                      `json:"baseAssetPrecision"`
+		QuoteAsset          string                   `json:"quoteAsset"`
+		QuotePrecision      int                      `json:"quotePrecision"`
+		QuoteAssetPrecision int                      `json:"quoteAssetPrecision"`
+		Filters             []map[string]interface{} `json:"filters"`
+	}
+
 	// ExchangeInfo exchange info
 	ExchangeInfo struct {
 		Timezone        string        `json:"timezone"`
 		ServerTime      int64         `json:"serverTime"`
 		RateLimits      []RateLimit   `json:"rateLimits"`
 		ExchangeFilters []interface{} `json:"exchangeFilters"`
-		Symbols         []string      `json:"symbols"`
+		Symbols         []Symbol      `json:"symbols"`
 	}
 
 	// TradeFeeDetails represents details about fees
