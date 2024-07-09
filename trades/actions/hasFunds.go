@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
-	"github.com/giovani-sirbu/mercury/exchange"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/trades"
 	"strconv"
@@ -30,8 +29,8 @@ func HasFunds(event events.Events) (events.Events, error) {
 	if event.Exchange.TestNet {
 		return event, nil
 	}
-	exchangeInit := exchange.Exchange{Name: event.Exchange.Name, ApiKey: event.Exchange.ApiKey, ApiSecret: event.Exchange.ApiSecret, TestNet: event.Exchange.TestNet}
-	client, _ := exchangeInit.Client()
+
+	client, _ := event.Exchange.Client()
 	assets, assetsErr := client.GetUserAssets() // Get user balance
 
 	if assetsErr != nil {

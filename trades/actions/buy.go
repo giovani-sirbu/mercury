@@ -3,7 +3,6 @@ package actions
 import (
 	"encoding/json"
 	"github.com/giovani-sirbu/mercury/events"
-	"github.com/giovani-sirbu/mercury/exchange"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
@@ -12,8 +11,7 @@ import (
 )
 
 func Buy(event events.Events) (events.Events, error) {
-	exchangeInit := exchange.Exchange{Name: event.Exchange.Name, ApiKey: event.Exchange.ApiKey, ApiSecret: event.Exchange.ApiSecret, TestNet: event.Exchange.TestNet}
-	client, clientError := exchangeInit.Client()
+	client, clientError := event.Exchange.Client()
 	if clientError != nil {
 		return events.Events{}, clientError
 	}
