@@ -26,10 +26,6 @@ func GetAssetBudget(assets []aggregates.UserAssetRecord, assetSymbol string) flo
 }
 
 func HasFunds(event events.Events) (events.Events, error) {
-	if event.Exchange.TestNet {
-		return event, nil
-	}
-
 	client, _ := event.Exchange.Client()
 	assets, assetsErr := client.GetUserAssets() // Get user balance
 

@@ -194,7 +194,11 @@ func (e Binance) GetUserAssets() ([]aggregates.UserAssetRecord, error) {
 	}
 	clientInfo, err := client.NewGetUserAsset().NeedBtcValuation(true).Do(context.Background())
 	if err != nil {
-		return nil, err
+		profileInfo, profileErr := e.GetProfile()
+		if profileErr != nil {
+			return nil, profileErr
+		}
+		return profileInfo.Balances, nil
 	}
 	var clientInfoResult []aggregates.UserAssetRecord
 	copier.Copy(&clientInfoResult, &clientInfo)
