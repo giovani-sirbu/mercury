@@ -57,7 +57,7 @@ func Buy(event events.Events) (events.Events, error) {
 
 			amount := GetAssetBudget(assets, assetSymbol)
 
-			quantity = trades.GetInitialBid(amount, depths, multiplier)
+			quantity = trades.GetInitialBid(amount, depths, multiplier) / event.Trade.PositionPrice
 		}
 		multiplier = 1
 	}
