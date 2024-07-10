@@ -115,17 +115,18 @@ type (
 	}
 
 	Account struct {
-		MakerCommission  int64           `json:"makerCommission"`
-		TakerCommission  int64           `json:"takerCommission"`
-		BuyerCommission  int64           `json:"buyerCommission"`
-		SellerCommission int64           `json:"sellerCommission"`
-		CommissionRates  CommissionRates `json:"commissionRates"`
-		CanTrade         bool            `json:"canTrade"`
-		CanWithdraw      bool            `json:"canWithdraw"`
-		CanDeposit       bool            `json:"canDeposit"`
-		UpdateTime       uint64          `json:"updateTime"`
-		AccountType      string          `json:"accountType"`
-		Permissions      []string        `json:"permissions"`
+		MakerCommission  int64             `json:"makerCommission"`
+		TakerCommission  int64             `json:"takerCommission"`
+		BuyerCommission  int64             `json:"buyerCommission"`
+		SellerCommission int64             `json:"sellerCommission"`
+		CommissionRates  CommissionRates   `json:"commissionRates"`
+		CanTrade         bool              `json:"canTrade"`
+		CanWithdraw      bool              `json:"canWithdraw"`
+		CanDeposit       bool              `json:"canDeposit"`
+		UpdateTime       uint64            `json:"updateTime"`
+		AccountType      string            `json:"accountType"`
+		Permissions      []string          `json:"permissions"`
+		Balances         []UserAssetRecord `json:"balances"`
 	}
 
 	UserAssetRecord struct {
