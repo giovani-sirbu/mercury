@@ -37,5 +37,6 @@ type (
 		OldPosition      string
 		PreventInfoLog   bool
 		Quantity         float64
+		Profit           float64
 	}
 )

@@ -38,5 +38,7 @@ func HasProfit(event events.Events) (events.Events, error) {
 		return event, fmt.Errorf(msg)
 	}
 
+	event.Params.Profit = profit - fee
+
 	return event, nil
 }
