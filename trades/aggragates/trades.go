@@ -14,7 +14,7 @@ type (
 		ParentSymbol    string          `gorm:"type:varchar(10); index" bson:"parentSymbol" json:"parentSymbol"`
 		PositionType    string          `gorm:"type:varchar(50); default:new" bson:"positionType" json:"positionType"`
 		PositionPrice   float64         `bson:"positionPrice" json:"positionPrice"`
-		ExchangeID      int             `form:"exchangeId" json:"-" xml:"exchangeId"`
+		ExchangeID      int             `gorm:"index:idx_dashboard_stats,priority:2" form:"exchangeId" json:"-" xml:"exchangeId"`
 		Exchange        TradesExchanges `form:"exchange" json:"exchange" xml:"exchange"`
 		StrategyID      int             `form:"strategyId" json:"-" xml:"strategyId"`
 		Strategy        Strategies      `gorm:"foreignKey:StrategyID;references:ID"  form:"strategy" json:"strategy" xml:"strategy"`
@@ -26,9 +26,9 @@ type (
 		PendingOrder    int64           `bson:"pendingOrder" json:"pendingOrder"`
 		History         []TradesHistory `gorm:"foreignKey:TradeID;references:ID" bson:"history" json:"history"`
 		Logs            []TradesLogs    `gorm:"foreignKey:TradeID;references:ID" bson:"logs" json:"logs"`
-		Status          Status          `gorm:"default:active;index;index:idx_dashboard_stats,priority:2" bson:"status" json:"status"`
+		Status          Status          `gorm:"default:active;index;index:idx_dashboard_stats,priority:3" bson:"status" json:"status"`
 		CreatedAt       time.Time       `form:"createdAt" json:"createdAt" xml:"createdAt"`
-		UpdatedAt       time.Time       `form:"updatedAt;index:idx_dashboard_stats,priority:3" json:"updatedAt" xml:"updatedAt"`
+		UpdatedAt       time.Time       `form:"updatedAt;index:idx_dashboard_stats,priority:4" json:"updatedAt" xml:"updatedAt"`
 		DeletedAt       gorm.DeletedAt  `form:"deletedAt" json:"-" xml:"deletedAt"`
 	}
 	Params struct {
