@@ -1,8 +1,6 @@
 package actions
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
@@ -47,10 +45,11 @@ func HasFunds(event events.Events) (events.Events, error) {
 		// If nou enough funds update to impasse and return
 		msg := fmt.Sprintf("Not enough funds to buy, available qty: %f, necessary qty: %f", remainedQuantity, quantity*event.Trade.PositionPrice)
 		event.Trade.PositionType = "impasse"
-		tradeInBytes, _ := json.Marshal(event.Trade)
-		topic := "update-trade"
-		event.Broker.Producer(topic, context.Background(), nil, tradeInBytes)
-		return events.Events{}, fmt.Errorf(msg)
+		newEvent, err := UpdateTrade(event)
+		if err != nil {
+			return SaveError(event, err)
+		}
+		return SaveError(newEvent, fmt.Errorf(msg))
 	}
 
 	return event, nil
