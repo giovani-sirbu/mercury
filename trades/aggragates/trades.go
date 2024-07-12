@@ -1,6 +1,7 @@
 package aggragates
 
 import (
+	"fmt"
 	"gorm.io/gorm"
 	"time"
 )
@@ -40,3 +41,24 @@ type (
 		Profit           float64
 	}
 )
+
+func (t *Trades) AfterUpdate(tx *gorm.DB) (err error) {
+	fmt.Println("AfterUpdate")
+	fmt.Println(t)
+
+	return
+}
+
+func (t *Trades) AfterSave(tx *gorm.DB) (err error) {
+	fmt.Println("AfterSave")
+	fmt.Println(t)
+
+	return
+}
+
+func (t *Trades) AfterCreate(tx *gorm.DB) (err error) {
+	fmt.Println("AfterCreate")
+	fmt.Println(t)
+
+	return
+}

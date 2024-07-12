@@ -47,7 +47,7 @@ func checkTagRules(e validator.FieldError) (errMsg string) {
 	return
 }
 
-func Response(c *gin.Context, statusCode int, data interface{}) error {
+func Response(c *gin.Context, statusCode int, data interface{}) {
 	if _, ok := data.(string); ok {
 		c.JSON(statusCode, Data{
 			Message: data.(string),
@@ -56,7 +56,7 @@ func Response(c *gin.Context, statusCode int, data interface{}) error {
 		c.JSON(statusCode, data)
 	}
 
-	return nil
+	return
 }
 
 func ValidationResponse(c *gin.Context, _err error) {
@@ -77,12 +77,8 @@ func ValidationResponse(c *gin.Context, _err error) {
 		})
 	}
 
-	err := Response(c, http.StatusUnprocessableEntity, ValidationErrors{
+	Response(c, http.StatusUnprocessableEntity, ValidationErrors{
 		Message: "VALIDATION_ERROR",
 		Errors:  errors,
 	})
-
-	if err != nil {
-		return
-	}
 }
