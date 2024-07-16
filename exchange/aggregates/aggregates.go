@@ -139,6 +139,11 @@ type (
 		BtcValuation string `json:"btcValuation"`
 	}
 
+	PriceWSResponseData struct {
+		Price  string `json:"p"`
+		Symbol string `json:"s"`
+	}
+
 	// Actions All exchange actions types
 	Actions struct {
 		Buy             func(symbol string, quantity float64, price string) (CreateOrderResponse, error)
@@ -153,5 +158,6 @@ type (
 		GetPrice        func(symbol string) (float64, error)
 		GetProfile      func() (Account, error)
 		GetUserAssets   func() ([]UserAssetRecord, error)
+		PriceWSHandler  func(pairs []string, handler func(PriceWSResponseData), done <-chan string)
 	}
 )

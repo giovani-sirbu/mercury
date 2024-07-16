@@ -31,6 +31,7 @@ func GetBinanceActions(e aggregates.Exchange) aggregates.Actions {
 		GetProfile:      binanceStruct.GetProfile,
 		GetPrice:        binanceStruct.GetPrice,
 		GetUserAssets:   binanceStruct.GetUserAssets,
+		PriceWSHandler:  binanceStruct.PriceWSHandler,
 	}
 	return actions
 }
