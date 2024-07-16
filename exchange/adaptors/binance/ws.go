@@ -104,6 +104,6 @@ func (e Binance) PriceWSHandler(pairs []string, handler func(aggregates.PriceWSR
 		if err = json.Unmarshal(msg, &response); err != nil {
 			return
 		}
-		handler(aggregates.PriceWSResponseData{response.Data.Price, response.Data.Symbol})
+		handler(aggregates.PriceWSResponseData{Price: response.Data.Price, Symbol: response.Data.Symbol, Exchange: e.Name})
 	}
 }

@@ -140,8 +140,9 @@ type (
 	}
 
 	PriceWSResponseData struct {
-		Price  string `json:"p"`
-		Symbol string `json:"s"`
+		Price    string `json:"p"`
+		Symbol   string `json:"s"`
+		Exchange string `json:"exchange"`
 	}
 
 	// Actions All exchange actions types
