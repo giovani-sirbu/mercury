@@ -89,7 +89,7 @@ func (e Binance) WS(url string, done <-chan string) (*websocket.Conn, error) {
 	return conn, err
 }
 
-func (e Binance) UserWs(listenKey string, handler func(order *aggregates.Order), done <-chan string) {
+func (e Binance) UserWs(listenKey string, handler func(order *aggregates.WsUserDataEvent), done <-chan string) {
 	socketUrl := getUserStreamUrlByExchange(e.Name, listenKey)
 
 	conn, err := e.WS(socketUrl, done)
@@ -105,7 +105,7 @@ func (e Binance) UserWs(listenKey string, handler func(order *aggregates.Order),
 		}
 	}()
 
-	var response *aggregates.Order
+	var response *aggregates.WsUserDataEvent
 	for {
 		_, msg, err := conn.ReadMessage()
 
@@ -122,6 +122,7 @@ func (e Binance) UserWs(listenKey string, handler func(order *aggregates.Order),
 		if err = json.Unmarshal(msg, &response); err != nil {
 			return
 		}
+		fmt.Println(string(msg), "here")
 		handler(response)
 	}
 }
