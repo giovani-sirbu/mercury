@@ -14,7 +14,7 @@ func CalculateUSDProfit(client aggregates.Actions, profit float64, profitAsset s
 	}
 
 	// calculate usd profit
-	price, err := client.GetPrice(profitAsset + fiatConversionSymbol)
+	price, err := client.GetPrice(profitAsset + "/" + fiatConversionSymbol)
 
 	if err != nil {
 		fmt.Println("could not calculate price")
