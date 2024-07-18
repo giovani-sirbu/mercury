@@ -28,6 +28,17 @@ func getUrlByExchange(exchange string, pairs []string) string {
 	return ""
 }
 
+func getUserStreamUrlByExchange(exchange string, listenKey string) string {
+	switch exchange {
+	case "binance":
+		{
+			url := fmt.Sprintf("wss://stream.binance.com:443/stream?streams=%s", listenKey)
+			return url
+		}
+	}
+	return ""
+}
+
 type WSResponse struct {
 	Data aggregates.PriceWSResponseData
 }
@@ -69,10 +80,58 @@ func listenToMessages(conn *websocket.Conn, done <-chan string) {
 	}
 }
 
+func (e Binance) WS(url string, done <-chan string) (*websocket.Conn, error) {
+	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	keepAlive(conn, time.Minute)
+
+	defer conn.Close()
+
+	go listenToMessages(conn, done)
+
+	return conn, err
+}
+
+func (e Binance) UserWs(listenKey string, handler func(order *aggregates.Order), done <-chan string) {
+	socketUrl := getUserStreamUrlByExchange(e.Name, listenKey)
+
+	conn, err := e.WS(socketUrl, done)
+
+	if err != nil {
+		log.Info(fmt.Sprintf("Error connecting to Websocket Server: %s", err.Error()), "", "")
+		e.UserWs(listenKey, handler, done)
+	}
+	defer conn.Close()
+	defer func() {
+		if err := recover(); err != nil {
+			e.UserWs(listenKey, handler, done)
+		}
+	}()
+
+	var response *aggregates.Order
+	for {
+		_, msg, err := conn.ReadMessage()
+
+		if err != nil {
+			log.Info(fmt.Sprintf("Error in receive: %s", err.Error()), "", "")
+			if strings.Contains(err.Error(), "use of closed network connection") && closedByChannel {
+				closedByChannel = false
+				return
+			}
+			e.UserWs(listenKey, handler, done)
+			return
+		}
+
+		if err = json.Unmarshal(msg, &response); err != nil {
+			return
+		}
+		handler(response)
+	}
+}
+
 func (e Binance) PriceWSHandler(pairs []string, handler func(aggregates.PriceWSResponseData), done <-chan string) {
 	socketUrl := getUrlByExchange(e.Name, pairs)
-	conn, _, err := websocket.DefaultDialer.Dial(socketUrl, nil)
-	keepAlive(conn, time.Minute)
+
+	conn, err := e.WS(socketUrl, done)
 
 	if err != nil {
 		log.Info(fmt.Sprintf("Error connecting to Websocket Server: %s", err.Error()), "", "")
@@ -84,8 +143,6 @@ func (e Binance) PriceWSHandler(pairs []string, handler func(aggregates.PriceWSR
 			e.PriceWSHandler(pairs, handler, done)
 		}
 	}()
-
-	go listenToMessages(conn, done)
 
 	var response *WSResponse
 	for {

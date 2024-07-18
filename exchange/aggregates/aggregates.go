@@ -160,5 +160,7 @@ type (
 		GetProfile      func() (Account, error)
 		GetUserAssets   func() ([]UserAssetRecord, error)
 		PriceWSHandler  func(pairs []string, handler func(PriceWSResponseData), done <-chan string)
+		PingUserStream  func() error
+		StartUserStream func() (string, error)
 	}
 )

@@ -32,6 +32,8 @@ func GetBinanceActions(e aggregates.Exchange) aggregates.Actions {
 		GetPrice:        binanceStruct.GetPrice,
 		GetUserAssets:   binanceStruct.GetUserAssets,
 		PriceWSHandler:  binanceStruct.PriceWSHandler,
+		StartUserStream: binanceStruct.StartUserStream,
+		PingUserStream:  binanceStruct.PingUserStream,
 	}
 	return actions
 }
@@ -51,8 +53,8 @@ func InitExchange(exchange Binance) (*binance.Client, error) {
 
 // Buy binance buy method
 func (e Binance) Buy(symbol string, quantity float64, price string) (aggregates.CreateOrderResponse, error) {
-	fmt.Println("here")
 	var actionResult aggregates.CreateOrderResponse
+
 	result, err := e.binanceCreateOrder(binance.SideTypeBuy, binance.OrderTypeLimit, symbol, quantity, price)
 	fmt.Println(result, err)
 	copier.Copy(&actionResult, &result)
@@ -249,4 +251,30 @@ func (e Binance) binanceCreateOrder(sideType binance.SideType, orderType binance
 	}
 
 	return order, err
+}
+
+// StartUserStream start a new user stream
+func (e Binance) StartUserStream() (string, error) {
+	client, initErr := InitExchange(e)
+	if initErr != nil {
+		return "", initErr
+	}
+	clientInfo, err := client.NewStartUserStreamService().Do(context.Background())
+	if err != nil {
+		return clientInfo, err
+	}
+	return clientInfo, nil
+}
+
+// PingUserStream keep alive a new user stream
+func (e Binance) PingUserStream() error {
+	client, initErr := InitExchange(e)
+	if initErr != nil {
+		return initErr
+	}
+	err := client.NewKeepaliveUserStreamService().Do(context.Background())
+	if err != nil {
+		return err
+	}
+	return nil
 }
