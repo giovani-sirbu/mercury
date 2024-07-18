@@ -84,8 +84,6 @@ func (e Binance) WS(url string, done <-chan string) (*websocket.Conn, error) {
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	keepAlive(conn, time.Minute)
 
-	defer conn.Close()
-
 	go listenToMessages(conn, done)
 
 	return conn, err
