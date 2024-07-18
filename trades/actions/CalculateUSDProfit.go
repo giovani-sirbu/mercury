@@ -8,17 +8,13 @@ import (
 
 const fiatConversionSymbol = "USDT"
 
-func CalculateUSDProfit(client aggregates.Actions, profit float64, symbol string) float64 {
-	split := strings.Split(symbol, "/")
-	quoteAsset := split[1]
-
-	if strings.Contains(quoteAsset, "USD") {
+func CalculateUSDProfit(client aggregates.Actions, profit float64, profitAsset string) float64 {
+	if strings.Contains(profitAsset, "USD") {
 		return profit
 	}
 
 	// calculate usd profit
-	usdSymbol := strings.Replace(symbol, quoteAsset, fiatConversionSymbol, 1)
-	price, err := client.GetPrice(usdSymbol)
+	price, err := client.GetPrice(profitAsset + fiatConversionSymbol)
 
 	if err != nil {
 		fmt.Println("could not calculate price")

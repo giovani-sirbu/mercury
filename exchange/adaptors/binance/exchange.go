@@ -57,9 +57,7 @@ func (e Binance) Buy(symbol string, quantity float64, price string) (aggregates.
 	var actionResult aggregates.CreateOrderResponse
 
 	result, err := e.binanceCreateOrder(binance.SideTypeBuy, binance.OrderTypeLimit, symbol, quantity, price)
-	fmt.Println(result, err)
 	copier.Copy(&actionResult, &result)
-	fmt.Println(actionResult)
 	return actionResult, err
 }
 
