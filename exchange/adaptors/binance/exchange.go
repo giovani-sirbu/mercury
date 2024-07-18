@@ -32,6 +32,7 @@ func GetBinanceActions(e aggregates.Exchange) aggregates.Actions {
 		GetPrice:        binanceStruct.GetPrice,
 		GetUserAssets:   binanceStruct.GetUserAssets,
 		PriceWSHandler:  binanceStruct.PriceWSHandler,
+		UserWSHandler:   binanceStruct.UserWs,
 		StartUserStream: binanceStruct.StartUserStream,
 		PingUserStream:  binanceStruct.PingUserStream,
 	}
