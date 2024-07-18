@@ -32,7 +32,7 @@ func getUserStreamUrlByExchange(exchange string, listenKey string) string {
 	switch exchange {
 	case "binance":
 		{
-			url := fmt.Sprintf("wss://stream.binance.com:443/stream?streams=%s", listenKey)
+			url := fmt.Sprintf("wss://stream.binance.com:9443/stream?streams=%s", listenKey)
 			return url
 		}
 	}
