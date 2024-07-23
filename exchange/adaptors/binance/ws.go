@@ -43,6 +43,10 @@ type WSResponse struct {
 	Data aggregates.PriceWSResponseData
 }
 
+type UserWSResponse struct {
+	Data aggregates.WsUserDataEvent
+}
+
 func keepAlive(c *websocket.Conn, timeout time.Duration) {
 	lastResponse := time.Now()
 	c.SetPongHandler(func(msg string) error {
@@ -89,7 +93,7 @@ func (e Binance) WS(url string, done <-chan string) (*websocket.Conn, error) {
 	return conn, err
 }
 
-func (e Binance) UserWs(listenKey string, handler func(order *aggregates.WsUserDataEvent), done <-chan string) {
+func (e Binance) UserWs(listenKey string, handler func(order aggregates.WsUserDataEvent), done <-chan string) {
 	socketUrl := getUserStreamUrlByExchange(e.Name, listenKey)
 
 	conn, err := e.WS(socketUrl, done)
@@ -105,7 +109,7 @@ func (e Binance) UserWs(listenKey string, handler func(order *aggregates.WsUserD
 		}
 	}()
 
-	var response *aggregates.WsUserDataEvent
+	var response *UserWSResponse
 	for {
 		_, msg, err := conn.ReadMessage()
 
@@ -122,8 +126,10 @@ func (e Binance) UserWs(listenKey string, handler func(order *aggregates.WsUserD
 		if err = json.Unmarshal(msg, &response); err != nil {
 			return
 		}
-		fmt.Println(string(msg), "here")
-		handler(response)
+
+		fmt.Println(string(msg), response.Data)
+
+		handler(response.Data)
 	}
 }
 

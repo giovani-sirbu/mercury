@@ -147,12 +147,12 @@ type (
 
 	// WsUserDataEvent define user data event
 	WsUserDataEvent struct {
-		Event         string `json:"e"`
-		Time          int64  `json:"E"`
-		AccountUpdate WsAccountUpdateList
-		BalanceUpdate WsBalanceUpdate
-		OrderUpdate   WsOrderUpdate
-		OCOUpdate     WsOCOUpdate
+		Event string `json:"e"`
+		Time  int64  `json:"E"`
+		WsAccountUpdateList
+		WsBalanceUpdate
+		WsOrderUpdate
+		WsOCOUpdate
 	}
 
 	WsAccountUpdateList struct {
@@ -264,7 +264,7 @@ type (
 		GetProfile      func() (Account, error)
 		GetUserAssets   func() ([]UserAssetRecord, error)
 		PriceWSHandler  func(pairs []string, handler func(PriceWSResponseData), done <-chan string)
-		UserWSHandler   func(listenKey string, handler func(order *WsUserDataEvent), done <-chan string)
+		UserWSHandler   func(listenKey string, handler func(order WsUserDataEvent), done <-chan string)
 		PingUserStream  func() error
 		StartUserStream func() (string, error)
 	}
