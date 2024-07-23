@@ -236,7 +236,7 @@ type (
 		RejectReason    string `json:"r"`
 		ClientOrderId   string `json:"C"` // List Client Order ID
 		TransactionTime int64  `json:"T"`
-		Orders          WsOCOOrderList
+		WsOCOOrderList
 	}
 
 	WsOCOOrderList struct {

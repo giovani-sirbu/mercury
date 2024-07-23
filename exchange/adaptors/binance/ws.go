@@ -127,8 +127,6 @@ func (e Binance) UserWs(listenKey string, handler func(order aggregates.WsUserDa
 			return
 		}
 
-		fmt.Println(string(msg), response.Data)
-
 		handler(response.Data)
 	}
 }
