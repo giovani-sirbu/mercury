@@ -23,7 +23,7 @@ type (
 		ProfitAsset     string          `bson:"profitAsset" json:"profitAsset"`
 		PreventNewTrade bool            `gorm:"type:boolean;default:false" bson:"preventNewTrade" json:"preventNewTrade"`
 		Inverse         bool            `gorm:"type:boolean;default:false" bson:"inverse" json:"inverse"`
-		PendingOrder    int64           `bson:"pendingOrder" json:"pendingOrder"`
+		PendingOrder    int64           `gorm:"index" bson:"pendingOrder" json:"pendingOrder"`
 		History         []TradesHistory `gorm:"foreignKey:TradeID;references:ID" bson:"history" json:"history"`
 		Logs            []TradesLogs    `gorm:"foreignKey:TradeID;references:ID" bson:"logs" json:"logs"`
 		Status          Status          `gorm:"default:active;index;index:idx_dashboard_stats,priority:3" bson:"status" json:"status"`

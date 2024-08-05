@@ -93,7 +93,9 @@ func (e Binance) WS(url string, done <-chan string) (*websocket.Conn, error) {
 	return conn, err
 }
 
-func (e Binance) UserWs(listenKey string, handler func(order aggregates.WsUserDataEvent), done <-chan string) {
+const expireEvent = "listenKeyExpired"
+
+func (e Binance) UserWs(listenKey string, handler func(order aggregates.WsUserDataEvent, expireEvent string), done <-chan string) {
 	socketUrl := getUserStreamUrlByExchange(e.Name, listenKey)
 
 	conn, err := e.WS(socketUrl, done)
@@ -127,7 +129,7 @@ func (e Binance) UserWs(listenKey string, handler func(order aggregates.WsUserDa
 			return
 		}
 
-		handler(response.Data)
+		handler(response.Data, expireEvent)
 	}
 }
 
