@@ -2,6 +2,7 @@ package actions
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/trades"
@@ -37,12 +38,13 @@ func Buy(event events.Events) (events.Events, error) {
 	multiplier := StrategySettings[settingsIndex].Multiplier
 	depths := StrategySettings[settingsIndex].Depths
 	pairInitialBid := StrategySettings[settingsIndex].InitialBid
+	minNotion := event.TradeSettings.MinNotion / event.Trade.PositionPrice
 
 	if quantity == 0 {
 		var initialBid float64
 		if pairInitialBid > 0 {
 			initialBid = pairInitialBid
-			quantity = (event.TradeSettings.MinNotion / event.Trade.PositionPrice) * initialBid
+			quantity = minNotion * initialBid
 		} else {
 			assets, assetsErr := client.GetUserAssets() // Get user balance
 			if assetsErr != nil {
@@ -58,6 +60,9 @@ func Buy(event events.Events) (events.Events, error) {
 			amount := GetAssetBudget(assets, assetSymbol)
 
 			quantity = trades.GetInitialBid(amount, depths, multiplier) / event.Trade.PositionPrice
+			if quantity < initialBid {
+				return SaveError(event, fmt.Errorf("not enough funds to start logic"))
+			}
 		}
 		multiplier = 1
 	}
