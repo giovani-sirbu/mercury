@@ -1,13 +1,14 @@
 package log
 
 import (
-	logs "github.com/sirupsen/logrus"
+	"fmt"
 	"os"
 )
 
 func Debug(msg ...any) {
 	if os.Getenv("DEBUG") == "true" {
-		logWrapper.SetFormatter(&logs.JSONFormatter{})
+		fmt.Println(msg)
+		logWrapper.Debug(msg)
 
 		for _, arg := range msg {
 			logWrapper.Debug(arg)
