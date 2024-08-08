@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-func Debug(msg ...any) {
+func Debug(msg any) {
 	if os.Getenv("DEBUG") == "true" {
 		fmt.Println(msg)
 	}
