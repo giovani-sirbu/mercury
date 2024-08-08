@@ -8,6 +8,9 @@ import (
 func Debug(msg ...any) {
 	if os.Getenv("DEBUG") == "true" {
 		logWrapper.SetFormatter(&logs.JSONFormatter{})
-		logWrapper.Debug(msg)
+
+		for _, arg := range msg {
+			logWrapper.Debug(arg)
+		}
 	}
 }
