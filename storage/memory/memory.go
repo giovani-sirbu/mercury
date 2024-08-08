@@ -2,8 +2,10 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"github.com/go-redis/cache/v9"
 	"github.com/redis/go-redis/v9"
+	"os"
 	"time"
 )
 
@@ -35,9 +37,11 @@ func (m Memory) Set(key string, obj interface{}, expiration time.Duration) error
 	cacheHandler := m.Init()
 	defer ctx.Done()
 
+	keyWithPrefix := fmt.Sprintf("%s%s", os.Getenv("REDIS_PREFIX"), key)
+
 	err := cacheHandler.Set(&cache.Item{
 		Ctx:   ctx,
-		Key:   key,
+		Key:   keyWithPrefix,
 		Value: obj,
 		TTL:   expiration,
 	})
@@ -51,7 +55,8 @@ func (m Memory) Get(key string, obj interface{}) error {
 	cacheHandler := m.Init()
 	defer ctx.Done()
 
-	err := cacheHandler.Get(ctx, key, &obj)
+	keyWithPrefix := fmt.Sprintf("%s%s", os.Getenv("REDIS_PREFIX"), key)
+	err := cacheHandler.Get(ctx, keyWithPrefix, &obj)
 
 	return err
 }
@@ -62,7 +67,8 @@ func (m Memory) Delete(key string) error {
 	cacheHandler := m.Init()
 	defer ctx.Done()
 
-	err := cacheHandler.Delete(ctx, key)
+	keyWithPrefix := fmt.Sprintf("%s%s", os.Getenv("REDIS_PREFIX"), key)
+	err := cacheHandler.Delete(ctx, keyWithPrefix)
 
 	return err
 }
