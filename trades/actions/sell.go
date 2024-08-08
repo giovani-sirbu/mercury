@@ -36,7 +36,8 @@ func Sell(event events.Events) (events.Events, error) {
 	var response aggregates.CreateOrderResponse
 	var err error
 
-	if dust > 0 {
+	// TODO - find a solution to sell dust assets
+	if dust > 0 && false {
 		if event.Trade.Inverse {
 			response, err = client.MarketBuy(event.Trade.Symbol, quantity)
 		} else {
