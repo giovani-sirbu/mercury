@@ -78,7 +78,7 @@ func (m MessageBroker) Consumer(topic string, handler fn) {
 		// define value
 		value := m.Value
 
-		commonLog.Info(fmt.Sprintf("Consumed on topic: %s", topic), "", "Consumer")
+		commonLog.Info(fmt.Sprintf("Consumed on topic: %s", topicWithPrefix), "", "Consumer")
 
 		// Handle response callback
 		go handler(value)
