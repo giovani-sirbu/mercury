@@ -22,17 +22,6 @@ type (
 	}
 )
 
-// Next Function to run the next event if we have multiple events
-func (e Events) Next() error {
-	log.Debug(e.EventsNames) // debug current events name
-	if len(e.EventsNames) == 1 {
-		return nil
-	}
-	e.EventsNames = e.EventsNames[1:]
-	err := e.Run()
-	return err
-}
-
 // Run Function to run events
 func (e Events) Run() error {
 	if len(e.EventsNames) == 0 {
@@ -42,14 +31,19 @@ func (e Events) Run() error {
 		return nil
 	}
 
-	newEvent, err := e.Events[e.EventsNames[0]](e)
-	if err != nil {
-		log.Error(err.Error(), "Run events", "")
-		return err
+	for _, eventName := range e.EventsNames {
+		log.Debug("In progress action", eventName)
+		_, err := e.Events[eventName](e)
+		if err != nil {
+			log.Error(err.Error(), "Run events", "")
+			return err
+		}
+		continue
 	}
-	err = newEvent.Next()
-	log.Debug(err) // log event error
-	return err
+
+	log.Debug("Finish all event actions", e.EventsNames)
+
+	return nil
 }
 
 // Add Function to register a new event or replace a default one
