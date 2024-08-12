@@ -24,6 +24,7 @@ type (
 
 // Next Function to run the next event if we have multiple events
 func (e Events) Next() error {
+	log.Debug(e.EventsNames) // debug current events name
 	if len(e.EventsNames) == 1 {
 		return nil
 	}
@@ -47,6 +48,7 @@ func (e Events) Run() error {
 		return err
 	}
 	err = newEvent.Next()
+	log.Debug(err) // log event error
 	return err
 }
 
