@@ -1,7 +1,6 @@
 package actions
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
@@ -22,6 +21,6 @@ func UpdateTrade(event events.Events) (events.Events, error) {
 	}
 	tradeInBytes, _ := json.Marshal(event.Trade)
 	topic := "update-trade"
-	event.Broker.Produce(topic, context.Background(), nil, tradeInBytes, event.Broker.Producer)
+	event.Broker.Produce(topic, nil, tradeInBytes, event.Broker.Producer)
 	return event, nil
 }

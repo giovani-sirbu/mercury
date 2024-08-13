@@ -1,7 +1,6 @@
 package messagebroker
 
 import (
-	"context"
 	"github.com/segmentio/kafka-go"
 	"time"
 )
@@ -18,7 +17,7 @@ type Producer struct {
 
 type BrokerMethods struct {
 	Producer *Producer
-	Produce  func(topic string, parent context.Context, key, value []byte, producer *Producer) error
+	Produce  func(topic string, key, value []byte, producer *Producer) error
 	Consumer func(topic string, handler fn)
 }
 
