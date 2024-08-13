@@ -10,7 +10,7 @@ import (
 type (
 	Events struct {
 		Storage               interface{}
-		Broker                messagebroker.BrokerMethods
+		Broker                messagebroker.MessageBroker
 		Exchange              exchange.Exchange
 		Trade                 aggragates.Trades
 		ChildrenTrades        []aggragates.Trades
@@ -22,6 +22,16 @@ type (
 	}
 )
 
+// Next Function to run the next event if we have multiple events
+func (e Events) Next() error {
+	if len(e.EventsNames) == 1 {
+		return nil
+	}
+	e.EventsNames = e.EventsNames[1:]
+	err := e.Run()
+	return err
+}
+
 // Run Function to run events
 func (e Events) Run() error {
 	if len(e.EventsNames) == 0 {
@@ -31,19 +41,13 @@ func (e Events) Run() error {
 		return nil
 	}
 
-	for _, eventName := range e.EventsNames {
-		log.Debug("In progress action", eventName)
-		_, err := e.Events[eventName](e)
-		if err != nil {
-			log.Error(err.Error(), "Run events", "")
-			return err
-		}
-		continue
+	newEvent, err := e.Events[e.EventsNames[0]](e)
+	if err != nil {
+		log.Error(err.Error(), "Run events", "")
+		return err
 	}
-
-	log.Debug("Finish all event actions", e.EventsNames)
-
-	return nil
+	err = newEvent.Next()
+	return err
 }
 
 // Add Function to register a new event or replace a default one
