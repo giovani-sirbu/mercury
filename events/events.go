@@ -10,7 +10,7 @@ import (
 type (
 	Events struct {
 		Storage               interface{}
-		Broker                messagebroker.MessageBroker
+		Broker                messagebroker.BrokerMethods
 		Exchange              exchange.Exchange
 		Trade                 aggragates.Trades
 		ChildrenTrades        []aggragates.Trades
