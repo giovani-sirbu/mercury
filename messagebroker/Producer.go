@@ -51,7 +51,7 @@ func (m MessageBroker) Producer() *Producer {
 }
 
 // Produce messages
-func (m MessageBroker) Produce(topic string, parent context.Context, key, value []byte, producer Producer) (err error) {
+func (m MessageBroker) Produce(topic string, parent context.Context, key, value []byte, producer *Producer) (err error) {
 	topicWithPrefix := fmt.Sprintf("%s%s", os.Getenv("TOPIC_PREFIX"), topic)
 
 	// Define messages
