@@ -11,8 +11,7 @@ import (
 	"time"
 )
 
-// Produce messages
-func (m MessageBroker) Producer(topic string, parent context.Context, key, value []byte) (err error) {
+func (m MessageBroker) Producer() *Producer {
 	// intialize the writer with the broker addresses, and the topic
 	serviceCert := fmt.Sprintf("%s/service.cert", m.CertsPath)
 	serviceKey := fmt.Sprintf("%s/service.key", m.CertsPath)
@@ -36,11 +35,8 @@ func (m MessageBroker) Producer(topic string, parent context.Context, key, value
 		commonLog.Error(fmt.Sprintf("Failed to parse CA Certificate file: %s", err), "", "Producer")
 	}
 
-	topicWithPrefix := fmt.Sprintf("%s%s", os.Getenv("TOPIC_PREFIX"), topic)
-
 	w := &kafka.Writer{
 		Addr:         kafka.TCP(m.Address[0]),
-		Topic:        topicWithPrefix,
 		BatchTimeout: m.Timeout,
 		Transport: &kafka.Transport{
 			TLS: &tls.Config{
@@ -51,8 +47,16 @@ func (m MessageBroker) Producer(topic string, parent context.Context, key, value
 		AllowAutoTopicCreation: true,
 	}
 
+	return &Producer{Writer: w}
+}
+
+// Produce messages
+func (m MessageBroker) Produce(topic string, parent context.Context, key, value []byte, producer *Producer) (err error) {
+	topicWithPrefix := fmt.Sprintf("%s%s", os.Getenv("TOPIC_PREFIX"), topic)
+
 	// Define messages
 	msg := kafka.Message{
+		Topic: topicWithPrefix,
 		Key:   key,
 		Value: value,
 		Time:  time.Now(),
@@ -60,10 +64,9 @@ func (m MessageBroker) Producer(topic string, parent context.Context, key, value
 
 	commonLog.Info(fmt.Sprintf("Produced on topic: %s", topicWithPrefix), "", "Producer")
 
-	defer w.Close()
 	defer parent.Done()
 
 	// Return message response
-	return w.WriteMessages(parent, msg)
-
+	err = producer.Writer.WriteMessages(parent, msg)
+	return err
 }
