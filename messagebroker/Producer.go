@@ -62,9 +62,9 @@ func (m MessageBroker) Produce(topic string, key, value []byte, producer *Produc
 		Time:  time.Now(),
 	}
 
-	commonLog.Info(fmt.Sprintf("Produced on topic: %s", topicWithPrefix), "", "Producer")
-
 	// Return message response
 	err = producer.Writer.WriteMessages(context.TODO(), msg)
+	commonLog.Debug(err)
+	commonLog.Info(fmt.Sprintf("Produced on topic: %s", topicWithPrefix), "", "Producer")
 	return err
 }
