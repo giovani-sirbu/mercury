@@ -22,7 +22,7 @@ type BrokerMethods struct {
 	Consumer func(topic string, handler fn)
 }
 
-func Init(broker MessageBroker) BrokerMethods {
+func (broker MessageBroker) Init() BrokerMethods {
 	producer := broker.Producer()
 	return BrokerMethods{
 		Producer: producer,
