@@ -38,6 +38,7 @@ func (m MessageBroker) Producer() *Producer {
 	w := &kafka.Writer{
 		Addr:         kafka.TCP(m.Address[0]),
 		BatchTimeout: m.Timeout,
+		BatchSize:    100000,
 		Transport: &kafka.Transport{
 			TLS: &tls.Config{
 				Certificates: []tls.Certificate{keypair},
