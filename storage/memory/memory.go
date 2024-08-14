@@ -16,7 +16,7 @@ type Memory struct {
 	PoolSize int
 }
 
-func (m Memory) Init() *cache.Cache {
+func (m Memory) Init() (*cache.Cache, redis.UniversalClient) {
 	client := redis.NewUniversalClient(&redis.UniversalOptions{
 		Addrs:    m.Address,
 		Password: m.Password,
@@ -28,13 +28,13 @@ func (m Memory) Init() *cache.Cache {
 		Redis:      client,
 		LocalCache: cache.NewTinyLFU(1000, time.Minute),
 	})
-	return cacheHandler
+	return cacheHandler, client
 }
 
 func (m Memory) Set(key string, obj interface{}, expiration time.Duration) error {
 	ctx := context.TODO()
 
-	cacheHandler := m.Init()
+	cacheHandler, _ := m.Init()
 	defer ctx.Done()
 
 	keyWithPrefix := fmt.Sprintf("%s%s", os.Getenv("REDIS_PREFIX"), key)
@@ -52,7 +52,7 @@ func (m Memory) Set(key string, obj interface{}, expiration time.Duration) error
 func (m Memory) Get(key string, obj interface{}) error {
 	ctx := context.TODO()
 
-	cacheHandler := m.Init()
+	cacheHandler, _ := m.Init()
 	defer ctx.Done()
 
 	keyWithPrefix := fmt.Sprintf("%s%s", os.Getenv("REDIS_PREFIX"), key)
@@ -64,11 +64,25 @@ func (m Memory) Get(key string, obj interface{}) error {
 func (m Memory) Delete(key string) error {
 	ctx := context.TODO()
 
-	cacheHandler := m.Init()
+	cacheHandler, _ := m.Init()
 	defer ctx.Done()
 
 	keyWithPrefix := fmt.Sprintf("%s%s", os.Getenv("REDIS_PREFIX"), key)
 	err := cacheHandler.Delete(ctx, keyWithPrefix)
 
+	return err
+}
+
+func (m Memory) DeleteByPattern(keyPattern string) error {
+	ctx := context.TODO()
+
+	_, client := m.Init()
+	defer ctx.Done()
+
+	keyPatternWithPrefix := fmt.Sprintf("%s%s", os.Getenv("REDIS_PREFIX"), keyPattern)
+	keys, err := client.Keys(ctx, keyPatternWithPrefix).Result()
+	for _, key := range keys {
+		client.Del(ctx, key)
+	}
 	return err
 }
