@@ -265,7 +265,7 @@ type (
 		GetUserAssets   func() ([]UserAssetRecord, error)
 		PriceWSHandler  func(pairs []string, handler func(PriceWSResponseData), done <-chan string)
 		UserWSHandler   func(listenKey string, handler func(order WsUserDataEvent, expireEvent string), done <-chan string)
-		PingUserStream  func() error
+		PingUserStream  func(listenKey string) error
 		StartUserStream func() (string, error)
 	}
 )

@@ -266,12 +266,12 @@ func (e Binance) StartUserStream() (string, error) {
 }
 
 // PingUserStream keep alive a new user stream
-func (e Binance) PingUserStream() error {
+func (e Binance) PingUserStream(listenKey string) error {
 	client, initErr := InitExchange(e)
 	if initErr != nil {
 		return initErr
 	}
-	err := client.NewKeepaliveUserStreamService().Do(context.Background())
+	err := client.NewKeepaliveUserStreamService().ListenKey(listenKey).Do(context.Background())
 	if err != nil {
 		return err
 	}
