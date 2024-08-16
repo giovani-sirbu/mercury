@@ -3,9 +3,11 @@ package binanceAdaptor
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/adshao/go-binance/v2"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/log"
 	"github.com/gorilla/websocket"
+	"github.com/jinzhu/copier"
 	"strings"
 	"time"
 )
@@ -22,17 +24,6 @@ func getUrlByExchange(exchange string, pairs []string) string {
 			pairsString := strings.Join(modifiedPairs[:], "/")
 
 			url := fmt.Sprintf("wss://stream.binance.com:443/stream?streams=%s", pairsString)
-			return url
-		}
-	}
-	return ""
-}
-
-func getUserStreamUrlByExchange(exchange string, listenKey string) string {
-	switch exchange {
-	case "binance":
-		{
-			url := fmt.Sprintf("wss://stream.binance.com:9443/stream?streams=%s", listenKey)
 			return url
 		}
 	}
@@ -96,41 +87,20 @@ func (e Binance) WS(url string, done <-chan string) (*websocket.Conn, error) {
 const expireEvent = "listenKeyExpired"
 
 func (e Binance) UserWs(listenKey string, handler func(order aggregates.WsUserDataEvent, expireEvent string), done <-chan string) {
-	socketUrl := getUserStreamUrlByExchange(e.Name, listenKey)
-
-	conn, err := e.WS(socketUrl, done)
-
+	wsHandler := func(message *binance.WsUserDataEvent) {
+		var orderDetails aggregates.WsUserDataEvent
+		copier.Copy(&orderDetails, &message)
+		handler(orderDetails, expireEvent)
+	}
+	errHandler := func(err error) {
+		fmt.Println(err)
+	}
+	doneC, _, err := binance.WsUserDataServe(listenKey, wsHandler, errHandler)
 	if err != nil {
-		log.Info(fmt.Sprintf("Error connecting to Websocket Server: %s", err.Error()), "", "")
-		e.UserWs(listenKey, handler, done)
+		fmt.Println(err)
+		return
 	}
-	defer conn.Close()
-	defer func() {
-		if recoverErr := recover(); recoverErr != nil {
-			e.UserWs(listenKey, handler, done)
-		}
-	}()
-
-	var response *UserWSResponse
-	for {
-		_, msg, connErr := conn.ReadMessage()
-
-		if connErr != nil {
-			log.Info(fmt.Sprintf("Error in receive: %s", err.Error()), "", "")
-			if closedByChannel {
-				closedByChannel = false
-				return
-			}
-			e.UserWs(listenKey, handler, done)
-			return
-		}
-
-		if err = json.Unmarshal(msg, &response); err != nil {
-			return
-		}
-
-		handler(response.Data, expireEvent)
-	}
+	<-doneC
 }
 
 func (e Binance) PriceWSHandler(pairs []string, handler func(aggregates.PriceWSResponseData), done <-chan string) {
