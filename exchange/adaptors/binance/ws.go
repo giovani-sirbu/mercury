@@ -106,18 +106,18 @@ func (e Binance) UserWs(listenKey string, handler func(order aggregates.WsUserDa
 	}
 	defer conn.Close()
 	defer func() {
-		if err := recover(); err != nil {
+		if recoverErr := recover(); recoverErr != nil {
 			e.UserWs(listenKey, handler, done)
 		}
 	}()
 
 	var response *UserWSResponse
 	for {
-		_, msg, err := conn.ReadMessage()
+		_, msg, connErr := conn.ReadMessage()
 
-		if err != nil {
+		if connErr != nil {
 			log.Info(fmt.Sprintf("Error in receive: %s", err.Error()), "", "")
-			if strings.Contains(err.Error(), "use of closed network connection") && closedByChannel {
+			if closedByChannel {
 				closedByChannel = false
 				return
 			}
@@ -144,18 +144,18 @@ func (e Binance) PriceWSHandler(pairs []string, handler func(aggregates.PriceWSR
 	}
 	defer conn.Close()
 	defer func() {
-		if err := recover(); err != nil {
+		if recoverErr := recover(); recoverErr != nil {
 			e.PriceWSHandler(pairs, handler, done)
 		}
 	}()
 
 	var response *WSResponse
 	for {
-		_, msg, err := conn.ReadMessage()
+		_, msg, connErr := conn.ReadMessage()
 
-		if err != nil {
-			log.Info(fmt.Sprintf("Error in receive: %s", err.Error()), "", "")
-			if strings.Contains(err.Error(), "use of closed network connection") && closedByChannel {
+		if connErr != nil {
+			log.Info(fmt.Sprintf("Error in receive: %s", connErr.Error()), "", "")
+			if strings.Contains(connErr.Error(), "use of closed network connection") && closedByChannel {
 				closedByChannel = false
 				return
 			}
