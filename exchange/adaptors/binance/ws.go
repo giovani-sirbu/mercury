@@ -89,9 +89,11 @@ const expireEvent = "listenKeyExpired"
 func (e Binance) UserWs(listenKey string, handler func(order aggregates.WsUserDataEvent, expireEvent string), done <-chan string) {
 	wsHandler := func(message *binance.WsUserDataEvent) {
 		var orderDetails aggregates.WsUserDataEvent
-		err := copier.Copy(&orderDetails, &message)
-		fmt.Println(err)
-		fmt.Println(orderDetails, message, &message)
+		copier.Copy(&orderDetails, &message)
+		copier.Copy(&orderDetails.WsOrderUpdate, &message.OrderUpdate)
+		copier.Copy(&orderDetails.WsBalanceUpdate, &message.BalanceUpdate)
+		copier.Copy(&orderDetails.WsAccountUpdates, &message.AccountUpdate)
+		copier.Copy(&orderDetails.WsOCOUpdate, &message.OCOUpdate)
 		handler(orderDetails, expireEvent)
 	}
 	errHandler := func(err error) {
