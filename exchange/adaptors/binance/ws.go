@@ -97,11 +97,11 @@ func (e Binance) UserWs(listenKey string, handler func(order aggregates.WsUserDa
 		handler(orderDetails, expireEvent)
 	}
 	errHandler := func(err error) {
-		fmt.Println(err)
+		log.Error(err.Error(), "", "")
 	}
 	doneC, _, err := binance.WsUserDataServe(listenKey, wsHandler, errHandler)
 	if err != nil {
-		fmt.Println(err)
+		log.Error(err.Error(), "", "")
 		return
 	}
 	<-doneC
