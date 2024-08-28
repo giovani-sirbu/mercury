@@ -16,7 +16,7 @@ func Buy(event events.Events) (events.Events, error) {
 	if clientError != nil {
 		return events.Events{}, clientError
 	}
-	quantity := trades.GetQuantityByHistory(event.Trade.History, event.Trade.Inverse)
+	quantity := trades.GetLatestQuantityByHistory(event.Trade.History)
 
 	historyCount := len(event.Trade.History)
 	settings := []byte(event.Trade.Strategy.Params)
