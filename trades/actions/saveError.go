@@ -6,9 +6,13 @@ import (
 )
 
 func SaveError(event events.Events, err error) (events.Events, error) {
-	if len(event.Trade.Logs) > 0 && event.Trade.Logs[len(event.Trade.Logs)-1].Type == aggragates.LOG_WARNING {
-		return event, err
+	// prevent duplicate logs
+	message := err.Error()
+	lastLog := event.Trade.Logs[len(event.Trade.Logs)-1]
+	if len(event.Trade.Logs) > 0 && lastLog.Message == message {
+		return event, nil
 	}
+
 	// Reset price and position to allow only the error update
 	price := event.Trade.PositionPrice
 	event.Trade.PositionType = event.Params.OldPosition
@@ -17,7 +21,7 @@ func SaveError(event events.Events, err error) (events.Events, error) {
 
 	event.Trade.Logs = append(event.Trade.Logs, aggragates.TradesLogs{
 		Percentage: event.Params.Percentage,
-		Message:    err.Error(),
+		Message:    message,
 		Type:       aggragates.LOG_WARNING,
 		Price:      price,
 		TradeID:    event.Trade.ID,

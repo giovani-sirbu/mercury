@@ -5,15 +5,22 @@ import (
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"strings"
 )
 
 func UpdateTrade(event events.Events) (events.Events, error) {
+	// prevent duplicate logs
+	message := fmt.Sprintf("%s_TO_%s", event.Params.OldPosition, event.Trade.PositionType)
+	lastLog := event.Trade.Logs[len(event.Trade.Logs)-1]
+	if len(event.Trade.Logs) > 0 && lastLog.Message == message {
+		return event, nil
+	}
+
 	// If no error occurs save only info logs
 	if !event.Params.PreventInfoLog {
-		message := fmt.Sprintf("Updated position to %s from %s", event.Trade.PositionType, event.Params.OldPosition)
 		event.Trade.Logs = append(event.Trade.Logs, aggragates.TradesLogs{
 			Percentage: event.Params.Percentage,
-			Message:    message,
+			Message:    strings.ToUpper(message),
 			Type:       aggragates.LOG_INFO,
 			Price:      event.Trade.PositionPrice,
 			TradeID:    event.Trade.ID,
