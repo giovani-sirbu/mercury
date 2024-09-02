@@ -35,6 +35,7 @@ func GetBinanceActions(e aggregates.Exchange) aggregates.Actions {
 		UserWSHandler:   binanceStruct.UserWs,
 		StartUserStream: binanceStruct.StartUserStream,
 		PingUserStream:  binanceStruct.PingUserStream,
+		KlineData:       binanceStruct.KlineData,
 	}
 	return actions
 }
@@ -276,4 +277,26 @@ func (e Binance) PingUserStream(listenKey string) error {
 		return err
 	}
 	return nil
+}
+
+// KlineData Kline/candlestick bars for a symbol. Klines are uniquely identified by their open time.
+func (e Binance) KlineData(symbol string, interval string, startTime int64, endTime int64, limit int) ([]aggregates.KlineResponse, error) {
+	client, initErr := InitExchange(e)
+	if initErr != nil {
+		return nil, initErr
+	}
+	clientData, err := client.NewKlinesService().
+		Symbol(symbol).
+		Interval(interval).
+		StartTime(startTime).
+		EndTime(endTime).
+		Limit(limit).
+		Do(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	var data []aggregates.KlineResponse
+	copier.Copy(&data, &clientData)
+	return data, nil
 }
