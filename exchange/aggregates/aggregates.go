@@ -263,6 +263,14 @@ type (
 		TakerBuyQuoteAssetVolume string `json:"takerBuyQuoteAssetVolume"`
 	}
 
+	KlinePayload struct {
+		Symbol    string
+		Interval  string
+		StartTime int64
+		EndTime   int64
+		Limit     int
+	}
+
 	// Actions All exchange actions types
 	Actions struct {
 		Buy             func(symbol string, quantity float64, price string) (CreateOrderResponse, error)
@@ -281,6 +289,6 @@ type (
 		UserWSHandler   func(listenKey string, handler func(order WsUserDataEvent, expireEvent string), done <-chan string)
 		PingUserStream  func(listenKey string) error
 		StartUserStream func() (string, error)
-		KlineData       func(symbol string, interval string, startTime int64, endTime int64, limit int) ([]KlineResponse, error)
+		KlineData       func(KlinePayload) ([]KlineResponse, error)
 	}
 )

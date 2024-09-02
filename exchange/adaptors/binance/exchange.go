@@ -280,17 +280,17 @@ func (e Binance) PingUserStream(listenKey string) error {
 }
 
 // KlineData Kline/candlestick bars for a symbol. Klines are uniquely identified by their open time.
-func (e Binance) KlineData(symbol string, interval string, startTime int64, endTime int64, limit int) ([]aggregates.KlineResponse, error) {
+func (e Binance) KlineData(payload aggregates.KlinePayload) ([]aggregates.KlineResponse, error) {
 	client, initErr := InitExchange(e)
 	if initErr != nil {
 		return nil, initErr
 	}
 	clientData, err := client.NewKlinesService().
-		Symbol(symbol).
-		Interval(interval).
-		StartTime(startTime).
-		EndTime(endTime).
-		Limit(limit).
+		Symbol(payload.Symbol).
+		Interval(payload.Interval).
+		StartTime(payload.StartTime).
+		EndTime(payload.EndTime).
+		Limit(payload.Limit).
 		Do(context.Background())
 	if err != nil {
 		return nil, err
