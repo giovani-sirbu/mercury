@@ -249,6 +249,20 @@ type (
 		ClientOrderId string `json:"c"`
 	}
 
+	KlineResponse struct {
+		OpenTime                 int64  `json:"openTime"`
+		Open                     string `json:"open"`
+		High                     string `json:"high"`
+		Low                      string `json:"low"`
+		Close                    string `json:"close"`
+		Volume                   string `json:"volume"`
+		CloseTime                int64  `json:"closeTime"`
+		QuoteAssetVolume         string `json:"quoteAssetVolume"`
+		TradeNum                 int64  `json:"tradeNum"`
+		TakerBuyBaseAssetVolume  string `json:"takerBuyBaseAssetVolume"`
+		TakerBuyQuoteAssetVolume string `json:"takerBuyQuoteAssetVolume"`
+	}
+
 	// Actions All exchange actions types
 	Actions struct {
 		Buy             func(symbol string, quantity float64, price string) (CreateOrderResponse, error)
@@ -267,5 +281,6 @@ type (
 		UserWSHandler   func(listenKey string, handler func(order WsUserDataEvent, expireEvent string), done <-chan string)
 		PingUserStream  func(listenKey string) error
 		StartUserStream func() (string, error)
+		KlineData       func(symbol string, interval string, startTime int64, endTime int64, limit int) ([]KlineResponse, error)
 	}
 )
