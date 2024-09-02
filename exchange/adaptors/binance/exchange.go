@@ -285,13 +285,17 @@ func (e Binance) KlineData(payload aggregates.KlinePayload) ([]aggregates.KlineR
 	if initErr != nil {
 		return nil, initErr
 	}
-	clientData, err := client.NewKlinesService().
-		Symbol(payload.Symbol).
-		Interval(payload.Interval).
-		StartTime(payload.StartTime).
-		EndTime(payload.EndTime).
-		Limit(payload.Limit).
-		Do(context.Background())
+	clientQuery := client.NewKlinesService().Symbol(payload.Symbol).Interval(payload.Interval)
+
+	if payload.StartTime > 0 {
+		clientQuery.StartTime(payload.StartTime)
+	}
+
+	if payload.EndTime > 0 {
+		clientQuery.EndTime(payload.EndTime)
+	}
+
+	clientData, err := clientQuery.Do(context.Background())
 	if err != nil {
 		return nil, err
 	}
