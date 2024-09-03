@@ -271,6 +271,25 @@ type (
 		Limit     int
 	}
 
+	AggTradesPayload struct {
+		Symbol    string
+		FromId    int64
+		StartTime int64
+		EndTime   int64
+		Limit     int
+	}
+
+	AggTradesResponse struct {
+		AggTradeID       int64  `json:"a"`
+		Price            string `json:"p"`
+		Quantity         string `json:"q"`
+		FirstTradeID     int64  `json:"f"`
+		LastTradeID      int64  `json:"l"`
+		Timestamp        int64  `json:"T"`
+		IsBuyerMaker     bool   `json:"m"`
+		IsBestPriceMatch bool   `json:"M"`
+	}
+
 	// Actions All exchange actions types
 	Actions struct {
 		Buy             func(symbol string, quantity float64, price string) (CreateOrderResponse, error)
@@ -289,6 +308,7 @@ type (
 		UserWSHandler   func(listenKey string, handler func(order WsUserDataEvent, expireEvent string), done <-chan string)
 		PingUserStream  func(listenKey string) error
 		StartUserStream func() (string, error)
+		AggTrades       func(payload AggTradesPayload) ([]AggTradesResponse, error)
 		KlineData       func(KlinePayload) ([]KlineResponse, error)
 	}
 )

@@ -35,7 +35,8 @@ func GetBinanceActions(e aggregates.Exchange) aggregates.Actions {
 		UserWSHandler:   binanceStruct.UserWs,
 		StartUserStream: binanceStruct.StartUserStream,
 		PingUserStream:  binanceStruct.PingUserStream,
-		KlineData:       binanceStruct.KlineData,
+		AggTrades:       binanceStruct.AggTrades,
+		KlineData:       binanceStruct.Klines,
 	}
 	return actions
 }
@@ -279,8 +280,8 @@ func (e Binance) PingUserStream(listenKey string) error {
 	return nil
 }
 
-// KlineData Kline/candlestick bars for a symbol. Klines are uniquely identified by their open time.
-func (e Binance) KlineData(payload aggregates.KlinePayload) ([]aggregates.KlineResponse, error) {
+// Klines Kline/candlestick bars for a symbol. Klines are uniquely identified by their open time.
+func (e Binance) Klines(payload aggregates.KlinePayload) ([]aggregates.KlineResponse, error) {
 	client, initErr := InitExchange(e)
 	if initErr != nil {
 		return nil, initErr
@@ -295,12 +296,51 @@ func (e Binance) KlineData(payload aggregates.KlinePayload) ([]aggregates.KlineR
 		clientQuery.EndTime(payload.EndTime)
 	}
 
+	if payload.Limit > 0 {
+		clientQuery.Limit(payload.Limit)
+	}
+
 	clientData, err := clientQuery.Do(context.Background())
 	if err != nil {
 		return nil, err
 	}
 
 	var data []aggregates.KlineResponse
+	copier.Copy(&data, &clientData)
+	return data, nil
+}
+
+// AggTrades Get compressed, aggregate trades. Trades that fill at the time, from the same order,
+// with the same price will have the quantity aggregated.
+func (e Binance) AggTrades(payload aggregates.AggTradesPayload) ([]aggregates.AggTradesResponse, error) {
+	client, initErr := InitExchange(e)
+	if initErr != nil {
+		return nil, initErr
+	}
+	clientQuery := client.NewAggTradesService().Symbol(payload.Symbol)
+
+	if payload.FromId > 0 {
+		clientQuery.FromID(payload.FromId)
+	}
+
+	if payload.StartTime > 0 {
+		clientQuery.StartTime(payload.StartTime)
+	}
+
+	if payload.EndTime > 0 {
+		clientQuery.EndTime(payload.EndTime)
+	}
+
+	if payload.Limit > 0 {
+		clientQuery.Limit(payload.Limit)
+	}
+
+	clientData, err := clientQuery.Do(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	var data []aggregates.AggTradesResponse
 	copier.Copy(&data, &clientData)
 	return data, nil
 }
