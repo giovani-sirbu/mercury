@@ -8,8 +8,7 @@ import (
 func SaveError(event events.Events, err error) (events.Events, error) {
 	// prevent duplicate logs
 	message := err.Error()
-	lastLog := event.Trade.Logs[len(event.Trade.Logs)-1]
-	if len(event.Trade.Logs) > 0 && lastLog.Message == message {
+	if len(event.Trade.Logs) > 0 && event.Trade.Logs[len(event.Trade.Logs)-1].Message == message {
 		return event, nil
 	}
 

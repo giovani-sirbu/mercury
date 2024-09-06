@@ -11,8 +11,7 @@ import (
 func UpdateTrade(event events.Events) (events.Events, error) {
 	// prevent duplicate logs
 	message := fmt.Sprintf("%s_TO_%s", event.Params.OldPosition, event.Trade.PositionType)
-	lastLog := event.Trade.Logs[len(event.Trade.Logs)-1]
-	if len(event.Trade.Logs) > 0 && lastLog.Message == message {
+	if len(event.Trade.Logs) > 0 && event.Trade.Logs[len(event.Trade.Logs)-1].Message == message {
 		return event, nil
 	}
 
