@@ -22,6 +22,7 @@ func UpdateTrade(event events.Events) (events.Events, error) {
 			Message:    strings.ToUpper(message),
 			Type:       aggragates.LOG_INFO,
 			Price:      event.Trade.PositionPrice,
+			Quantity:   event.Params.Quantity,
 			TradeID:    event.Trade.ID,
 		})
 	}

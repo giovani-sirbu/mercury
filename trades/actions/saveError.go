@@ -23,8 +23,8 @@ func SaveError(event events.Events, err error) (events.Events, error) {
 		Message:    message,
 		Type:       aggragates.LOG_WARNING,
 		Price:      price,
-		TradeID:    event.Trade.ID,
 		Quantity:   event.Params.Quantity,
+		TradeID:    event.Trade.ID,
 	})
 
 	newEvent, _ := UpdateTrade(event)
