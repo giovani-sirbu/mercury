@@ -24,7 +24,7 @@ func createToken(user UserClaims) (string, error) {
 			"id":    user.Id,
 			"email": user.Email,
 			"role":  user.Role,
-			"exp":   time.Now().Add(time.Hour * 24).Unix(),
+			"exp":   time.Now().Add(time.Hour * 24 * 7).Unix(),
 		})
 
 	tokenString, err := token.SignedString(secretKey)
