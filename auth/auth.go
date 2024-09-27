@@ -63,7 +63,7 @@ func GenerateTokens(id uint, email string, role string) (Tokens, error) {
 	if createError != nil {
 		return Tokens{}, createError
 	}
-	refreshToken, createRefreshError := createToken(UserClaims{Email: email, Exp: time.Now().Add(time.Hour * 24 * 7).Unix()})
+	refreshToken, createRefreshError := createToken(UserClaims{Id: id, Email: email, Exp: time.Now().Add(time.Hour * 24 * 7).Unix()})
 	if createRefreshError != nil {
 		return Tokens{}, createRefreshError
 	}
