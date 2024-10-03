@@ -3,6 +3,7 @@ package trades
 import (
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"math"
+	"sort"
 	"strings"
 )
 
@@ -25,6 +26,11 @@ func GetLatestQuantityByHistory(history []aggragates.TradesHistory) float64 {
 	if len(history) == 0 {
 		return 0
 	}
+
+	// sort older history first
+	sort.SliceStable(history, func(i, j int) bool {
+		return history[i].ID < history[j].ID
+	})
 
 	return history[len(history)-1].Quantity
 }
