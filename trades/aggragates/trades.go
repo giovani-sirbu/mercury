@@ -18,6 +18,7 @@ type (
 		Exchange        TradesExchanges `form:"exchange" json:"exchange" xml:"exchange"`
 		StrategyID      int             `form:"strategyId" json:"-" xml:"strategyId"`
 		Strategy        Strategies      `gorm:"foreignKey:StrategyID;references:ID"  form:"strategy" json:"strategy" xml:"strategy"`
+		Settings        SettingsPairs   `gorm:"foreignKey:StrategyID;references:StrategyID"  form:"settings" json:"settings" xml:"settings"`
 		USDProfit       float64         `bson:"usdProfit" json:"usdProfit"`
 		Profit          float64         `bson:"profit" json:"profit"`
 		ProfitAsset     string          `bson:"profitAsset" json:"profitAsset"`
