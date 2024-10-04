@@ -1,15 +1,17 @@
 package events
 
 import (
+	"fmt"
 	"github.com/giovani-sirbu/mercury/exchange"
 	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/messagebroker"
+	"github.com/giovani-sirbu/mercury/storage/memory"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
 type (
 	Events struct {
-		Storage               interface{}
+		Storage               memory.Memory
 		Broker                messagebroker.BrokerMethods
 		Exchange              exchange.Exchange
 		Trade                 aggragates.Trades
@@ -42,11 +44,16 @@ func (e Events) Run() error {
 	}
 
 	newEvent, err := e.Events[e.EventsNames[0]](e)
+	fmt.Println(err)
 	if err != nil {
+		e.LockTradeWithBackOff()
 		log.Error(err.Error(), "Run events", "")
 		return err
 	}
 	err = newEvent.Next()
+	if err != nil {
+		e.LockTradeWithBackOff()
+	}
 	return err
 }
 
