@@ -28,6 +28,5 @@ func (e Events) LockTradeWithBackOff() {
 		}
 	}
 	backoffTries[e.Trade.ID] = lockDuration
-	fmt.Println(backoffTries[e.Trade.ID])
 	e.LockTrade(lockDuration)
 }
