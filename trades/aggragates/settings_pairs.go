@@ -7,9 +7,9 @@ import (
 
 type SettingsPairs struct {
 	ID          uint           `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
-	StrategyID  uint           `form:"strategyID" json:"strategyID" xml:"strategyID"`
-	Symbol      string         `gorm:"type:varchar(20)" bson:"symbol" json:"symbol" form:"symbol" xml:"symbol" validate:"required,min=3,max=20"`
-	Exchange    string         `gorm:"type:varchar(50)" bson:"exchange" json:"exchange" form:"exchange" xml:"exchange" validate:"required,min=3,max=50"`
+	StrategyID  int            `gorm:"index:idx_symbol_exchange_strategy_id,unique" form:"strategyID" json:"strategyID" xml:"strategyID"`
+	Symbol      string         `gorm:"type:varchar(20);index:idx_symbol_exchange_strategy_id,unique" bson:"symbol" json:"symbol" form:"symbol" xml:"symbol" validate:"required,min=3,max=20"`
+	Exchange    string         `gorm:"type:varchar(50);index:idx_symbol_exchange_strategy_id,unique" bson:"exchange" json:"exchange" form:"exchange" xml:"exchange" validate:"required,min=3,max=50"`
 	LotSize     uint8          `bson:"lotSize" json:"lotSize" form:"lotSize" xml:"lotSize" validate:"required"`
 	PriceFilter uint8          `bson:"priceFilter" json:"priceFilter" form:"priceFilter" xml:"priceFilter" validate:"required"`
 	MinNotional float64        `bson:"minNotional" json:"minNotional" form:"minNotional" xml:"minNotional" validate:"required"`
