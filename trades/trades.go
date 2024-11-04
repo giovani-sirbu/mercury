@@ -29,7 +29,7 @@ func GetLatestQuantityByHistory(history []aggragates.TradesHistory) float64 {
 
 	// sort older history first
 	sort.SliceStable(history, func(i, j int) bool {
-		return history[i].ID < history[j].ID
+		return history[i].Quantity < history[j].Quantity
 	})
 
 	return history[len(history)-1].Quantity

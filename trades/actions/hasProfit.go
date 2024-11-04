@@ -10,13 +10,14 @@ import (
 func HasProfit(event events.Events) (events.Events, error) {
 	simulateHistory := event.Trade.History
 	feeInBase, feeInQuote := CalculateFees(event.Trade.History, event.Trade.Symbol)
-	buyQty, _ := trades.GetQuantities(event.Trade.History)
-	quantity := buyQty
+	buyQty, sellQty := trades.GetQuantities(event.Trade.History)
+	quantity := buyQty - sellQty
 	historyType := "sell"
 
 	if event.Trade.Inverse {
-		quantity = trades.GetQuantityInQuote(event.Trade.History, "BUY")
-		quantity = quantity / event.Trade.PositionPrice
+		buyQuantity := trades.GetQuantityInQuote(event.Trade.History, "BUY")
+		sellQuantity := trades.GetQuantityInQuote(event.Trade.History, "SELL")
+		quantity = (buyQuantity - sellQuantity) / event.Trade.PositionPrice
 		quantity = ToFixed(quantity, event.TradeSettings.LotSize)
 		historyType = "buy"
 	}
@@ -25,6 +26,7 @@ func HasProfit(event events.Events) (events.Events, error) {
 	sellTotal, buyTotal := GetProfit(simulateHistory)
 	profit := sellTotal - buyTotal
 	fee := feeInQuote
+
 	if event.Trade.Inverse {
 		fee = feeInBase
 		sellTotal, buyTotal = GetProfitInBase(simulateHistory)
