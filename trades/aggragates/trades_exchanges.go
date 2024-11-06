@@ -13,7 +13,7 @@ type TradesExchanges struct {
 	ApiKey       string         `gorm:"type:varchar(200)" bson:"apiKey" json:"apiKey" form:"apiKey" xml:"apiKey" validate:"required,min=10,max=150"`
 	ApiSecret    string         `gorm:"type:varchar(200)" bson:"apiSecret" json:"apiSecret" form:"apiSecret" xml:"apiSecret" validate:"required,min=10,max=150"`
 	TestNet      bool           `gorm:"type:boolean;default:false" bson:"testNet" json:"testNet" form:"testNet" xml:"testNet"`
-	TradesStatus Status         `gorm:"type:varchar(50);default:active" bson:"tradesStatus" json:"tradesStatus" form:"tradesStatus" xml:"tradesStatus"`
+	TradesStatus Status         `gorm:"type:varchar(50);default:new" bson:"tradesStatus" json:"tradesStatus" form:"tradesStatus" xml:"tradesStatus"`
 	CreatedAt    time.Time      `form:"createdAt" json:"-" xml:"createdAt"`
 	UpdatedAt    time.Time      `form:"updatedAt" json:"-" xml:"updatedAt"`
 	DeletedAt    gorm.DeletedAt `form:"deletedAt" json:"-" xml:"deletedAt"`
