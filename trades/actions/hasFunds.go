@@ -70,7 +70,11 @@ func HasFunds(event events.Events) (events.Events, error) {
 		}
 	} else {
 		assetSymbol = pairSymbols[1]
-		quantity = trades.GetLatestQuantityByHistory(event.Trade.History) * multiplier
+		quantityType := "BUY"
+		if event.Trade.Inverse {
+			quantityType = "SELL"
+		}
+		quantity = trades.GetLatestQuantityByHistory(event.Trade.History, quantityType) * multiplier
 		if event.Trade.Inverse {
 			assetSymbol = pairSymbols[0]
 		}

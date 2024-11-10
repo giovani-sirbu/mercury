@@ -22,13 +22,16 @@ func GetQuantities(history []aggragates.TradesHistory) (float64, float64) {
 	return buyTotal, sellTotal
 }
 
-func GetLatestQuantityByHistory(history []aggragates.TradesHistory) float64 {
+func GetLatestQuantityByHistory(history []aggragates.TradesHistory, historyType string) float64 {
 	if len(history) == 0 {
 		return 0
 	}
 
 	// sort older history first
 	sort.SliceStable(history, func(i, j int) bool {
+		if history[i].Type != historyType {
+			return true
+		}
 		return history[i].Quantity < history[j].Quantity
 	})
 
