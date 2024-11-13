@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
+	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"strconv"
@@ -81,8 +82,12 @@ func HasFunds(event events.Events) (events.Events, error) {
 	}
 
 	remainedQuantity := GetAssetBudget(assets, assetSymbol)
+	neededQuantity := quantity * event.Trade.PositionPrice
 
-	if remainedQuantity < quantity {
+	if remainedQuantity < neededQuantity {
+		log.Debug("remainedQuantity: ", remainedQuantity, assetSymbol)
+		log.Debug("neededQuantity: ", neededQuantity)
+
 		// If nou enough funds update to impasse and return
 		msg := fmt.Sprintf("Not enough funds to buy, available qty: %f, necessary qty: %f", remainedQuantity, quantity*event.Trade.PositionPrice)
 		event.Trade.PositionType = "impasse"
