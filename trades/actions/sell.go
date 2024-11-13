@@ -27,7 +27,7 @@ func Sell(event events.Events) (events.Events, error) {
 
 	quantityBeforeLotSize := quantity
 	var dust float64
-	quantity = ToFixed(quantity, event.TradeSettings.LotSize)
+	quantity = ToFixed(quantity, int(event.Trade.SettingsPairs.TradeFilters.LotSize))
 
 	if quantityBeforeLotSize > quantity {
 		dust = quantityBeforeLotSize - quantity
