@@ -7,12 +7,17 @@ import (
 func SellAll(event events.Events) (events.Events, error) {
 	for index, childrenTrade := range event.ChildrenTrades {
 		childrenTrade.PreventNewTrade = true
+		eventsNames := []string{"sell", "updateTrade"}
+		if len(childrenTrade.History) == 0 {
+			childrenTrade.Status = "closed"
+			eventsNames = []string{"updateTrade"}
+		}
 		newEvent := events.Events{
 			Trade:         childrenTrade,
 			Broker:        event.Broker,
 			Events:        event.Events,
 			Exchange:      event.Exchange,
-			EventsNames:   []string{"sell", "updateTrade"},
+			EventsNames:   eventsNames,
 			TradeSettings: event.ChildrenTradeSettings[index],
 		}
 		err := newEvent.Run()

@@ -29,6 +29,7 @@ func ParentTradeHasProfit(event events.Events) (events.Events, error) {
 		}
 
 		childrenTrade.PositionPrice = childrenPrice
+		event.ChildrenTrades[index].PositionPrice = childrenPrice
 		newEvent := events.Events{Trade: childrenTrade, Events: event.Events, EventsNames: []string{"hasProfit"}, TradeSettings: event.ChildrenTradeSettings[index]}
 		newEvent, _ = HasProfit(newEvent)
 		childrenProfit = childrenProfit + newEvent.Trade.Profit
