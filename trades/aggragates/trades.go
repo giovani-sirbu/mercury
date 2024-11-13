@@ -22,6 +22,7 @@ type (
 		StrategyID       int                `form:"strategyId" json:"-" xml:"strategyId"`
 		Strategy         Strategy           `gorm:"foreignKey:StrategyID;references:ID"  form:"strategyInfo" json:"strategyInfo" xml:"strategyInfo"`
 		StrategySettings []StrategySettings `gorm:"type:jsonb;serializer:json;foreignKey:StrategyID;references:StrategyID" json:"strategySettings"`
+		SettingsPairs    SettingsPairs      `gorm:"foreignKey:StrategyID,Symbol;references:StrategyID,Symbol" json:"pairInfo"`
 		USDProfit        float64            `bson:"usdProfit" json:"usdProfit"`
 		Profit           float64            `bson:"profit" json:"profit"`
 		ProfitAsset      string             `bson:"profitAsset" json:"profitAsset"`
