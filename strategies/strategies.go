@@ -3,6 +3,7 @@ package strategies
 import (
 	"fmt"
 	"github.com/Knetic/govaluate"
+	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
 type (
@@ -10,18 +11,11 @@ type (
 		Type  string
 		Price float64
 	}
-	Settings struct {
-		Tolerance          float64 `bson:"tolerance" json:"tolerance"`
-		TrailingTakeProfit float64 `bson:"trailingTakeProfit" json:"trailingTakeProfit"`
-		InitialBid         float64 `bson:"initialBid" json:"initialBid"`
-		Percentage         float64 `bson:"percentage" json:"percentage"`
-		Multiplier         float64 `bson:"multiplier" json:"multiplier"`
-	}
 	Strategy struct {
 		Type     string
 		Position Position
 		Price    float64
-		Settings []Settings
+		Settings []aggragates.StrategySettings
 		Logic    map[string]string
 		Depth    int32
 	}
