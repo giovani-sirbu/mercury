@@ -6,15 +6,6 @@ type (
 		Name   string `gorm:"type:varchar(50)" bson:"name" json:"name" form:"name" xml:"name" validate:"required,min=3,max=50"`
 		Params string `gorm:"type:text" bson:"params" json:"params"`
 	}
-	StrategyParams struct {
-		Tolerance          float64 `bson:"tolerance" json:"tolerance"`
-		Depths             float64 `bson:"depths" json:"depths"`
-		TrailingTakeProfit float64 `bson:"trailingTakeProfit" json:"trailingTakeProfit"`
-		InitialBid         float64 `bson:"initialBid" json:"initialBid"`
-		Name               string  `bson:"name" json:"name"`
-		Percentage         float64 `bson:"percentage" json:"percentage"`
-		Multiplier         float64 `bson:"multiplier" json:"multiplier"`
-	}
 	StrategyInfoSettings struct {
 		Pairs   uint8 `form:"pairs" json:"pairs" xml:"pairs"`
 		Impasse bool  `form:"impasse" bson:"impasse" json:"impasse"`

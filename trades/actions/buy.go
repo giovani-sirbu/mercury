@@ -1,12 +1,10 @@
 package actions
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/trades"
-	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"strconv"
 	"strings"
 )
@@ -26,14 +24,11 @@ func Buy(event events.Events) (events.Events, error) {
 	buyQty, sellQty := trades.GetQuantities(event.Trade.History)
 
 	historyCount := len(event.Trade.History)
-	settings := []byte(event.Trade.Strategy.Params)
-	var StrategySettings []aggragates.StrategyParams
+	strategySettings := event.Trade.StrategySettings
 	var settingsIndex int
 
-	json.Unmarshal(settings, &StrategySettings)
-
-	if historyCount > len(StrategySettings) {
-		settingsIndex = len(StrategySettings) - 1
+	if historyCount > len(strategySettings) {
+		settingsIndex = len(strategySettings) - 1
 	} else {
 		settingsIndex = historyCount - 1
 	}
@@ -42,9 +37,9 @@ func Buy(event events.Events) (events.Events, error) {
 		settingsIndex = 0
 	}
 
-	multiplier := StrategySettings[settingsIndex].Multiplier
-	depths := StrategySettings[settingsIndex].Depths
-	pairInitialBid := StrategySettings[settingsIndex].InitialBid
+	multiplier := strategySettings[settingsIndex].Multiplier
+	depths := strategySettings[settingsIndex].Depths
+	pairInitialBid := strategySettings[settingsIndex].InitialBid
 	minNotion := event.TradeSettings.MinNotion / event.Trade.PositionPrice
 
 	if quantity == 0 {

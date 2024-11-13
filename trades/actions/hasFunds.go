@@ -1,13 +1,11 @@
 package actions
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/trades"
-	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"strconv"
 	"strings"
 )
@@ -35,14 +33,11 @@ func HasFunds(event events.Events) (events.Events, error) {
 	}
 
 	historyCount := len(event.Trade.History)
-	settings := []byte(event.Trade.Strategy.Params)
-	var StrategySettings []aggragates.StrategyParams
+	strategySettings := event.Trade.StrategySettings
 	var settingsIndex int
 
-	json.Unmarshal(settings, &StrategySettings)
-
-	if historyCount > len(StrategySettings) {
-		settingsIndex = len(StrategySettings) - 1
+	if historyCount > len(strategySettings) {
+		settingsIndex = len(strategySettings) - 1
 	} else {
 		settingsIndex = historyCount - 1
 	}
@@ -52,7 +47,7 @@ func HasFunds(event events.Events) (events.Events, error) {
 	}
 
 	pairSymbols := strings.Split(event.Trade.Symbol, "/")
-	multiplier := StrategySettings[settingsIndex].Multiplier
+	multiplier := strategySettings[settingsIndex].Multiplier
 
 	var assetSymbol string
 	var quantity float64
