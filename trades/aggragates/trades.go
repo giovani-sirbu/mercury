@@ -20,7 +20,7 @@ type (
 		ExchangeID       int                `gorm:"index:idx_dashboard_stats,priority:2;constraint:OnDelete:CASCADE;" form:"exchangeId" json:"-" xml:"exchangeId"`
 		Exchange         TradesExchanges    `form:"exchange" json:"exchange" xml:"exchange"`
 		StrategyID       int                `form:"strategyId" json:"-" xml:"strategyId"`
-		Strategy         Strategy           `gorm:"foreignKey:StrategyID;references:ID"  form:"strategyInfo" json:"strategyInfo" xml:"strategyInfo"`
+		Strategy         Strategies         `gorm:"foreignKey:StrategyID;references:ID"  form:"strategyInfo" json:"strategyInfo" xml:"strategyInfo"`
 		StrategySettings []StrategySettings `gorm:"type:jsonb;serializer:json;foreignKey:StrategyID;references:StrategyID" json:"strategySettings"`
 		SettingsPairs    SettingsPairs      `gorm:"foreignKey:StrategyID,Symbol;references:StrategyID,Symbol" json:"pairInfo"`
 		USDProfit        float64            `bson:"usdProfit" json:"usdProfit"`
