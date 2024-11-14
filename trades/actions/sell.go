@@ -1,14 +1,19 @@
 package actions
 
 import (
+	"strconv"
+
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"strconv"
 )
 
 func Sell(event events.Events) (events.Events, error) {
+	if event.Trade.Status == "new" {
+		event.Trade.Status = "closed"
+		return event, nil
+	}
 	client, clientError := event.Exchange.Client()
 	if clientError != nil {
 		return SaveError(event, clientError)
