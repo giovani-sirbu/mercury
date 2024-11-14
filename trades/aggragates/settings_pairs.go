@@ -25,13 +25,13 @@ type (
 	}
 	SettingsPairs struct {
 		ID           uint               `gorm:"primaryKey" form:"id" json:"-" xml:"id"`
-		StrategyID   int                `gorm:"index:idx_symbol_strategy_id,unique" form:"strategyID" json:"-" xml:"strategyID"`
-		Symbol       string             `gorm:"type:varchar(20);index:idx_symbol_strategy_id,unique" bson:"symbol" json:"-" form:"symbol" xml:"symbol" validate:"required,min=3,max=20"`
+		StrategyID   int                `gorm:"index:idx_symbol_strategy_id,unique" form:"strategyID" json:"strategyID" xml:"strategyID"`
+		Symbol       string             `gorm:"type:varchar(20);index:idx_symbol_strategy_id,unique" bson:"symbol" json:"symbol" form:"symbol" xml:"symbol" validate:"required,min=3,max=20"`
 		Exchange     string             `gorm:"type:varchar(50);" bson:"exchange" json:"exchange" form:"exchange" xml:"exchange" validate:"required,min=3,max=50"`
 		Rank         uint8              `bson:"rank" json:"rank" form:"rank" xml:"rank" validate:"required"`
 		Status       string             `gorm:"default:active" bson:"status" json:"status"`
 		TradeFilters TradeFilters       `gorm:"type:jsonb;serializer:json;" bson:"tradeFilters" json:"tradeFilters" form:"tradeFilters" xml:"tradeFilters"`
-		Settings     []StrategySettings `gorm:"type:jsonb;serializer:json;" bson:"settings" json:"-" form:"settings" xml:"settings"`
+		Settings     []StrategySettings `gorm:"type:jsonb;serializer:json;" bson:"settings" json:"settings" form:"settings" xml:"settings"`
 		CreatedAt    time.Time          `form:"createdAt" json:"-" xml:"createdAt"`
 		UpdatedAt    time.Time          `form:"updatedAt" json:"-" xml:"updatedAt"`
 		DeletedAt    gorm.DeletedAt     `form:"deletedAt" json:"-" xml:"deletedAt"`
