@@ -2,12 +2,13 @@ package actions
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/trades"
-	"strconv"
-	"strings"
 )
 
 func GetAssetBudget(assets []aggregates.UserAssetRecord, assetSymbol string) float64 {
@@ -79,18 +80,24 @@ func HasFunds(event events.Events) (events.Events, error) {
 	remainedQuantity := GetAssetBudget(assets, assetSymbol)
 	neededQuantity := quantity * event.Trade.PositionPrice
 
+	if event.Trade.Inverse {
+		neededQuantity = quantity
+	}
+
 	if remainedQuantity < neededQuantity {
 		log.Debug("remainedQuantity: ", remainedQuantity, assetSymbol)
 		log.Debug("neededQuantity: ", neededQuantity)
 
 		// If nou enough funds update to impasse and return
-		msg := fmt.Sprintf("Not enough funds to buy, available qty: %f, necessary qty: %f", remainedQuantity, quantity*event.Trade.PositionPrice)
-		event.Trade.PositionType = "impasse"
-		newEvent, err := UpdateTrade(event)
-		if err != nil {
-			return SaveError(event, err)
+		msg := fmt.Sprintf("Not enough funds for #%d to buy %s, available qty: %f, necessary qty: %f", event.Trade.UserID, event.Trade.Symbol, remainedQuantity, quantity*event.Trade.PositionPrice)
+		if event.Trade.Strategy.Settings.Impasse {
+			event.Trade.PositionType = "impasse"
+			_, err := UpdateTrade(event)
+			if err != nil {
+				return SaveError(event, err)
+			}
 		}
-		return SaveError(newEvent, fmt.Errorf(msg))
+		return SaveError(event, fmt.Errorf(msg))
 	}
 
 	return event, nil
