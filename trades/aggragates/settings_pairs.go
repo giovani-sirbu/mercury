@@ -25,9 +25,9 @@ type (
 	}
 	SettingsPairs struct {
 		ID               uint               `gorm:"primaryKey" form:"id" json:"-" xml:"id"`
-		StrategyID       int                `gorm:"index:idx_symbol_strategy_id,unique" form:"strategyId" json:"-" xml:"strategyId"`
-		Symbol           string             `gorm:"type:varchar(20);index:idx_symbol_strategy_id,unique" bson:"symbol" json:"-" form:"symbol" xml:"symbol" validate:"required,min=3,max=20"`
-		Exchange         string             `gorm:"type:varchar(50);" bson:"exchange" json:"-" form:"exchange" xml:"exchange" validate:"required,min=3,max=50"`
+		StrategyID       int                `gorm:"uniqueIndex:idx_symbol_strategy_id,priority:2;" form:"strategyId" json:"-" xml:"strategyId"`
+		Symbol           string             `gorm:"type:varchar(20);uniqueIndex:idx_symbol_strategy_id,priority:1;" bson:"symbol" json:"-" form:"symbol" xml:"symbol" validate:"required,min=3,max=20"`
+		Exchange         string             `gorm:"type:varchar(50);uniqueIndex:idx_symbol_strategy_id,priority:3;" bson:"exchange" json:"-" form:"exchange" xml:"exchange" validate:"required,min=3,max=50"`
 		Rank             uint8              `bson:"rank" json:"rank" form:"rank" xml:"rank" validate:"required"`
 		Status           string             `gorm:"default:active" bson:"status" json:"status"`
 		TradeFilters     TradeFilters       `gorm:"type:jsonb;serializer:json;" bson:"tradeFilters" json:"tradeFilters" form:"tradeFilters" xml:"tradeFilters"`

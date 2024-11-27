@@ -13,8 +13,8 @@ type (
 		ID              uint            `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
 		UserID          uint            `gorm:"index:idx_dashboard_stats,priority:1" form:"userId" json:"userId" xml:"userId"`
 		ParentID        uint            `gorm:"index" form:"parentId" json:"parentId" xml:"parentId"`
-		Symbol          string          `gorm:"type:varchar(10); index; uniqueIndex:idx_symbol_strategy_id,priority:1;" bson:"symbol" json:"symbol"`
-		ParentSymbol    string          `gorm:"type:varchar(10); index;" bson:"parentSymbol" json:"parentSymbol"`
+		Symbol          string          `gorm:"type:varchar(10);uniqueIndex:idx_symbol_strategy_id,priority:1;" bson:"symbol" json:"symbol"`
+		ParentSymbol    string          `gorm:"type:varchar(10); index" bson:"parentSymbol" json:"parentSymbol"`
 		PositionType    string          `gorm:"type:varchar(50); default:new" bson:"positionType" json:"positionType"`
 		PositionPrice   float64         `bson:"positionPrice" json:"positionPrice"`
 		ExchangeID      int             `gorm:"index:idx_dashboard_stats,priority:2;constraint:OnDelete:CASCADE;" form:"exchangeId" json:"-" xml:"exchangeId"`
