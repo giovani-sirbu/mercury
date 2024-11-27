@@ -34,7 +34,7 @@ func HasFunds(event events.Events) (events.Events, error) {
 	}
 
 	historyCount := len(event.Trade.History)
-	strategySettings := event.Trade.StrategySettings
+	strategySettings := event.Trade.SettingsPairs.StrategySettings
 	var settingsIndex int
 
 	if historyCount > len(strategySettings) {
@@ -90,7 +90,7 @@ func HasFunds(event events.Events) (events.Events, error) {
 
 		// If nou enough funds update to impasse and return
 		msg := fmt.Sprintf("Not enough funds for #%d to buy %s, available qty: %f, necessary qty: %f", event.Trade.UserID, event.Trade.Symbol, remainedQuantity, quantity*event.Trade.PositionPrice)
-		if event.Trade.Strategy.Settings.Impasse {
+		if event.Trade.Strategy.Params.Impasse {
 			event.Trade.PositionType = "impasse"
 			_, err := UpdateTrade(event)
 			if err != nil {

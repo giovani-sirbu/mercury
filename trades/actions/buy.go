@@ -24,7 +24,7 @@ func Buy(event events.Events) (events.Events, error) {
 	buyQty, sellQty := trades.GetQuantities(event.Trade.History)
 
 	historyCount := len(event.Trade.History)
-	strategySettings := event.Trade.StrategySettings
+	strategySettings := event.Trade.SettingsPairs.StrategySettings
 	var settingsIndex int
 
 	if historyCount > len(strategySettings) {
