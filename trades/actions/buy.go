@@ -24,7 +24,7 @@ func Buy(event events.Events) (events.Events, error) {
 	buyQty, sellQty := trades.GetQuantities(event.Trade.History)
 
 	historyCount := len(event.Trade.History)
-	strategySettings := event.Trade.SettingsPairs.StrategySettings
+	strategySettings := event.Trade.StrategyPair.StrategySettings
 	var settingsIndex int
 
 	if historyCount > len(strategySettings) {
@@ -40,7 +40,7 @@ func Buy(event events.Events) (events.Events, error) {
 	multiplier := strategySettings[settingsIndex].Multiplier
 	depths := strategySettings[settingsIndex].Depths
 	pairInitialBid := strategySettings[settingsIndex].InitialBid
-	minNotion := event.Trade.SettingsPairs.TradeFilters.MinNotional / event.Trade.PositionPrice
+	minNotion := event.Trade.StrategyPair.TradeFilters.MinNotional / event.Trade.PositionPrice
 
 	if quantity == 0 {
 		var initialBid float64
@@ -78,7 +78,7 @@ func Buy(event events.Events) (events.Events, error) {
 		quantity = quantity - sellQty
 	}
 
-	quantity = ToFixed(quantity, int(event.Trade.SettingsPairs.TradeFilters.LotSize))
+	quantity = ToFixed(quantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
 
 	event.Params.Quantity = quantity
 

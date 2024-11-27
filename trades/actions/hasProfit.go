@@ -18,7 +18,7 @@ func HasProfit(event events.Events) (events.Events, error) {
 		buyQuantity := trades.GetQuantityInQuote(event.Trade.History, "BUY")
 		sellQuantity := trades.GetQuantityInQuote(event.Trade.History, "SELL")
 		quantity = (buyQuantity - sellQuantity) / event.Trade.PositionPrice
-		quantity = ToFixed(quantity, int(event.Trade.SettingsPairs.TradeFilters.LotSize))
+		quantity = ToFixed(quantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
 		historyType = "buy"
 	}
 

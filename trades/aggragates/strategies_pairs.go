@@ -23,7 +23,7 @@ type (
 		Percentage         float64 `bson:"percentage" json:"percentage"`
 		Multiplier         float64 `bson:"multiplier" json:"multiplier"`
 	}
-	SettingsPairs struct {
+	StrategiesPairs struct {
 		ID               uint               `gorm:"primaryKey" form:"id" json:"-" xml:"id"`
 		StrategyID       int                `gorm:"uniqueIndex:idx_symbol_strategy_id,priority:2;" form:"strategyId" json:"-" xml:"strategyId"`
 		Symbol           string             `gorm:"type:varchar(20);uniqueIndex:idx_symbol_strategy_id,priority:1;" bson:"symbol" json:"-" form:"symbol" xml:"symbol" validate:"required,min=3,max=20"`

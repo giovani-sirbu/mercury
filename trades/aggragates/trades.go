@@ -22,7 +22,7 @@ type (
 		ExchangeName    string          `gorm:"type:varchar(50);uniqueIndex:idx_symbol_strategy_id,priority:3;" bson:"exchangeName" json:"-"`
 		StrategyID      int             `gorm:"uniqueIndex:idx_symbol_strategy_id,priority:2;" form:"strategyId" json:"-" xml:"strategyId"`
 		Strategy        Strategies      `gorm:"foreignKey:StrategyID;references:ID"  form:"strategyInfo" json:"strategyInfo" xml:"strategyInfo"`
-		SettingsPairs   SettingsPairs   `gorm:"foreignKey:Symbol,StrategyID,ExchangeName;references:Symbol,StrategyID,Exchange" json:"settingsPairs"`
+		StrategyPair    StrategiesPairs `gorm:"foreignKey:Symbol,StrategyID,ExchangeName;references:Symbol,StrategyID,Exchange" json:"strategyPair"`
 		USDProfit       float64         `bson:"usdProfit" json:"usdProfit"`
 		Profit          float64         `bson:"profit" json:"profit"`
 		ProfitAsset     string          `bson:"profitAsset" json:"profitAsset"`

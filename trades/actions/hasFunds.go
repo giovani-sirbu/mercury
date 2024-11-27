@@ -34,7 +34,7 @@ func HasFunds(event events.Events) (events.Events, error) {
 	}
 
 	historyCount := len(event.Trade.History)
-	strategySettings := event.Trade.SettingsPairs.StrategySettings
+	strategySettings := event.Trade.StrategyPair.StrategySettings
 	var settingsIndex int
 
 	if historyCount > len(strategySettings) {
