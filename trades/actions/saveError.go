@@ -9,7 +9,7 @@ func SaveError(event events.Events, err error) (events.Events, error) {
 	// prevent duplicate logs
 	message := err.Error()
 	if len(event.Trade.Logs) > 0 && event.Trade.Logs[len(event.Trade.Logs)-1].Message == message {
-		return event, nil
+		return event, err
 	}
 
 	// Reset price and position to allow only the error update

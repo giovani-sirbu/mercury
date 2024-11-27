@@ -71,7 +71,6 @@ func Buy(event events.Events) (events.Events, error) {
 
 	priceInString := strconv.FormatFloat(event.Trade.PositionPrice, 'f', -1, 64)
 	quantity = quantity * multiplier
-	fmt.Println(quantity)
 	if event.Trade.Inverse {
 		quantity = quantity - buyQty
 	} else {
