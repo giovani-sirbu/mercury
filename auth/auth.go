@@ -19,13 +19,13 @@ type UserClaims struct {
 
 // createToken generate an access token
 func createToken(user UserClaims) (string, error) {
-
+	accessTokenDuration, _ := time.ParseDuration(os.Getenv("ACCESS_TOKEN_DURATION"))
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
 		jwt.MapClaims{
 			"id":    user.Id,
 			"email": user.Email,
 			"role":  user.Role,
-			"exp":   time.Now().Add(time.Hour * 24 * 7).Unix(),
+			"exp":   time.Now().Add(accessTokenDuration).Unix(),
 		})
 
 	tokenString, err := token.SignedString(secretKey)
