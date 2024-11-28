@@ -3,6 +3,7 @@ package auth
 import (
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
+	"os"
 	"time"
 )
 
@@ -59,11 +60,23 @@ type Tokens struct {
 
 // GenerateTokens generate refresh and access tokens
 func GenerateTokens(id uint, email string, role string) (Tokens, error) {
-	token, createError := createToken(UserClaims{Id: id, Email: email, Role: role, Exp: time.Now().Add(time.Hour * 24).Unix()})
+	accessTokenDuration, _ := time.ParseDuration(os.Getenv("ACCESS_TOKEN_DURATION"))
+	token, createError := createToken(UserClaims{
+		Id:    id,
+		Email: email,
+		Role:  role,
+		Exp:   time.Now().Add(accessTokenDuration).Unix(),
+	})
 	if createError != nil {
 		return Tokens{}, createError
 	}
-	refreshToken, createRefreshError := createToken(UserClaims{Id: id, Email: email, Exp: time.Now().Add(time.Hour * 24 * 7).Unix()})
+
+	refreshTokenDuration, _ := time.ParseDuration(os.Getenv("REFRESH_TOKEN_DURATION"))
+	refreshToken, createRefreshError := createToken(UserClaims{
+		Id:    id,
+		Email: email,
+		Exp:   time.Now().Add(refreshTokenDuration).Unix(),
+	})
 	if createRefreshError != nil {
 		return Tokens{}, createRefreshError
 	}
