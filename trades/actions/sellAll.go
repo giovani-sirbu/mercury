@@ -27,7 +27,7 @@ func SellAll(event events.Events) (events.Events, error) {
 
 	event.Trade.PositionType = "sellParent"
 
-	newEvent, err := UpdateTrade(event)
+	newEvent, err := event.Events["updateTrade"](event)
 
 	return newEvent, err
 }

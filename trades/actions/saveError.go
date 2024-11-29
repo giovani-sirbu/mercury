@@ -27,7 +27,7 @@ func SaveError(event events.Events, err error) (events.Events, error) {
 		TradeID:    event.Trade.ID,
 	})
 
-	newEvent, _ := UpdateTrade(event)
+	newEvent, _ := event.Events["updateTrade"](event)
 
 	return newEvent, err
 }

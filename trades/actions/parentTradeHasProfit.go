@@ -2,6 +2,7 @@ package actions
 
 import (
 	"fmt"
+
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
@@ -31,7 +32,7 @@ func ParentTradeHasProfit(event events.Events) (events.Events, error) {
 		childrenTrade.PositionPrice = childrenPrice
 		event.ChildrenTrades[index].PositionPrice = childrenPrice
 		newEvent := events.Events{Trade: childrenTrade, Events: event.Events, EventsNames: []string{"hasProfit"}}
-		newEvent, _ = HasProfit(newEvent)
+		newEvent, _ = event.Events["hasProfit"](newEvent)
 		childrenProfit = childrenProfit + newEvent.Trade.Profit
 	}
 
