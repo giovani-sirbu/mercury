@@ -4,8 +4,9 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
-	"gorm.io/gorm"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type (
@@ -23,6 +24,10 @@ type (
 		Percentage         float64 `bson:"percentage" json:"percentage"`
 		Multiplier         float64 `bson:"multiplier" json:"multiplier"`
 	}
+	ImpassePairs struct {
+		Symbol  string
+		Inverse bool
+	}
 	StrategiesPairs struct {
 		ID               uint               `gorm:"primaryKey" form:"id" json:"-" xml:"id"`
 		StrategyID       int                `gorm:"uniqueIndex:idx_symbol_strategy_id,priority:2;" form:"strategyId" json:"-" xml:"strategyId"`
@@ -32,6 +37,7 @@ type (
 		Status           string             `gorm:"default:active" bson:"status" json:"status"`
 		TradeFilters     TradeFilters       `gorm:"type:jsonb;serializer:json;" bson:"tradeFilters" json:"tradeFilters" form:"tradeFilters" xml:"tradeFilters"`
 		StrategySettings []StrategySettings `gorm:"type:jsonb;serializer:json;" bson:"strategySettings" json:"strategySettings" form:"strategySettings" xml:"strategySettings"`
+		ImpassePairs     []ImpassePairs     `gorm:"type:jsonb;serializer:json;" bson:"impassePairs" json:"impassePairs" form:"impassePairs" xml:"impassePairs"`
 		CreatedAt        time.Time          `form:"createdAt" json:"-" xml:"createdAt"`
 		UpdatedAt        time.Time          `form:"updatedAt" json:"-" xml:"updatedAt"`
 		DeletedAt        gorm.DeletedAt     `form:"deletedAt" json:"-" xml:"deletedAt"`
@@ -45,6 +51,34 @@ func (a TradeFilters) Value() (driver.Value, error) {
 
 // Scan Unmarshal
 func (a *TradeFilters) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New("type assertion to []byte failed")
+	}
+	return json.Unmarshal(b, &a)
+}
+
+// Value Marshal
+func (a StrategySettings) Value() (driver.Value, error) {
+	return json.Marshal(a)
+}
+
+// Scan Unmarshal
+func (a *StrategySettings) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New("type assertion to []byte failed")
+	}
+	return json.Unmarshal(b, &a)
+}
+
+// Value Marshal
+func (a ImpassePairs) Value() (driver.Value, error) {
+	return json.Marshal(a)
+}
+
+// Scan Unmarshal
+func (a *ImpassePairs) Scan(value interface{}) error {
 	b, ok := value.([]byte)
 	if !ok {
 		return errors.New("type assertion to []byte failed")

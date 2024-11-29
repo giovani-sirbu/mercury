@@ -1,11 +1,9 @@
 package aggragates
 
 import (
-	"database/sql/driver"
-	"encoding/json"
-	"errors"
-	"gorm.io/gorm"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type (
@@ -45,17 +43,3 @@ type (
 		Profit           float64
 	}
 )
-
-// Value Marshal
-func (a StrategySettings) Value() (driver.Value, error) {
-	return json.Marshal(a)
-}
-
-// Scan Unmarshal
-func (a *StrategySettings) Scan(value interface{}) error {
-	b, ok := value.([]byte)
-	if !ok {
-		return errors.New("type assertion to []byte failed")
-	}
-	return json.Unmarshal(b, &a)
-}
