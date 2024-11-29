@@ -92,10 +92,6 @@ func HasFunds(event events.Events) (events.Events, error) {
 		msg := fmt.Sprintf("Not enough funds for #%d to buy %s, available qty: %f, necessary qty: %f", event.Trade.UserID, event.Trade.Symbol, remainedQuantity, quantity*event.Trade.PositionPrice)
 		if event.Trade.Strategy.Params.Impasse {
 			event.Trade.PositionType = "impasse"
-			_, err := event.Events["updateTrade"](event)
-			if err != nil {
-				return SaveError(event, err)
-			}
 		}
 		return SaveError(event, fmt.Errorf(msg))
 	}

@@ -14,8 +14,10 @@ func SaveError(event events.Events, err error) (events.Events, error) {
 
 	// Reset price and position to allow only the error update
 	price := event.Trade.PositionPrice
-	event.Trade.PositionType = event.Params.OldPosition
-	event.Trade.PositionPrice = event.Params.OldPositionPrice
+	if event.Trade.PositionType != "impasse" {
+		event.Trade.PositionType = event.Params.OldPosition
+		event.Trade.PositionPrice = event.Params.OldPositionPrice
+	}
 	event.Params.PreventInfoLog = true
 
 	event.Trade.Logs = append(event.Trade.Logs, aggragates.TradesLogs{
