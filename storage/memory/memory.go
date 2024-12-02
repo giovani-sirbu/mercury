@@ -86,3 +86,13 @@ func (m Memory) DeleteByPattern(keyPattern string) error {
 	}
 	return err
 }
+
+func (m Memory) Ping() error {
+	ctx := context.Background()
+	_, client := m.Init()
+
+	defer ctx.Done()
+
+	err := client.Ping(ctx).Err()
+	return err
+}
