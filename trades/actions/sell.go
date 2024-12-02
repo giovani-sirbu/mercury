@@ -1,15 +1,19 @@
 package actions
 
 import (
-	"strconv"
-
+	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"strconv"
 )
 
 func Sell(event events.Events) (events.Events, error) {
+	if event.Trade.PendingOrder != 0 {
+		msg := fmt.Sprintf("Trade already have pending id %d", event.Trade.PendingOrder)
+		return event, fmt.Errorf(msg)
+	}
 	if event.Trade.Status == "new" {
 		event.Trade.Status = "closed"
 		return event, nil
@@ -33,6 +37,11 @@ func Sell(event events.Events) (events.Events, error) {
 	quantityBeforeLotSize := quantity
 	var dust float64
 	quantity = ToFixed(quantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
+
+	if quantity <= 0 {
+		errMsg := fmt.Sprintf("Invalid quantity: %f", quantity)
+		return event, fmt.Errorf(errMsg)
+	}
 
 	if quantityBeforeLotSize > quantity {
 		dust = quantityBeforeLotSize - quantity

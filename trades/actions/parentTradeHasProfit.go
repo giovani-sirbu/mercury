@@ -2,7 +2,6 @@ package actions
 
 import (
 	"fmt"
-
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
@@ -29,6 +28,7 @@ func ParentTradeHasProfit(event events.Events) (events.Events, error) {
 			return events.Events{}, fmt.Errorf("failed to get children price")
 		}
 
+		childrenPrice = ToFixed(childrenPrice, int(childrenTrade.StrategyPair.TradeFilters.PriceFilter))
 		childrenTrade.PositionPrice = childrenPrice
 		event.ChildrenTrades[index].PositionPrice = childrenPrice
 		newEvent := events.Events{Trade: childrenTrade, Events: event.Events, EventsNames: []string{"hasProfit"}}
@@ -37,7 +37,7 @@ func ParentTradeHasProfit(event events.Events) (events.Events, error) {
 	}
 
 	if profit-fee+(childrenProfit*event.Trade.PositionPrice) < 0 {
-		msg := fmt.Sprintf("profit: %f is smaller then min profit", profit-fee-(childrenProfit*event.Trade.PositionPrice))
+		msg := fmt.Sprintf("profit: %f is smaller then min profit for symbol %s, trade id %d, user id %d", profit-fee-(childrenProfit*event.Trade.PositionPrice), event.Trade.Symbol, event.Trade.ID, event.Trade.UserID)
 		return events.Events{}, fmt.Errorf(msg)
 	}
 

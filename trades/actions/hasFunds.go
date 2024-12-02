@@ -2,13 +2,12 @@ package actions
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
-
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/trades"
+	"strconv"
+	"strings"
 )
 
 func GetAssetBudget(assets []aggregates.UserAssetRecord, assetSymbol string) float64 {
