@@ -36,8 +36,10 @@ func ParentTradeHasProfit(event events.Events) (events.Events, error) {
 		childrenProfit = childrenProfit + newEvent.Trade.Profit
 	}
 
-	if profit-fee+(childrenProfit*event.Trade.PositionPrice) < 0 {
-		msg := fmt.Sprintf("profit: %f is smaller then min profit for symbol %s, trade id %d, user id %d", profit-fee-(childrenProfit*event.Trade.PositionPrice), event.Trade.Symbol, event.Trade.ID, event.Trade.UserID)
+	profit = profit - fee + (childrenProfit * event.Trade.PositionPrice)
+
+	if profit < 0 {
+		msg := fmt.Sprintf("profit: %f is smaller then min profit for symbol %s, trade id %d, user id %d", profit, event.Trade.Symbol, event.Trade.ID, event.Trade.UserID)
 		return events.Events{}, fmt.Errorf(msg)
 	}
 

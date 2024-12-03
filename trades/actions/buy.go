@@ -39,6 +39,9 @@ func Buy(event events.Events) (events.Events, error) {
 
 	multiplier := strategySettings[settingsIndex].Multiplier
 	depths := strategySettings[settingsIndex].Depths
+	if event.Trade.ParentID != 0 {
+		depths = strategySettings[settingsIndex].ImpasseDepth
+	}
 	pairInitialBid := strategySettings[settingsIndex].InitialBid
 	minNotion := event.Trade.StrategyPair.TradeFilters.MinNotional / event.Trade.PositionPrice
 
