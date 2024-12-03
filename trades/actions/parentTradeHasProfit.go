@@ -29,10 +29,10 @@ func ParentTradeHasProfit(event events.Events) (events.Events, error) {
 			return events.Events{}, fmt.Errorf("failed to get children price")
 		}
 
-		msg := fmt.Sprintf("children price before to fixed: %f", childrenPrice)
+		msg := fmt.Sprintf("children price before to fixed: %f, price filter %d", childrenPrice, int(childrenTrade.StrategyPair.TradeFilters.PriceFilter))
 		log.Info(msg, "parentHasProfit", "events")
 		childrenPrice = ToFixed(childrenPrice, int(childrenTrade.StrategyPair.TradeFilters.PriceFilter))
-		msg = fmt.Sprintf("children price before to fixed: %f", childrenPrice)
+		msg = fmt.Sprintf("children price after to fixed: %f", childrenPrice)
 		log.Info(msg, "parentHasProfit", "events")
 
 		childrenTrade.PositionPrice = childrenPrice
