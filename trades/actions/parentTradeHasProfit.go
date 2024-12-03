@@ -3,6 +3,7 @@ package actions
 import (
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
@@ -33,9 +34,13 @@ func ParentTradeHasProfit(event events.Events) (events.Events, error) {
 		event.ChildrenTrades[index].PositionPrice = childrenPrice
 		newEvent := events.Events{Trade: childrenTrade, Events: event.Events, EventsNames: []string{"hasProfit"}}
 		newEvent, _ = event.Events["hasProfit"](newEvent)
+		msg := fmt.Sprintf("children profit: %f", newEvent.Trade.Profit)
+		log.Info(msg, "parentHasProfit", "events")
 		childrenProfit = childrenProfit + newEvent.Trade.Profit
 	}
 
+	msg := fmt.Sprintf("Profit info: parent profit: %f, childrens profit: %f, fee: %f", profit, childrenProfit, fee)
+	log.Info(msg, "parentHasProfit", "events")
 	profit = profit - fee + (childrenProfit * event.Trade.PositionPrice)
 
 	if profit < 0 {
