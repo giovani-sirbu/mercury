@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-type TradesFees struct {
+type TradesHistoryFees struct {
 	ID         uint      `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
 	TradeID    uint      `form:"tradeId" json:"tradeId" xml:"tradeId"`
 	HistoryID  uint      `form:"historyId" json:"historyId" xml:"historyId"`

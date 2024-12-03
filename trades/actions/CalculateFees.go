@@ -12,8 +12,8 @@ func CalculateFees(history []aggragates.TradesHistory, symbol string) (float64, 
 	for _, historyData := range history {
 		baseSymbol := strings.Split(symbol, "/")[0]
 
-		if len(historyData.FeeDetails) > 0 {
-			for _, feeDetail := range historyData.FeeDetails {
+		if len(historyData.Fees) > 0 {
+			for _, feeDetail := range historyData.Fees {
 				feeInQuote = feeInQuote + feeDetail.FeeInQuote
 				if baseSymbol == feeDetail.Asset {
 					feeInBase = feeInBase + feeDetail.Fee
