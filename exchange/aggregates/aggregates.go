@@ -288,7 +288,6 @@ type (
 		Timestamp        int64  `json:"T"`
 		IsBuyerMaker     bool   `json:"m"`
 		IsBestPriceMatch bool   `json:"M"`
-		Symbol           string `json:"S"`
 	}
 
 	// Actions All exchange actions types
