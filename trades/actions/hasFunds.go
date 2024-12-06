@@ -84,11 +84,11 @@ func HasFunds(event events.Events) (events.Events, error) {
 	}
 
 	if remainedQuantity < neededQuantity {
-		log.Debug("remainedQuantity: ", remainedQuantity, assetSymbol)
-		log.Debug("neededQuantity: ", neededQuantity)
 
 		// If nou enough funds update to impasse and return
-		msg := fmt.Sprintf("Not enough funds for #%d to buy %s, available qty: %f, necessary qty: %f", event.Trade.UserID, event.Trade.Symbol, remainedQuantity, quantity*event.Trade.PositionPrice)
+		msg := fmt.Sprintf("Insufficient funds")
+		debugErrorMsg := fmt.Sprintf("Insufficient funds for #%d to buy %s, available qty: %f, necessary qty: %f", event.Trade.UserID, event.Trade.Symbol, remainedQuantity, quantity*event.Trade.PositionPrice)
+		log.Debug(debugErrorMsg)
 		if event.Trade.Strategy.Params.Impasse && event.Trade.ParentID == 0 {
 			event.Trade.PositionType = "impasse"
 		}
