@@ -24,6 +24,44 @@ func GetAssetBudget(assets []aggregates.UserAssetRecord, assetSymbol string) flo
 	return remainedQuantity
 }
 
+func HasFundsForDepths(amount float64, event events.Events, settingsIndex int) error {
+	strategySettings := event.Trade.StrategyPair.StrategySettings
+
+	multiplier := strategySettings[settingsIndex].Multiplier
+	depths := strategySettings[settingsIndex].ImpasseDepth
+
+	quantity := trades.GetInitialBid(amount, depths, multiplier)
+	minNotionQuantity := quantity
+	if event.Trade.Inverse {
+		minNotionQuantity = quantity * event.Trade.PositionPrice
+	} else {
+		quantity = quantity / event.Trade.PositionPrice
+	}
+
+	if minNotionQuantity < event.Trade.StrategyPair.TradeFilters.MinNotional {
+		return fmt.Errorf("not enough funds to start logic")
+	}
+
+	return nil
+}
+
+func GetUsedQuantities(event events.Events) float64 {
+	buyQuantity, sellQuantity := trades.GetQuantities(event.Trade.History)
+	feeInBase, _ := CalculateFees(event.Trade.History, event.Trade.Symbol)
+	quantity := buyQuantity - sellQuantity - feeInBase
+
+	if event.Trade.Inverse {
+		sellQuantity = trades.GetQuantityInQuote(event.Trade.History, "BUY")
+		buyQuantity = trades.GetQuantityInQuote(event.Trade.History, "SELL")
+		quantity = sellQuantity - buyQuantity
+		quantity = quantity / event.Trade.PositionPrice
+		quantity = quantity - feeInBase
+	}
+
+	quantity = ToFixed(quantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
+	return quantity
+}
+
 func HasFunds(event events.Events) (events.Events, error) {
 	client, _ := event.Exchange.Client()
 	assets, assetsErr := client.GetUserAssets() // Get user balance
@@ -90,7 +128,11 @@ func HasFunds(event events.Events) (events.Events, error) {
 		debugErrorMsg := fmt.Sprintf("Insufficient funds for #%d to buy %s, available qty: %f, necessary qty: %f", event.Trade.UserID, event.Trade.Symbol, remainedQuantity, quantity*event.Trade.PositionPrice)
 		log.Debug(debugErrorMsg)
 		if event.Trade.Strategy.Params.Impasse && event.Trade.ParentID == 0 {
-			event.Trade.PositionType = "impasse"
+			usedAmount := GetUsedQuantities(event)
+			hasFundsError := HasFundsForDepths(usedAmount, event, 0)
+			if hasFundsError == nil {
+				event.Trade.PositionType = "impasse"
+			}
 		}
 		return SaveError(event, fmt.Errorf(msg))
 	}
