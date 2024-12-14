@@ -10,7 +10,7 @@ type Exchanges struct {
 	Name           string         `gorm:"type:varchar(50)" bson:"name" json:"name" form:"name" xml:"name" validate:"required,min=3,max=50"`
 	Icon           string         `gorm:"type:varchar(200)" bson:"icon" json:"icon" form:"icon" xml:"icon" validate:"required"`
 	ApiTutorial    string         `gorm:"type:varchar(500)" bson:"apiTutorial" json:"apiTutorial" form:"apiTutorial" xml:"apiTutorial" validate:"required"`
-	WhitelistedIps string         `gorm:"type:varchar(500)" bson:"whitelisted_ips" json:"whitelisted_ips" form:"whitelisted_ips" xml:"whitelisted_ips" validate:"required"`
+	IpsToWhitelist string         `gorm:"type:varchar(500)" bson:"ipsToWhitelist" json:"ipsToWhitelist" form:"ipsToWhitelist" xml:"ipsToWhitelist" validate:"required"`
 	Status         Status         `gorm:"type:varchar(50);default:active" bson:"status" json:"status" form:"status" xml:"status"`
 	CreatedAt      time.Time      `form:"createdAt" json:"-" xml:"createdAt"`
 	UpdatedAt      time.Time      `form:"updatedAt" json:"-" xml:"updatedAt"`
