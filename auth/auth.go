@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-var secretKey = []byte("secret-key")
+var secretKey = []byte(os.Getenv("ENCRYPTION_TOKEN_KEY"))
 
 type UserClaims struct {
 	jwt.RegisteredClaims
