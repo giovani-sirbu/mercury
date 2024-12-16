@@ -28,9 +28,10 @@ func HasFundsForDepths(amount float64, event events.Events, settingsIndex int) e
 	strategySettings := event.Trade.StrategyPair.StrategySettings
 
 	multiplier := strategySettings[settingsIndex].Multiplier
+	percentage := strategySettings[settingsIndex].Percentage
 	depths := strategySettings[settingsIndex].ImpasseDepth
 
-	quantity := trades.GetInitialBid(amount, depths, multiplier)
+	quantity := trades.GetInitialBid(amount, depths, multiplier, percentage)
 	minNotionQuantity := quantity
 	if event.Trade.Inverse {
 		minNotionQuantity = quantity * event.Trade.PositionPrice

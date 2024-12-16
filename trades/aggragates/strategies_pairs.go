@@ -17,6 +17,7 @@ type (
 	}
 	StrategySettings struct {
 		Tolerance          float64 `bson:"tolerance" json:"tolerance"`
+		MinDepths          float64 `bson:"minDepths" json:"minDepths"`
 		Depths             float64 `bson:"depths" json:"depths"`
 		ImpasseDepth       float64 `bson:"impasseDepths" json:"impasseDepths"`
 		TrailingTakeProfit float64 `bson:"trailingTakeProfit" json:"trailingTakeProfit"`

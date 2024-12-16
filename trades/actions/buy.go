@@ -39,6 +39,7 @@ func Buy(event events.Events) (events.Events, error) {
 
 	multiplier := strategySettings[settingsIndex].Multiplier
 	depths := strategySettings[settingsIndex].Depths
+	percentage := strategySettings[settingsIndex].Percentage
 	if event.Trade.ParentID != 0 {
 		depths = strategySettings[settingsIndex].ImpasseDepth
 	}
@@ -64,7 +65,7 @@ func Buy(event events.Events) (events.Events, error) {
 
 			amount := GetAssetBudget(assets, assetSymbol)
 
-			quantity = trades.GetInitialBid(amount, depths, multiplier)
+			quantity = trades.GetInitialBid(amount, depths, multiplier, percentage)
 			minNotionQuantity := quantity
 			if event.Trade.Inverse {
 				minNotionQuantity = quantity * event.Trade.PositionPrice

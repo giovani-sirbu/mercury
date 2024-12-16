@@ -48,7 +48,33 @@ func GetQuantityInQuote(history []aggragates.TradesHistory, typeFilter string) f
 	return quantity
 }
 
-func GetInitialBid(amount float64, minDepth float64, multiplier float64) float64 {
-	rationPowDepth := math.Pow(multiplier, minDepth)
-	return amount / rationPowDepth
+func GetInitialBid(amount float64, minDepth float64, multiplier float64, percentage float64) float64 {
+	if multiplier <= 0 {
+		return 0
+	}
+	if percentage < 0 || percentage >= 100 {
+		return 0
+	}
+
+	// Calculate the adjusted ratio
+	reductionFactor := 1 - (percentage / 100)
+	ratio := multiplier * reductionFactor
+
+	// Compute the first term (initial bid)
+	numerator := amount * (1 - ratio)
+	denominator := 1 - math.Pow(ratio, minDepth)
+	initialBid := numerator / denominator
+
+	/*
+		//Generate the sequence
+		sequence := make([]float64, int(minDepth))
+		sequence[0] = initialBid
+
+		// Calculate each depth's value
+		for i := 1; i < int(minDepth); i++ {
+			sequence[i] = sequence[i-1] * ratio
+		}
+	*/
+
+	return initialBid
 }
