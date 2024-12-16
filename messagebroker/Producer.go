@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	commonLog "github.com/giovani-sirbu/mercury/log"
+	"github.com/giovani-sirbu/mercury/log"
 	"github.com/segmentio/kafka-go"
 	"os"
 	"time"
@@ -20,19 +20,19 @@ func (m MessageBroker) Producer() *Producer {
 	keypair, err := tls.LoadX509KeyPair(serviceCert, serviceKey)
 
 	if err != nil {
-		commonLog.Error(fmt.Sprintf("Failed to load Access Key and/or Access Certificate: %s", err), "", "Producer")
+		log.Error(fmt.Sprintf("Failed to load Access Key and/or Access Certificate: %s", err), "", "Producer")
 	}
 
 	caCert, err := os.ReadFile(caCerts)
 	if err != nil {
-		commonLog.Error(fmt.Sprintf("Failed to read CA Certificate file: %s", err), "", "Producer")
+		log.Error(fmt.Sprintf("Failed to read CA Certificate file: %s", err), "", "Producer")
 	}
 
 	caCertPool := x509.NewCertPool()
 	ok := caCertPool.AppendCertsFromPEM(caCert)
 
 	if !ok {
-		commonLog.Error(fmt.Sprintf("Failed to parse CA Certificate file: %s", err), "", "Producer")
+		log.Error(fmt.Sprintf("Failed to parse CA Certificate file: %s", err), "", "Producer")
 	}
 
 	w := &kafka.Writer{
@@ -65,7 +65,6 @@ func (m MessageBroker) Produce(topic string, key, value []byte, producer *Produc
 
 	// Return message response
 	err = producer.Writer.WriteMessages(context.TODO(), msg)
-	commonLog.Debug(err)
-	commonLog.Info(fmt.Sprintf("Produced on topic: %s", topicWithPrefix), "", "Producer")
+	log.Info(fmt.Sprintf("Produced on topic: %s", topicWithPrefix), "", "Producer")
 	return err
 }
