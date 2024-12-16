@@ -107,7 +107,7 @@ func HasFunds(event events.Events) (events.Events, error) {
 		log.Debug(debugErrorMsg)
 		if event.Trade.Strategy.Params.Impasse && event.Trade.ParentID == 0 {
 			usedAmount := GetUsedQuantities(event)
-			_, hasFundsError := trades.CalculateInitialBid(usedAmount, event.Trade, event.Trade.StrategyPair.StrategySettings[0])
+			_, hasFundsError := trades.CalculateInitialBid(usedAmount, event.Trade, 0)
 			if hasFundsError == nil {
 				event.Trade.PositionType = "impasse"
 			}

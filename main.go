@@ -7,6 +7,34 @@ import (
 )
 
 func main() {
+	/*
+		result := trades.CalculateMinimumQuantity(7, 5, 2.5) // depth, initial amount, percentage (as a decimal)
+		fmt.Println("Total needed sum:", result)
+
+		event := aggragates.Trades{
+			Inverse:       false,
+			PositionPrice: 10,
+			StrategyPair: aggragates.StrategiesPairs{
+				TradeFilters: aggragates.TradeFilters{
+					MinNotional: 5,
+				},
+				StrategySettings: []aggragates.StrategySettings{
+					{
+						Percentage: 2.5,
+						Multiplier: 2,
+						MinDepths:  7,
+						Depths:     7,
+					},
+				},
+			},
+		}
+		initialBid, err := trades.CalculateInitialBid(560, event, 0)
+
+		fmt.Println(initialBid, err)
+
+		return
+	*/
+
 	var tradesHistory []aggragates.TradesHistory
 	tradesHistory = append(tradesHistory, aggragates.TradesHistory{Quantity: 3.97, Price: 5.029, Type: "SELL"})
 	tradesHistory = append(tradesHistory, aggragates.TradesHistory{Quantity: 7.94, Price: 5.158, Type: "SELL"})

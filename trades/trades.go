@@ -80,9 +80,25 @@ func GetInitialBidByDepth(amount float64, depth float64, multiplier float64, per
 	return initialBid
 }
 
-func CalculateInitialBid(amount float64, trade aggragates.Trades, strategySettings aggragates.StrategySettings) (float64, error) {
-	isEligible := false
+func CalculateMinimumQuantity(depth int, initial, percent float64) float64 {
+	latestSum := initial * (1 + (percent / 100))
+	var neededSum float64 = 0
+
+	for i := 1; i < depth; i++ {
+		latestSum = (latestSum - (latestSum * (percent / 100))) * 2
+		neededSum += latestSum
+	}
+
+	// increase amount by 5%
+	neededSum *= 1.05
+
+	return neededSum
+}
+
+func CalculateInitialBid(amount float64, trade aggragates.Trades, strategyIndex int) (float64, error) {
 	var initialBid float64
+	isEligible := false
+	strategySettings := trade.StrategyPair.StrategySettings[strategyIndex]
 
 	for depth := strategySettings.Depths; depth >= strategySettings.MinDepths; depth-- {
 		if isEligible {
