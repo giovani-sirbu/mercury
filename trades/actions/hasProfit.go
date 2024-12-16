@@ -34,9 +34,9 @@ func HasProfit(event events.Events) (events.Events, error) {
 	}
 
 	event.Trade.Profit = profit
-
-	if profit-fee < CalculateMinProfit(event.Trade) {
-		msg := fmt.Sprintf("profit: %f is smaller then min profit for symbol %s, trade id %d, user id %d", profit-fee, event.Trade.Symbol, event.Trade.ID, event.Trade.UserID)
+	minProfit := CalculateMinProfit(event.Trade)
+	if profit-fee < minProfit {
+		msg := fmt.Sprintf("profit(%f) is smaller than min profit(%f) for symbol %s | trade_id: %d | user_id: %d", profit-fee, minProfit, event.Trade.Symbol, event.Trade.ID, event.Trade.UserID)
 		return event, fmt.Errorf(msg)
 	}
 
