@@ -1,7 +1,6 @@
 package actions
 
 import (
-	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/trades"
@@ -68,7 +67,7 @@ func Buy(event events.Events) (events.Events, error) {
 			}
 
 			if err != nil {
-				return SaveError(event, fmt.Errorf("not enough funds to start logic"))
+				return SaveError(event, err)
 			}
 		}
 		multiplier = 1
