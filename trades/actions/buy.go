@@ -62,7 +62,7 @@ func Buy(event events.Events) (events.Events, error) {
 			var err error
 			quantity, err = trades.CalculateInitialBid(amount, event.Trade, settingsIndex)
 
-			if event.Trade.Inverse {
+			if !event.Trade.Inverse {
 				quantity /= event.Trade.PositionPrice
 			}
 
