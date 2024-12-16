@@ -1,6 +1,7 @@
 package trades
 
 import (
+	"fmt"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"math"
 	"sort"
@@ -48,7 +49,7 @@ func GetQuantityInQuote(history []aggragates.TradesHistory, typeFilter string) f
 	return quantity
 }
 
-func GetInitialBid(amount float64, minDepth float64, multiplier float64, percentage float64) float64 {
+func GetInitialBidByDepth(amount float64, depth float64, multiplier float64, percentage float64) float64 {
 	if multiplier <= 0 {
 		return 0
 	}
@@ -62,19 +63,51 @@ func GetInitialBid(amount float64, minDepth float64, multiplier float64, percent
 
 	// Compute the first term (initial bid)
 	numerator := amount * (1 - ratio)
-	denominator := 1 - math.Pow(ratio, minDepth)
+	denominator := 1 - math.Pow(ratio, depth)
 	initialBid := numerator / denominator
 
 	/*
 		//Generate the sequence
-		sequence := make([]float64, int(minDepth))
+		sequence := make([]float64, int(depth))
 		sequence[0] = initialBid
 
 		// Calculate each depth's value
-		for i := 1; i < int(minDepth); i++ {
+		for i := 1; i < int(depth); i++ {
 			sequence[i] = sequence[i-1] * ratio
 		}
 	*/
 
 	return initialBid
+}
+
+func CalculateInitialBid(amount float64, trade aggragates.Trades, strategySettings aggragates.StrategySettings) (float64, error) {
+	isEligible := false
+	var initialBid float64
+
+	for depth := strategySettings.Depths; depth >= strategySettings.MinDepths; depth-- {
+		if isEligible {
+			continue
+		}
+		// rewrite depth if impasse is active
+		if trade.ParentID != 0 {
+			depth = strategySettings.ImpasseDepth
+		}
+		initialBid = GetInitialBidByDepth(amount, depth, strategySettings.Multiplier, strategySettings.Percentage)
+
+		// update initialBid on inverse
+		if trade.Inverse {
+			initialBid *= trade.PositionPrice
+		}
+
+		if initialBid > trade.StrategyPair.TradeFilters.MinNotional {
+			isEligible = true
+		}
+	}
+
+	if initialBid < trade.StrategyPair.TradeFilters.MinNotional {
+		msg := fmt.Sprintf("not enough funds to start logic")
+		return 0, fmt.Errorf(msg)
+	}
+
+	return initialBid, nil
 }

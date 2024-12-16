@@ -38,11 +38,6 @@ func Buy(event events.Events) (events.Events, error) {
 	}
 
 	multiplier := strategySettings[settingsIndex].Multiplier
-	depths := strategySettings[settingsIndex].Depths
-	percentage := strategySettings[settingsIndex].Percentage
-	if event.Trade.ParentID != 0 {
-		depths = strategySettings[settingsIndex].ImpasseDepth
-	}
 	pairInitialBid := strategySettings[settingsIndex].InitialBid
 	minNotion := event.Trade.StrategyPair.TradeFilters.MinNotional / event.Trade.PositionPrice
 
@@ -65,15 +60,14 @@ func Buy(event events.Events) (events.Events, error) {
 
 			amount := GetAssetBudget(assets, assetSymbol)
 
-			quantity = trades.GetInitialBid(amount, depths, multiplier, percentage)
-			minNotionQuantity := quantity
+			var err error
+			quantity, err = trades.CalculateInitialBid(amount, event.Trade, strategySettings[settingsIndex])
+
 			if event.Trade.Inverse {
-				minNotionQuantity = quantity * event.Trade.PositionPrice
-			} else {
-				quantity = quantity / event.Trade.PositionPrice
+				quantity /= event.Trade.PositionPrice
 			}
 
-			if minNotionQuantity < event.Trade.StrategyPair.TradeFilters.MinNotional {
+			if err != nil {
 				return SaveError(event, fmt.Errorf("not enough funds to start logic"))
 			}
 		}

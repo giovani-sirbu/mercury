@@ -24,28 +24,6 @@ func GetAssetBudget(assets []aggregates.UserAssetRecord, assetSymbol string) flo
 	return remainedQuantity
 }
 
-func HasFundsForDepths(amount float64, event events.Events, settingsIndex int) error {
-	strategySettings := event.Trade.StrategyPair.StrategySettings
-
-	multiplier := strategySettings[settingsIndex].Multiplier
-	percentage := strategySettings[settingsIndex].Percentage
-	depths := strategySettings[settingsIndex].ImpasseDepth
-
-	quantity := trades.GetInitialBid(amount, depths, multiplier, percentage)
-	minNotionQuantity := quantity
-	if event.Trade.Inverse {
-		minNotionQuantity = quantity * event.Trade.PositionPrice
-	} else {
-		quantity = quantity / event.Trade.PositionPrice
-	}
-
-	if minNotionQuantity < event.Trade.StrategyPair.TradeFilters.MinNotional {
-		return fmt.Errorf("not enough funds to start logic")
-	}
-
-	return nil
-}
-
 func GetUsedQuantities(event events.Events) float64 {
 	buyQuantity, sellQuantity := trades.GetQuantities(event.Trade.History)
 	feeInBase, _ := CalculateFees(event.Trade.History, event.Trade.Symbol)
@@ -129,7 +107,7 @@ func HasFunds(event events.Events) (events.Events, error) {
 		log.Debug(debugErrorMsg)
 		if event.Trade.Strategy.Params.Impasse && event.Trade.ParentID == 0 {
 			usedAmount := GetUsedQuantities(event)
-			hasFundsError := HasFundsForDepths(usedAmount, event, 0)
+			_, hasFundsError := trades.CalculateInitialBid(usedAmount, event.Trade, event.Trade.StrategyPair.StrategySettings[0])
 			if hasFundsError == nil {
 				event.Trade.PositionType = "impasse"
 			}
