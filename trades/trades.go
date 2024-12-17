@@ -97,6 +97,7 @@ func CalculateMinimumQuantity(depth int, initial, percent float64) float64 {
 
 func CalculateInitialBid(amount float64, trade aggragates.Trades, strategyIndex int) (float64, error) {
 	var initialBid float64
+	var initialBidInQuote float64
 	isEligible := false
 	strategySettings := trade.StrategyPair.StrategySettings[strategyIndex]
 
@@ -109,18 +110,19 @@ func CalculateInitialBid(amount float64, trade aggragates.Trades, strategyIndex 
 			depth = strategySettings.ImpasseDepth
 		}
 		initialBid = GetInitialBidByDepth(amount, depth, strategySettings.Multiplier, strategySettings.Percentage)
+		initialBidInQuote = initialBid
 
 		// update initialBid on inverse
 		if trade.Inverse {
-			initialBid *= trade.PositionPrice
+			initialBidInQuote *= trade.PositionPrice
 		}
 
-		if initialBid > trade.StrategyPair.TradeFilters.MinNotional {
+		if initialBidInQuote > trade.StrategyPair.TradeFilters.MinNotional {
 			isEligible = true
 		}
 	}
 
-	if initialBid < trade.StrategyPair.TradeFilters.MinNotional {
+	if initialBidInQuote < trade.StrategyPair.TradeFilters.MinNotional {
 		msg := fmt.Sprintf("not enough funds to start logic")
 		return 0, fmt.Errorf(msg)
 	}
