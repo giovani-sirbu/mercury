@@ -101,10 +101,19 @@ func CalculateInitialBid(amount float64, trade aggragates.Trades, strategyIndex 
 	isEligible := false
 	strategySettings := trade.StrategyPair.StrategySettings[strategyIndex]
 
-	for depth := strategySettings.Depths; depth >= strategySettings.MinDepths; depth-- {
+	maxDepths := strategySettings.Depths
+	minDepths := strategySettings.MinDepths
+	decimalDecrease := 0.5
+
+	for depthMultiplied := maxDepths * 100; depthMultiplied >= minDepths*100; depthMultiplied-- {
+		if math.Mod(depthMultiplied/10, decimalDecrease*10) != 0 {
+			continue
+		}
 		if isEligible {
 			continue
 		}
+		depth := depthMultiplied / 100
+		fmt.Println(depth)
 		// rewrite depth if impasse is active
 		if trade.ParentID != 0 {
 			depth = strategySettings.ImpasseDepth
