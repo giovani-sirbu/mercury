@@ -31,7 +31,6 @@ func main() {
 		initialBid, err := trades.CalculateInitialBid(560, event, 0)
 
 		fmt.Println(initialBid, err)
-
 		return
 	*/
 
