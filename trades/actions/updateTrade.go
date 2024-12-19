@@ -9,10 +9,14 @@ import (
 )
 
 func UpdateTrade(event events.Events) (events.Events, error) {
-	// prevent duplicate logs
 	message := fmt.Sprintf("%s_TO_%s", event.Params.OldPosition, event.Trade.PositionType)
-	if len(event.Trade.Logs) > 0 && event.Trade.Logs[len(event.Trade.Logs)-1].Message == message {
-		return event, nil
+
+	// prevent duplicate logs
+	if len(event.Trade.Logs) > 0 {
+		lastError := event.Trade.Logs[len(event.Trade.Logs)-1].Message
+		if RemoveNumbersFromString(lastError) == RemoveNumbersFromString(message) {
+			return event, nil
+		}
 	}
 
 	// If no error occurs save only info logs
