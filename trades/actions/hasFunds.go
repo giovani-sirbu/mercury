@@ -103,7 +103,7 @@ func HasFunds(event events.Events) (events.Events, error) {
 		// If nou enough funds update to impasse and return
 		msg := fmt.Sprintf("Failed to %s %f %s. Available quantity: %f", event.Trade.PositionType, quantity*event.Trade.PositionPrice, assetSymbol, remainedQuantity)
 		if event.Trade.Strategy.Params.Impasse && event.Trade.ParentID == 0 {
-			usedAmount := GetUsedQuantities(event)
+			usedAmount := GetUsedQuantities(event) * event.Trade.PositionPrice
 			_, hasFundsError := trades.CalculateInitialBid(usedAmount, event.Trade, 0)
 			if hasFundsError == nil {
 				event.Trade.PositionType = "impasse"
