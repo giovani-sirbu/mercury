@@ -1,7 +1,6 @@
 package messagebroker
 
 import (
-	"github.com/giovani-sirbu/mercury/log"
 	"github.com/segmentio/kafka-go"
 	"time"
 )
@@ -23,7 +22,6 @@ type BrokerMethods struct {
 }
 
 func (broker MessageBroker) Init() BrokerMethods {
-	log.Debug("init broker")
 	producer := broker.Producer()
 	return BrokerMethods{
 		Producer: producer,
