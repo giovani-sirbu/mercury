@@ -1,6 +1,7 @@
 package events
 
 import (
+	"fmt"
 	"github.com/giovani-sirbu/mercury/exchange"
 	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/messagebroker"
@@ -43,7 +44,17 @@ func (e Events) Run() error {
 	newEvent, err := e.Events[e.EventsNames[0]](e)
 	if err != nil {
 		e.LockTradeWithBackOff()
-		log.Error(err.Error(), "Run events", "")
+		msg := fmt.Sprintf("User ID: #%d | Trade Info: (ID: #%d, Position Type: %s, Position Price: %f, Impasse: %t, Profit: %f, Depths: %d) | Message: %s",
+			e.Trade.UserID,
+			e.Trade.ID,
+			e.Trade.PositionType,
+			e.Trade.PositionPrice,
+			e.Trade.Inverse,
+			e.Params.Profit,
+			len(e.Trade.History),
+			err.Error(),
+		)
+		log.Error(msg, "Run events", "")
 		return err
 	}
 	err = newEvent.Next()
