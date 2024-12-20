@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
-	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/trades"
 	"strconv"
 	"strings"
@@ -106,7 +105,6 @@ func HasFunds(event events.Events) (events.Events, error) {
 		if event.Trade.Strategy.Params.Impasse && event.Trade.ParentID == 0 {
 			usedAmount := GetUsedQuantities(event) * event.Trade.PositionPrice
 			_, hasFundsError := trades.CalculateInitialBid(usedAmount, event.Trade, 0)
-			log.Debug(hasFundsError)
 			if hasFundsError == nil {
 				event.Trade.PositionType = "impasse"
 			}

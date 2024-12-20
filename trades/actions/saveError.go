@@ -12,6 +12,11 @@ func SaveError(event events.Events, err error) (events.Events, error) {
 	if len(event.Trade.Logs) > 0 {
 		lastError := event.Trade.Logs[len(event.Trade.Logs)-1].Message
 		if RemoveNumbersFromString(lastError) == RemoveNumbersFromString(message) {
+			if event.Trade.PositionType == "impasse" && event.Params.OldPosition != "impasse" {
+				newEvent, _ := event.Events["updateTrade"](event)
+
+				return newEvent, err
+			}
 			return event, err
 		}
 	}
