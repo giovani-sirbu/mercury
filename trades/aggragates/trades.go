@@ -34,11 +34,12 @@ type (
 		DeletedAt       gorm.DeletedAt  `form:"deletedAt" json:"-" xml:"deletedAt"`
 	}
 	Params struct {
-		OldPositionPrice float64
-		Percentage       float64
-		OldPosition      string
-		PreventInfoLog   bool
-		Quantity         float64
-		Profit           float64
+		OldPositionPrice  float64
+		Percentage        float64
+		OldPosition       string
+		PreventInfoLog    bool
+		Quantity          float64
+		Profit            float64
+		InverseUsedAmount float64
 	}
 )
