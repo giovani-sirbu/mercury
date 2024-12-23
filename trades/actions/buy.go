@@ -59,6 +59,10 @@ func Buy(event events.Events) (events.Events, error) {
 
 			amount := GetAssetBudget(assets, assetSymbol)
 
+			if !event.Trade.Inverse && strings.Contains(assetSymbol, "USD") {
+				amount = amount - event.Params.InverseUsedAmount
+			}
+
 			var err error
 			quantity, err = trades.CalculateInitialBid(amount, event.Trade, settingsIndex)
 

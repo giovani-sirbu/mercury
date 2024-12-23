@@ -44,7 +44,7 @@ func (e Events) Run() error {
 	newEvent, err := e.Events[e.EventsNames[0]](e)
 	if err != nil {
 		e.LockTradeWithBackOff()
-		msg := fmt.Sprintf("%s | User ID: #%d | Trade Info: (ID: #%d, Position Type: %s, Position Price: %f, Impasse: %t, Profit: %f, Depths: %d)",
+		msg := fmt.Sprintf("%s | User ID: #%d | Trade Info: (ID: #%d, Position Type: %s, Position Price: %f, Impasse: %t, Profit: %f, Depths: %d, Inverse used: %f)",
 			err.Error(),
 			e.Trade.UserID,
 			e.Trade.ID,
@@ -53,6 +53,7 @@ func (e Events) Run() error {
 			e.Trade.Inverse,
 			e.Params.Profit,
 			len(e.Trade.History),
+			e.Params.InverseUsedAmount,
 		)
 		log.Error(msg, "Run events", "")
 		return err

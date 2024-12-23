@@ -99,6 +99,10 @@ func HasFunds(event events.Events) (events.Events, error) {
 		neededQuantity = quantity
 	}
 
+	if !event.Trade.Inverse && strings.Contains(assetSymbol, "USD") {
+		remainedQuantity = remainedQuantity - event.Params.InverseUsedAmount
+	}
+
 	if remainedQuantity < neededQuantity {
 		// If nou enough funds update to impasse and return
 		msg := fmt.Sprintf("Failed to %s %f %s. Available quantity: %f", event.Trade.PositionType, quantity*event.Trade.PositionPrice, assetSymbol, remainedQuantity)
