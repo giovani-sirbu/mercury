@@ -14,7 +14,7 @@ type (
 		Symbol          string          `gorm:"type:varchar(10);uniqueIndex:idx_symbol_strategy_id,priority:1;" bson:"symbol" json:"symbol"`
 		PositionType    string          `gorm:"type:varchar(50); default:new" bson:"positionType" json:"positionType"`
 		PositionPrice   float64         `bson:"positionPrice" json:"positionPrice"`
-		ExchangeID      int             `gorm:"index:idx_dashboard_stats,priority:2;constraint:OnDelete:CASCADE;" form:"exchangeId" json:"-" xml:"exchangeId"`
+		ExchangeID      int             `gorm:"index:idx_dashboard_stats,priority:2;constraint:OnDelete:CASCADE;" form:"exchangeId" json:"exchangeId" xml:"exchangeId"`
 		Exchange        TradesExchanges `form:"exchange" json:"exchange" xml:"exchange"`
 		ExchangeName    string          `gorm:"type:varchar(50);uniqueIndex:idx_symbol_strategy_id,priority:3;" bson:"exchangeName" json:"-"`
 		StrategyID      int             `gorm:"uniqueIndex:idx_symbol_strategy_id,priority:2;" form:"strategyId" json:"strategyId" xml:"strategyId"`
