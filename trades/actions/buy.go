@@ -4,6 +4,7 @@ import (
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/trades"
+	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"strconv"
 	"strings"
 )
@@ -59,8 +60,8 @@ func Buy(event events.Events) (events.Events, error) {
 
 			amount := GetAssetBudget(assets, assetSymbol)
 
-			if !event.Trade.Inverse && strings.Contains(assetSymbol, "USD") {
-				amount = amount - event.Params.InverseUsedAmount
+			if !event.Trade.Inverse {
+				amount = amount - aggragates.FindUsedAmount(event.Params.InverseUsedAmount, assetSymbol)
 			}
 
 			var err error

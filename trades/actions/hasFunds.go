@@ -5,6 +5,7 @@ import (
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/trades"
+	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"strconv"
 	"strings"
 )
@@ -100,7 +101,7 @@ func HasFunds(event events.Events) (events.Events, error) {
 	}
 
 	if !event.Trade.Inverse && strings.Contains(assetSymbol, "USD") {
-		remainedQuantity = remainedQuantity - event.Params.InverseUsedAmount
+		remainedQuantity = remainedQuantity - aggragates.FindUsedAmount(event.Params.InverseUsedAmount, assetSymbol)
 	}
 
 	if remainedQuantity < neededQuantity {

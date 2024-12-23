@@ -7,6 +7,7 @@ import (
 	"github.com/giovani-sirbu/mercury/messagebroker"
 	"github.com/giovani-sirbu/mercury/storage/memory"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"strings"
 )
 
 type (
@@ -44,6 +45,8 @@ func (e Events) Run() error {
 	newEvent, err := e.Events[e.EventsNames[0]](e)
 	if err != nil {
 		e.LockTradeWithBackOff()
+		pairSymbols := strings.Split(e.Trade.Symbol, "/")
+		assetSymbol := pairSymbols[1]
 		msg := fmt.Sprintf("%s | User ID: #%d | Trade Info: (ID: #%d, Position Type: %s, Position Price: %f, Impasse: %t, Profit: %f, Depths: %d, Inverse used: %f)",
 			err.Error(),
 			e.Trade.UserID,
@@ -53,7 +56,7 @@ func (e Events) Run() error {
 			e.Trade.Inverse,
 			e.Params.Profit,
 			len(e.Trade.History),
-			e.Params.InverseUsedAmount,
+			aggragates.FindUsedAmount(e.Params.InverseUsedAmount, assetSymbol),
 		)
 		log.Error(msg, "Run events", "")
 		return err

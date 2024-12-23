@@ -33,6 +33,10 @@ type (
 		UpdatedAt       time.Time       `form:"updatedAt;index:idx_dashboard_stats,priority:4" json:"updatedAt" xml:"updatedAt"`
 		DeletedAt       gorm.DeletedAt  `form:"deletedAt" json:"-" xml:"deletedAt"`
 	}
+	UsedAmountResult struct {
+		UsedAmount    float64 `json:"usedAmount"`
+		QuoteCurrency string  `json:"quoteCurrency"`
+	}
 	Params struct {
 		OldPositionPrice  float64
 		Percentage        float64
@@ -40,6 +44,6 @@ type (
 		PreventInfoLog    bool
 		Quantity          float64
 		Profit            float64
-		InverseUsedAmount float64
+		InverseUsedAmount []UsedAmountResult
 	}
 )
