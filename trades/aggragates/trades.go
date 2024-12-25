@@ -23,6 +23,7 @@ type (
 		USDProfit       float64         `bson:"usdProfit" json:"usdProfit"`
 		Profit          float64         `bson:"profit" json:"profit"`
 		ProfitAsset     string          `bson:"profitAsset" json:"profitAsset"`
+		Dust            float64         `bson:"dust" json:"dust"`
 		PreventNewTrade bool            `gorm:"type:boolean;default:false" bson:"preventNewTrade" json:"preventNewTrade"`
 		Inverse         bool            `gorm:"type:boolean;default:false" bson:"inverse" json:"inverse"`
 		PendingOrder    int64           `gorm:"index" bson:"pendingOrder" json:"pendingOrder"`

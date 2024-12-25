@@ -80,6 +80,7 @@ func Sell(event events.Events) (events.Events, error) {
 	}
 
 	event.Trade.PendingOrder = response.OrderID
+	event.Trade.Dust = dust
 
 	if err != nil {
 		return SaveError(event, err)

@@ -100,7 +100,7 @@ func HasFunds(event events.Events) (events.Events, error) {
 		neededQuantity = quantity
 	}
 
-	if !event.Trade.Inverse && strings.Contains(assetSymbol, "USD") {
+	if !event.Trade.Inverse {
 		remainedQuantity = remainedQuantity - aggragates.FindUsedAmount(event.Params.InverseUsedAmount, assetSymbol)
 	}
 
