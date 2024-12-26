@@ -14,7 +14,7 @@ func Sell(event events.Events) (events.Events, error) {
 		msg := fmt.Sprintf("Trade already have pending id %d", event.Trade.PendingOrder)
 		return event, fmt.Errorf(msg)
 	}
-	if event.Trade.Status == "new" {
+	if event.Trade.Status == "new" || event.Params.OldPosition == "new" {
 		event.Trade.Status = "closed"
 		return event, nil
 	}
