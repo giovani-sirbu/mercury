@@ -38,13 +38,21 @@ type (
 		UsedAmount    float64 `json:"usedAmount"`
 		QuoteCurrency string  `json:"quoteCurrency"`
 	}
+
+	CoolDownIndicators struct {
+		RiskScore        float64 `json:"riskScore"`
+		VolatilityScore  float64 `json:"volatilityScore"`
+		ShouldTakeProfit bool    `json:"shouldTakeProfit"`
+	}
+
 	Params struct {
-		OldPositionPrice  float64
-		Percentage        float64
-		OldPosition       string
-		PreventInfoLog    bool
-		Quantity          float64
-		Profit            float64
-		InverseUsedAmount []UsedAmountResult
+		OldPositionPrice   float64
+		Percentage         float64
+		OldPosition        string
+		PreventInfoLog     bool
+		Quantity           float64
+		Profit             float64
+		InverseUsedAmount  []UsedAmountResult
+		CoolDownIndicators CoolDownIndicators
 	}
 )
