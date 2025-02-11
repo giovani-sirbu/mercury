@@ -26,8 +26,8 @@ type (
 		Multiplier         float64 `bson:"multiplier" json:"multiplier"`
 	}
 	ImpassePairs struct {
-		Symbol  string
-		Inverse bool
+		Symbol  string `bson:"symbol" json:"symbol"`
+		Inverse bool   `bson:"inverse" json:"inverse"`
 	}
 	StrategiesPairs struct {
 		ID               uint               `gorm:"primaryKey" form:"id" json:"-" xml:"id"`
