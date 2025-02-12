@@ -40,9 +40,9 @@ type (
 	}
 
 	CoolDownIndicators struct {
-		RiskScore        float64 `json:"riskScore"`
-		VolatilityScore  float64 `json:"volatilityScore"`
-		ShouldTakeProfit bool    `json:"shouldTakeProfit"`
+		VolatilityScore float64 `json:"volatilityScore"`
+		MarketBullish   bool    `json:"marketBullish"`
+		MarketBearish   bool    `json:"marketBearish"`
 	}
 
 	Params struct {
