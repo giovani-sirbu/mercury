@@ -69,7 +69,7 @@ func HasFunds(event events.Events) (events.Events, error) {
 	var assetSymbol string
 	var quantity float64
 
-	if event.Trade.PositionType == "sell" {
+	if event.Trade.PositionType == "sell" || event.Trade.PositionType == "takeProfit" {
 		sellAction = true
 	}
 
