@@ -67,7 +67,7 @@ func HasFunds(event events.Events) (events.Events, error) {
 	multiplier := strategySettings[settingsIndex].Multiplier
 
 	var assetSymbol string
-	var quantity float64
+	var neededQuantity float64
 
 	if event.Trade.PositionType == "sell" || event.Trade.PositionType == "takeProfit" {
 		sellAction = true
@@ -76,9 +76,9 @@ func HasFunds(event events.Events) (events.Events, error) {
 	if sellAction {
 		buyQty, sellQty := trades.GetQuantities(event.Trade.History)
 		assetSymbol = pairSymbols[0]
-		quantity = buyQty - sellQty
+		neededQuantity = buyQty - sellQty
 		if event.Trade.Inverse {
-			quantity = (buyQty - sellQty) * event.Trade.PositionPrice
+			neededQuantity = (sellQty - buyQty) * event.Trade.PositionPrice
 			assetSymbol = pairSymbols[1]
 		}
 	} else {
@@ -86,19 +86,15 @@ func HasFunds(event events.Events) (events.Events, error) {
 		quantityType := "BUY"
 		if event.Trade.Inverse {
 			quantityType = "SELL"
-		}
-		quantity = trades.GetLatestQuantityByHistory(event.Trade.History, quantityType) * multiplier
-		if event.Trade.Inverse {
 			assetSymbol = pairSymbols[0]
+		}
+		neededQuantity = trades.GetLatestQuantityByHistory(event.Trade.History, quantityType) * multiplier
+		if !event.Trade.Inverse {
+			neededQuantity *= event.Trade.PositionPrice
 		}
 	}
 
 	remainedQuantity := GetAssetBudget(assets, assetSymbol)
-	neededQuantity := quantity * event.Trade.PositionPrice
-
-	if event.Trade.Inverse {
-		neededQuantity = quantity
-	}
 
 	if !event.Trade.Inverse {
 		remainedQuantity = remainedQuantity - aggragates.FindUsedAmount(event.Params.InverseUsedAmount, assetSymbol)
