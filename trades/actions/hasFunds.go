@@ -41,12 +41,12 @@ func GetUsedQuantities(event events.Events) float64 {
 	return quantity
 }
 
-func HasFunds(event events.Events) (events.Events, error) {
+func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
 	client, _ := event.Exchange.Client()
 	assets, assetsErr := client.GetUserAssets() // Get user balance
 	sellAction := false
 	if assetsErr != nil {
-		return events.Events{}, assetsErr
+		return 0, 0, "", assetsErr
 	}
 
 	historyCount := len(event.Trade.History)
@@ -77,6 +77,7 @@ func HasFunds(event events.Events) (events.Events, error) {
 		buyQty, sellQty := trades.GetQuantities(event.Trade.History)
 		assetSymbol = pairSymbols[0]
 		neededQuantity = buyQty - sellQty
+		fmt.Println(buyQty, sellQty)
 		if event.Trade.Inverse {
 			neededQuantity = (sellQty - buyQty) * event.Trade.PositionPrice
 			assetSymbol = pairSymbols[1]
@@ -98,6 +99,16 @@ func HasFunds(event events.Events) (events.Events, error) {
 
 	if !event.Trade.Inverse {
 		remainedQuantity = remainedQuantity - aggragates.FindUsedAmount(event.Params.InverseUsedAmount, assetSymbol)
+	}
+
+	return remainedQuantity, neededQuantity, assetSymbol, nil
+}
+
+func HasFunds(event events.Events) (events.Events, error) {
+	remainedQuantity, neededQuantity, assetSymbol, err := GetFundsQuantities(event)
+
+	if err != nil {
+		return events.Events{}, err
 	}
 
 	if remainedQuantity < neededQuantity {
