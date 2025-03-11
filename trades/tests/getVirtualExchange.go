@@ -6,7 +6,7 @@ import (
 	"github.com/giovani-sirbu/mercury/virtualExchange"
 )
 
-func GetVirtualExchange() exchange.Exchange {
-	exchangeInit := virtualExchange.InitVirtualExchange([]aggregates.UserAssetRecord{{Asset: "USDT", Free: "1000.0"}})
+func GetVirtualExchange(asset string, amount string) exchange.Exchange {
+	exchangeInit := virtualExchange.InitVirtualExchange([]aggregates.UserAssetRecord{{Asset: asset, Free: amount}})
 	return exchangeInit
 }

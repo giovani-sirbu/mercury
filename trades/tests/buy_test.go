@@ -31,7 +31,7 @@ func SimpleCase() events.Events {
 		aggragates.StrategySettings{MinDepths: 6, Depths: 8, Percentage: 2, Multiplier: 2, Tolerance: 0.25, InitialBid: 0.5},
 	)
 	defaultActions := actions.GetDefaultActions()
-	exchangeInit := GetVirtualExchange()
+	exchangeInit := GetVirtualExchange("USDT", "1000")
 	newEvent := events.Events{Trade: trade, Exchange: exchangeInit, Events: defaultActions, EventsNames: []string{"buy"}}
 	return newEvent
 }
@@ -50,7 +50,7 @@ func NoHistory() events.Events {
 		aggragates.StrategySettings{MinDepths: 5, Depths: 8, Percentage: 2, Multiplier: 2, Tolerance: 0.25, TrailingTakeProfit: 0.5},
 	)
 	defaultActions := actions.GetDefaultActions()
-	exchangeInit := GetVirtualExchange()
+	exchangeInit := GetVirtualExchange("USDT", "1000")
 	newEvent := events.Events{Trade: trade, Exchange: exchangeInit, Events: defaultActions, EventsNames: []string{"buy"}}
 	return newEvent
 }
@@ -72,7 +72,7 @@ func Inverse() events.Events {
 		aggragates.StrategySettings{MinDepths: 5, Depths: 8, Percentage: 2, Multiplier: 2, Tolerance: 0.25, TrailingTakeProfit: 0.5},
 	)
 	defaultActions := actions.GetDefaultActions()
-	exchangeInit := GetVirtualExchange()
+	exchangeInit := GetVirtualExchange("USDT", "1000")
 	newEvent := events.Events{Trade: trade, Exchange: exchangeInit, Events: defaultActions, EventsNames: []string{"buy"}}
 	return newEvent
 }

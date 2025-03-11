@@ -69,7 +69,7 @@ func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
 	var assetSymbol string
 	var neededQuantity float64
 
-	if event.Trade.PositionType == "sell" || event.Trade.PositionType == "takeProfit" {
+	if event.Trade.PositionType == "sell" || event.Trade.PositionType == "takeProfit" || event.Trade.PositionType == "sellParent" {
 		sellAction = true
 	}
 

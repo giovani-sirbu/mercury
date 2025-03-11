@@ -19,10 +19,10 @@ func HasEnoughFunds(event events.Events) (events.Events, error) {
 	if negativeAmount {
 		remainedQuantity, neededQuantity, _, _ := GetFundsQuantities(event)
 		if remainedQuantity < neededQuantity {
-			event.Trade.History = append(event.Trade.History, aggragates.TradesHistory{Quantity: (remainedQuantity - neededQuantity) + (remainedQuantity-neededQuantity)*0.000000000001, Type: "ADJUST", Price: 0.000000000001})
+			event.Trade.History = append(event.Trade.History, aggragates.TradesHistory{Quantity: (remainedQuantity - neededQuantity) + (remainedQuantity-neededQuantity)*0.000000000001, Type: "BUY", Status: "ADJUST", Price: 0.000000000001})
 			newEvent, err := event.Events["updateTrade"](event)
 			return newEvent, err
 		}
 	}
-	return events.Events{}, nil
+	return event, nil
 }
