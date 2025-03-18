@@ -77,7 +77,6 @@ func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
 		buyQty, sellQty := trades.GetQuantities(event.Trade.History)
 		assetSymbol = pairSymbols[0]
 		neededQuantity = buyQty - sellQty
-		fmt.Println(buyQty, sellQty)
 		if event.Trade.Inverse {
 			neededQuantity = (sellQty - buyQty) * event.Trade.PositionPrice
 			assetSymbol = pairSymbols[1]
@@ -101,6 +100,8 @@ func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
 		remainedQuantity = remainedQuantity - aggragates.FindUsedAmount(event.Params.InverseUsedAmount, assetSymbol)
 	}
 
+	neededQuantity = ToFixed(neededQuantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
+
 	return remainedQuantity, neededQuantity, assetSymbol, nil
 }
 
@@ -113,7 +114,8 @@ func HasFunds(event events.Events) (events.Events, error) {
 
 	if remainedQuantity < neededQuantity {
 		// If nou enough funds update to impasse and return
-		msg := fmt.Sprintf("Failed to %s %f %s. Available quantity: %f", event.Params.OldPosition, neededQuantity, assetSymbol, remainedQuantity)
+		fmt.Println("Trade", event.Trade.ID, "history:", event.Trade.History)
+		msg := fmt.Sprintf("%s to %s failed for %f %s. Available quantity: %f", event.Params.OldPosition, event.Trade.PositionType, neededQuantity, assetSymbol, remainedQuantity)
 		if event.Trade.Strategy.Params.Impasse && event.Trade.ParentID == 0 {
 			usedAmount := GetUsedQuantities(event) * event.Trade.PositionPrice
 			_, hasFundsError := trades.CalculateInitialBid(usedAmount, event.Trade, 0)
