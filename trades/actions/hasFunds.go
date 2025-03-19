@@ -114,7 +114,9 @@ func HasFunds(event events.Events) (events.Events, error) {
 
 	if remainedQuantity < neededQuantity {
 		// If nou enough funds update to impasse and return
-		fmt.Println("Trade", event.Trade.ID, "history:", event.Trade.History)
+		if neededQuantity-remainedQuantity < 10 {
+			fmt.Println("Trade", event.Trade.ID, "history:", event.Trade.History)
+		}
 		msg := fmt.Sprintf("%s to %s failed for %f %s. Available quantity: %f", event.Params.OldPosition, event.Trade.PositionType, neededQuantity, assetSymbol, remainedQuantity)
 		if event.Trade.Strategy.Params.Impasse && event.Trade.ParentID == 0 {
 			usedAmount := GetUsedQuantities(event) * event.Trade.PositionPrice
