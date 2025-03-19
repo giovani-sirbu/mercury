@@ -25,12 +25,24 @@ type (
 
 // Next Function to run the next event if we have multiple events
 func (e Events) Next() error {
-	if len(e.EventsNames) == 1 {
+	if len(e.EventsNames) <= 1 {
+		// Safely clean up backoffTries
+		_, exists := backoffTries[e.Trade.ID]
+		if exists {
+			log.Debug("backoffTries[before]: ", len(backoffTries), e.Trade.ID)
+
+			rwLocker.Lock()
+			defer rwLocker.Unlock()
+			delete(backoffTries, e.Trade.ID)
+
+			log.Debug("backoffTries[after]: ", len(backoffTries), e.Trade.ID)
+		}
+
 		return nil
 	}
+
 	e.EventsNames = e.EventsNames[1:]
-	err := e.Run()
-	return err
+	return e.Run()
 }
 
 // Run Function to run events
@@ -38,34 +50,20 @@ func (e Events) Run() error {
 	if len(e.EventsNames) == 0 {
 		return nil
 	}
-	if e.Events[e.EventsNames[0]] == nil {
+
+	currentEvent := e.EventsNames[0]
+	eventFunc, exists := e.Events[currentEvent]
+	if !exists || eventFunc == nil {
 		return nil
 	}
 
-	newEvent, err := e.Events[e.EventsNames[0]](e)
+	newEvent, err := eventFunc(e)
 	if err != nil {
 		e.LockTradeWithBackOff()
-		pairSymbols := strings.Split(e.Trade.Symbol, "/")
-		assetSymbol := pairSymbols[1]
-		msg := fmt.Sprintf("%s | User ID: #%d | Trade Info: (ID: #%d, Position Type: %s, Position Price: %f, Impasse: %t, Profit: %f, Depths: %d, Inverse used: %f)",
-			err.Error(),
-			e.Trade.UserID,
-			e.Trade.ID,
-			e.Trade.PositionType,
-			e.Trade.PositionPrice,
-			e.Trade.Inverse,
-			e.Params.Profit,
-			len(e.Trade.History),
-			aggragates.FindUsedAmount(e.Params.InverseUsedAmount, assetSymbol),
-		)
-		log.Error(msg, "Run events", "")
-		return err
+		return e.logEventError(err)
 	}
-	err = newEvent.Next()
-	if err != nil {
-		e.LockTradeWithBackOff()
-	}
-	return err
+
+	return newEvent.Next()
 }
 
 // Add Function to register a new event or replace a default one
@@ -77,4 +75,26 @@ func (e Events) Add(event string, action func(Events) (Events, error)) Events {
 	newEvent[event] = action
 	e.Events = newEvent
 	return e
+}
+
+// logEventError formats and logs event execution errors
+func (e Events) logEventError(err error) error {
+	pairSymbols := strings.Split(e.Trade.Symbol, "/")
+	assetSymbol := pairSymbols[1]
+
+	msg := fmt.Sprintf(
+		"%s | User ID: #%d | Trade Info: (ID: #%d, Position Type: %s, Position Price: %f, Impasse: %t, Profit: %f, Depths: %d, Inverse used: %f)",
+		err.Error(),
+		e.Trade.UserID,
+		e.Trade.ID,
+		e.Trade.PositionType,
+		e.Trade.PositionPrice,
+		e.Trade.Inverse,
+		e.Params.Profit,
+		len(e.Trade.History),
+		aggragates.FindUsedAmount(e.Params.InverseUsedAmount, assetSymbol),
+	)
+
+	log.Error(msg, "Run events", "")
+	return err
 }
