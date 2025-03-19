@@ -26,6 +26,11 @@ type (
 // Next Function to run the next event if we have multiple events
 func (e Events) Next() error {
 	if len(e.EventsNames) <= 1 {
+		// Safely clean up backoffTries
+		rwLocker.Lock()
+		defer rwLocker.Unlock()
+		delete(backoffTries, e.Trade.ID)
+
 		return nil
 	}
 
@@ -50,9 +55,6 @@ func (e Events) Run() error {
 		e.LockTradeWithBackOff()
 		return e.logEventError(err)
 	}
-
-	// Cleanup goroutine to remove the entry after lockDuration expires
-	delete(backoffTries, e.Trade.ID)
 
 	return newEvent.Next()
 }
