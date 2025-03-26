@@ -1,6 +1,7 @@
 package exchange
 
 import (
+	"github.com/adshao/go-binance/v2/common"
 	"github.com/giovani-sirbu/mercury/exchange/adaptors"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 )
@@ -16,11 +17,12 @@ type Exchange struct {
 }
 
 // Client Add client method to receive exchange actions
-func (e Exchange) Client() (aggregates.Actions, error) {
+func (e Exchange) Client() (aggregates.Actions, *common.APIError) {
 	if e.IsCustom {
 		return e.CustomActions, nil
 	}
 	var initExchange = aggregates.Exchange{Name: e.Name, ApiKey: e.ApiKey, ApiSecret: e.ApiSecret, TestNet: e.TestNet}
 	exchangeActions, err := adaptors.GetExchangeActions(initExchange)
-	return exchangeActions, err
+	apiErr := adaptors.ApiError(err)
+	return exchangeActions, apiErr
 }
