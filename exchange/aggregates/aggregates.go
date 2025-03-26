@@ -1,5 +1,7 @@
 package aggregates
 
+import "github.com/adshao/go-binance/v2/common"
+
 type (
 	// Exchange structure to initialize an exchange
 	Exchange struct {
@@ -292,23 +294,23 @@ type (
 
 	// Actions All exchange actions types
 	Actions struct {
-		Buy             func(symbol string, quantity float64, price string) (CreateOrderResponse, error)
-		Sell            func(symbol string, quantity float64, price string) (CreateOrderResponse, error)
-		MarketBuy       func(symbol string, quantity float64) (CreateOrderResponse, error)
-		MarketSell      func(symbol string, quantity float64) (CreateOrderResponse, error)
-		GetOrder        func(orderId int64, symbol string) (Order, error)
-		CancelOrder     func(orderId int64, symbol string) (CancelOrderResponse, error)
-		GetTrades       func(orderId int64, symbol string) ([]Trade, error)
-		GetExchangeInfo func(symbol string) (ExchangeInfo, error)
-		GetFees         func(symbol string) (TradeFeeDetails, error)
-		GetPrice        func(symbol string) (float64, error)
-		GetProfile      func() (Account, error)
-		GetUserAssets   func() ([]UserAssetRecord, error)
+		Buy             func(symbol string, quantity float64, price string) (CreateOrderResponse, *common.APIError)
+		Sell            func(symbol string, quantity float64, price string) (CreateOrderResponse, *common.APIError)
+		MarketBuy       func(symbol string, quantity float64) (CreateOrderResponse, *common.APIError)
+		MarketSell      func(symbol string, quantity float64) (CreateOrderResponse, *common.APIError)
+		GetOrder        func(orderId int64, symbol string) (Order, *common.APIError)
+		CancelOrder     func(orderId int64, symbol string) (CancelOrderResponse, *common.APIError)
+		GetTrades       func(orderId int64, symbol string) ([]Trade, *common.APIError)
+		GetExchangeInfo func(symbol string) (ExchangeInfo, *common.APIError)
+		GetFees         func(symbol string) (TradeFeeDetails, *common.APIError)
+		GetPrice        func(symbol string) (float64, *common.APIError)
+		GetProfile      func() (Account, *common.APIError)
+		GetUserAssets   func() ([]UserAssetRecord, *common.APIError)
 		PriceWSHandler  func(pairs []string, handler func(PriceWSResponseData), done <-chan string)
 		UserWSHandler   func(listenKey string, handler func(order WsUserDataEvent, expireEvent string), done <-chan string)
-		PingUserStream  func(listenKey string) error
-		StartUserStream func() (string, error)
-		AggTrades       func(payload AggTradesPayload) ([]AggTradesResponse, error)
-		KlineData       func(KlinePayload) ([]KlineResponse, error)
+		PingUserStream  func(listenKey string) *common.APIError
+		StartUserStream func() (string, *common.APIError)
+		AggTrades       func(payload AggTradesPayload) ([]AggTradesResponse, *common.APIError)
+		KlineData       func(KlinePayload) ([]KlineResponse, *common.APIError)
 	}
 )
