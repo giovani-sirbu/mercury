@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/adshao/go-binance/v2"
 	"github.com/adshao/go-binance/v2/common"
-	"github.com/giovani-sirbu/mercury/exchange/adaptors"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/jinzhu/copier"
 	"strconv"
@@ -15,6 +14,35 @@ import (
 // Binance structure to init the binance actions
 type Binance struct {
 	aggregates.Exchange
+}
+
+// ApiError converts a given error into an APIError
+func ApiError(err error) *common.APIError {
+	if err == nil {
+		return nil // Return nil if there's no error
+	}
+
+	// Check if the error is already an APIError
+	if apiErr, ok := err.(*common.APIError); ok {
+		return &common.APIError{
+			Code:    apiErr.Code,
+			Message: apiErr.Message,
+		}
+	}
+
+	// Check if the error is a Binance API error
+	if binanceErr, ok := err.(*common.APIError); ok {
+		return &common.APIError{
+			Code:    int64(binanceErr.Code),
+			Message: binanceErr.Message,
+		}
+	}
+
+	// Handle other unknown errors as a generic APIError
+	return &common.APIError{
+		Code:    0, // No specific error code
+		Message: err.Error(),
+	}
 }
 
 // GetBinanceActions map all binance actions
@@ -99,7 +127,7 @@ func (e Binance) GetOrder(orderId int64, symbol string) (aggregates.Order, *comm
 	order, err := client.NewGetOrderService().Symbol(formattedSymbol).
 		OrderID(orderId).Do(context.Background())
 	if err != nil {
-		return aggregates.Order{}, adaptors.ApiError(err)
+		return aggregates.Order{}, ApiError(err)
 	}
 	var orderResult aggregates.Order
 	copier.Copy(&orderResult, &order)
@@ -116,7 +144,7 @@ func (e Binance) CancelOrder(orderId int64, symbol string) (aggregates.CancelOrd
 	order, err := client.NewCancelOrderService().Symbol(formattedSymbol).
 		OrderID(orderId).Do(context.Background())
 	if err != nil {
-		return aggregates.CancelOrderResponse{}, adaptors.ApiError(err)
+		return aggregates.CancelOrderResponse{}, ApiError(err)
 	}
 
 	var orderResult aggregates.CancelOrderResponse
@@ -134,7 +162,7 @@ func (e Binance) GetTrades(orderId int64, symbol string) ([]aggregates.Trade, *c
 	order, err := client.NewListTradesService().Symbol(formattedSymbol).
 		OrderId(orderId).Do(context.Background())
 	if err != nil {
-		return nil, adaptors.ApiError(err)
+		return nil, ApiError(err)
 	}
 	var orderResult []aggregates.Trade
 	copier.Copy(&orderResult, &order)
@@ -150,7 +178,7 @@ func (e Binance) GetExchangeInfo(symbol string) (aggregates.ExchangeInfo, *commo
 	formattedSymbol := strings.Replace(symbol, "/", "", 1) // Format symbol as exchange need it
 	details, detailsErr := client.NewExchangeInfoService().Symbol(formattedSymbol).Do(context.Background())
 	if detailsErr != nil {
-		return aggregates.ExchangeInfo{}, adaptors.ApiError(detailsErr)
+		return aggregates.ExchangeInfo{}, ApiError(detailsErr)
 	}
 	var exchangeInfoResult aggregates.ExchangeInfo
 	copier.Copy(&exchangeInfoResult, &details)
@@ -167,7 +195,7 @@ func (e Binance) GetFees(symbol string) (aggregates.TradeFeeDetails, *common.API
 	details, detailsErr := client.NewTradeFeeService().Symbol(formattedSymbol).Do(context.Background())
 
 	if detailsErr != nil {
-		return aggregates.TradeFeeDetails{}, adaptors.ApiError(detailsErr)
+		return aggregates.TradeFeeDetails{}, ApiError(detailsErr)
 	}
 
 	var exchangeInfoResult aggregates.TradeFeeDetails
@@ -184,7 +212,7 @@ func (e Binance) GetProfile() (aggregates.Account, *common.APIError) {
 	clientInfo, err := client.NewGetAccountService().Do(context.Background())
 
 	if err != nil {
-		return aggregates.Account{}, adaptors.ApiError(err)
+		return aggregates.Account{}, ApiError(err)
 	}
 
 	var clientInfoResult aggregates.Account
@@ -222,7 +250,7 @@ func (e Binance) GetPrice(symbol string) (float64, *common.APIError) {
 	}
 	clientInfo, err := client.NewAveragePriceService().Symbol(formattedSymbol).Do(context.Background())
 	if err != nil {
-		return price, adaptors.ApiError(err)
+		return price, ApiError(err)
 	}
 	price, _ = strconv.ParseFloat(clientInfo.Price, 64)
 	return price, nil
@@ -253,7 +281,7 @@ func (e Binance) binanceCreateOrder(sideType binance.SideType, orderType binance
 			Price(price).Do(context.Background())
 	}
 
-	return order, adaptors.ApiError(err)
+	return order, ApiError(err)
 }
 
 // StartUserStream start a new user stream
@@ -264,7 +292,7 @@ func (e Binance) StartUserStream() (string, *common.APIError) {
 	}
 	clientInfo, err := client.NewStartUserStreamService().Do(context.Background())
 	if err != nil {
-		return clientInfo, adaptors.ApiError(err)
+		return clientInfo, ApiError(err)
 	}
 	return clientInfo, nil
 }
@@ -277,7 +305,7 @@ func (e Binance) PingUserStream(listenKey string) *common.APIError {
 	}
 	err := client.NewKeepaliveUserStreamService().ListenKey(listenKey).Do(context.Background())
 	if err != nil {
-		return adaptors.ApiError(err)
+		return ApiError(err)
 	}
 	return nil
 }
@@ -304,7 +332,7 @@ func (e Binance) Klines(payload aggregates.KlinePayload) ([]aggregates.KlineResp
 
 	clientData, err := clientQuery.Do(context.Background())
 	if err != nil {
-		return nil, adaptors.ApiError(err)
+		return nil, ApiError(err)
 	}
 
 	var data []aggregates.KlineResponse
@@ -339,7 +367,7 @@ func (e Binance) AggTrades(payload aggregates.AggTradesPayload) ([]aggregates.Ag
 
 	clientData, err := clientQuery.Do(context.Background())
 	if err != nil {
-		return nil, adaptors.ApiError(err)
+		return nil, ApiError(err)
 	}
 
 	var data []aggregates.AggTradesResponse
