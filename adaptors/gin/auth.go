@@ -19,7 +19,7 @@ func IsAuth(c *gin.Context) {
 
 	if len(authHeader) < 1 {
 		c.Abort()
-		Response(c, http.StatusUnauthorized, Data{Message: "UNAUTHORIZED"})
+		Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
 		return
 	}
 
@@ -28,7 +28,7 @@ func IsAuth(c *gin.Context) {
 
 	if err != nil {
 		c.Abort()
-		Response(c, http.StatusUnauthorized, Data{Message: "UNAUTHORIZED"})
+		Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
 		return
 	}
 
@@ -37,9 +37,38 @@ func IsAuth(c *gin.Context) {
 		userInfo, _ := auth.ParseToken(token)
 		if userInfo.Id != userId {
 			c.Abort()
-			Response(c, http.StatusUnauthorized, Data{Message: "UNAUTHORIZED"})
+			Response(c, http.StatusForbidden, "ACCESS_FORBIDDEN")
 			return
 		}
+	}
+
+	// Continue down the chain, user is logged in
+	c.Next()
+}
+
+func IsAdmin(c *gin.Context) {
+	authHeader := c.Request.Header["Authorization"]
+
+	if len(authHeader) < 1 {
+		c.Abort()
+		Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
+		return
+	}
+
+	token := strings.Split(c.Request.Header["Authorization"][0], " ")[1]
+	err := auth.VerifyToken(token)
+
+	if err != nil {
+		c.Abort()
+		Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
+		return
+	}
+
+	userInfo, _ := auth.ParseToken(token)
+	if userInfo.Role != "admin" {
+		c.Abort()
+		Response(c, http.StatusForbidden, "ACCESS_FORBIDDEN")
+		return
 	}
 
 	// Continue down the chain, user is logged in
