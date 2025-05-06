@@ -35,7 +35,7 @@ func IsAuth(c *gin.Context) {
 	// if userId exist in url, compare it with userId stored in token and return error if different
 	if userId != 0 {
 		userInfo, _ := auth.ParseToken(token)
-		if userInfo.Id != userId {
+		if userInfo.Id != userId && userInfo.Role != "admin" {
 			c.Abort()
 			Response(c, http.StatusForbidden, "ACCESS_FORBIDDEN")
 			return
