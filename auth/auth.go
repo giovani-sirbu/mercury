@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -99,4 +100,17 @@ func ParseToken(jwtToken string) (UserClaims, error) {
 	}
 
 	return userClaim, nil
+}
+
+func ExtractJwtToken(header string) (string, error) {
+	if header == "" {
+		return "", fmt.Errorf("bad header value given")
+	}
+
+	jwtToken := strings.Split(header, " ")
+	if len(jwtToken) != 2 {
+		return "", fmt.Errorf("incorrectly formatted authorization header")
+	}
+
+	return jwtToken[1], nil
 }
