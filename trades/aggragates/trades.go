@@ -45,6 +45,15 @@ type (
 		MarketBearish   bool    `json:"marketBearish"`
 	}
 
+	AIIndicators struct {
+		AIMarketBearish  bool
+		AIMarketBullish  bool
+		AIAction         string
+		AISignalStrength float64
+		StayOutReasons   []string
+		UseAI            bool
+	}
+
 	Params struct {
 		OldPositionPrice   float64
 		Percentage         float64
@@ -54,5 +63,6 @@ type (
 		Profit             float64
 		InverseUsedAmount  []UsedAmountResult
 		CoolDownIndicators CoolDownIndicators
+		AIIndicators       AIIndicators
 	}
 )

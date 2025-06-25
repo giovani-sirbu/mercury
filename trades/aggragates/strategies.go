@@ -10,5 +10,6 @@ type (
 		Pairs    uint8 `form:"pairs" json:"pairs" xml:"pairs"`
 		Impasse  bool  `form:"impasse" bson:"impasse" json:"impasse"`
 		Cooldown bool  `form:"cooldown" bson:"cooldown" json:"cooldown"`
+		UseAI    bool  `form:"useAI" bson:"useAI" json:"useAI"`
 	}
 )
