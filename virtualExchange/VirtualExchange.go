@@ -2,6 +2,7 @@ package virtualExchange
 
 import (
 	"fmt"
+	"github.com/adshao/go-binance/v2/common"
 	"github.com/giovani-sirbu/mercury/exchange"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"strconv"
@@ -98,7 +99,7 @@ func GetPartiallyFilledOrderBySymbol(symbol string) Order {
 	return Order{}
 }
 
-func setOrderData(order Order) (aggregates.CreateOrderResponse, error) {
+func setOrderData(order Order) (aggregates.CreateOrderResponse, *common.APIError) {
 	orderId := time.Now().UnixMilli()
 	order.OrderID = orderId
 	if order.Status == "" {
@@ -140,13 +141,13 @@ func setOrderData(order Order) (aggregates.CreateOrderResponse, error) {
 }
 
 func setCustomActions(customActions aggregates.Actions, assets []aggregates.UserAssetRecord) aggregates.Actions {
-	customActions.GetUserAssets = func() ([]aggregates.UserAssetRecord, error) {
+	customActions.GetUserAssets = func() ([]aggregates.UserAssetRecord, *common.APIError) {
 		if len(Wallet) == 0 {
 			Wallet = assets
 		}
 		return Wallet, nil
 	}
-	customActions.Buy = func(symbol string, quantity float64, price string) (aggregates.CreateOrderResponse, error) {
+	customActions.Buy = func(symbol string, quantity float64, price string) (aggregates.CreateOrderResponse, *common.APIError) {
 		payload := Order{
 			Symbol:   symbol,
 			Quantity: quantity,
@@ -156,11 +157,11 @@ func setCustomActions(customActions aggregates.Actions, assets []aggregates.User
 		UpdateWalletBalances(symbol, price, quantity, "BUY")
 		data, err := setOrderData(payload)
 		if err != nil {
-			return aggregates.CreateOrderResponse{}, err
+			return aggregates.CreateOrderResponse{}, &common.APIError{Message: err.Error()}
 		}
 		return data, nil
 	}
-	customActions.MarketBuy = func(symbol string, quantity float64) (aggregates.CreateOrderResponse, error) {
+	customActions.MarketBuy = func(symbol string, quantity float64) (aggregates.CreateOrderResponse, *common.APIError) {
 		payload := Order{
 			Symbol:   symbol,
 			Quantity: quantity,
@@ -174,7 +175,7 @@ func setCustomActions(customActions aggregates.Actions, assets []aggregates.User
 		}
 		return data, nil
 	}
-	customActions.Sell = func(symbol string, quantity float64, price string) (aggregates.CreateOrderResponse, error) {
+	customActions.Sell = func(symbol string, quantity float64, price string) (aggregates.CreateOrderResponse, *common.APIError) {
 		payload := Order{
 			Symbol:   symbol,
 			Quantity: quantity,
@@ -188,7 +189,7 @@ func setCustomActions(customActions aggregates.Actions, assets []aggregates.User
 		}
 		return data, nil
 	}
-	customActions.MarketSell = func(symbol string, quantity float64) (aggregates.CreateOrderResponse, error) {
+	customActions.MarketSell = func(symbol string, quantity float64) (aggregates.CreateOrderResponse, *common.APIError) {
 		payload := Order{
 			Symbol:   symbol,
 			Quantity: quantity,
@@ -203,7 +204,7 @@ func setCustomActions(customActions aggregates.Actions, assets []aggregates.User
 		return data, nil
 	}
 
-	customActions.CancelOrder = func(orderId int64, symbol string) (aggregates.CancelOrderResponse, error) {
+	customActions.CancelOrder = func(orderId int64, symbol string) (aggregates.CancelOrderResponse, *common.APIError) {
 		delete(Orders, int(orderId))
 		return aggregates.CancelOrderResponse{
 			Symbol:  symbol,
@@ -211,7 +212,7 @@ func setCustomActions(customActions aggregates.Actions, assets []aggregates.User
 		}, nil
 	}
 
-	customActions.GetPrice = func(symbol string) (float64, error) {
+	customActions.GetPrice = func(symbol string) (float64, *common.APIError) {
 		var price = Prices[symbol]
 		return price, nil
 	}

@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"github.com/adshao/go-binance/v2/common"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/trades"
@@ -91,7 +92,7 @@ func Buy(event events.Events) (events.Events, error) {
 	event.Params.Quantity = quantity
 
 	var response aggregates.CreateOrderResponse
-	var err error
+	var err *common.APIError
 
 	if historyCount > 0 {
 		if event.Trade.Inverse {
