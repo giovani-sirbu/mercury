@@ -2,6 +2,7 @@ package actions
 
 import (
 	"fmt"
+	"github.com/adshao/go-binance/v2/common"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/trades"
@@ -23,15 +24,15 @@ func Sell(event events.Events) (events.Events, error) {
 		return SaveError(event, clientError)
 	}
 	buyQuantity, sellQuantity := trades.GetQuantities(event.Trade.History)
-	feeInBase, _ := CalculateFees(event.Trade.History, event.Trade.Symbol)
+	feeInBase, feeInQuote := CalculateFees(event.Trade.History, event.Trade.Symbol)
 	quantity := buyQuantity - sellQuantity - feeInBase
 
 	if event.Trade.Inverse {
 		sellQuantity = trades.GetQuantityInQuote(event.Trade.History, "BUY")
 		buyQuantity = trades.GetQuantityInQuote(event.Trade.History, "SELL")
-		quantity = sellQuantity - buyQuantity
+		quantity = sellQuantity - buyQuantity - feeInQuote
 		quantity = quantity / event.Trade.PositionPrice
-		quantity = quantity - feeInBase
+		quantity = quantity - feeInBase // subtract fee in base for the partial cases
 	}
 
 	quantityBeforeLotSize := quantity
@@ -48,7 +49,7 @@ func Sell(event events.Events) (events.Events, error) {
 	}
 
 	var response aggregates.CreateOrderResponse
-	var err error
+	var err *common.APIError
 
 	// TODO - find a solution to sell dust assets
 	if dust > 0 && false {
@@ -72,6 +73,8 @@ func Sell(event events.Events) (events.Events, error) {
 
 	priceInString := strconv.FormatFloat(event.Trade.PositionPrice, 'f', -1, 64)
 	event.Params.Quantity = quantity
+
+	fmt.Println(quantity)
 
 	if event.Trade.Inverse {
 		response, err = client.Buy(event.Trade.Symbol, quantity, priceInString)
