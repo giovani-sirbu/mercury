@@ -1,9 +1,15 @@
 package aggragates
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"errors"
+	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"gorm.io/gorm"
 	"time"
 )
+
+type Assets struct{ aggregates.UserAssetRecord }
 
 type TradesExchanges struct {
 	ID           uint           `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
@@ -16,7 +22,22 @@ type TradesExchanges struct {
 	TradesStatus Status         `gorm:"type:varchar(50);default:new" bson:"tradesStatus" json:"tradesStatus" form:"tradesStatus" xml:"tradesStatus"`
 	Status       Status         `gorm:"type:varchar(50);default:new" bson:"status" json:"status" form:"status" xml:"status"`
 	Balance      float64        `form:"balance" json:"balance" xml:"balance"`
+	Assets       []Assets       `gorm:"type:jsonb;serializer:json;" bson:"assets" form:"assets" json:"assets" xml:"assets"`
 	CreatedAt    time.Time      `form:"createdAt" json:"createdAt" xml:"createdAt"`
 	UpdatedAt    time.Time      `form:"updatedAt" json:"-" xml:"updatedAt"`
 	DeletedAt    gorm.DeletedAt `form:"deletedAt" json:"-" xml:"deletedAt"`
+}
+
+// Value Marshal
+func (a Assets) Value() (driver.Value, error) {
+	return json.Marshal(a)
+}
+
+// Scan Unmarshal
+func (a *Assets) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New("type assertion to []byte failed")
+	}
+	return json.Unmarshal(b, &a)
 }
