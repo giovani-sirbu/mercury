@@ -23,7 +23,7 @@ func ShouldHold(event events.Events) (events.Events, error) {
 	// ======================================================
 	// ✅ 0) Special logic: If trade is "new", restrict HOLD
 	// ======================================================
-	if event.Trade.PositionType == "new" {
+	if event.Params.OldPosition == "new" {
 		if ai.UseAI {
 			isBearishSignal := ai.AIMarketBearish || ai.AIAction == ActionShort
 			isBullishSignal := ai.AIMarketBullish || ai.AIAction == ActionLong
