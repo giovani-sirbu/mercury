@@ -8,8 +8,6 @@ import (
 )
 
 const (
-	MinSignalStrength = 25.0
-
 	ActionHold  = "HOLD"
 	ActionLong  = "LONG"
 	ActionShort = "SHORT"
@@ -68,12 +66,6 @@ func ShouldHold(event events.Events) (events.Events, error) {
 		if ai.AIAction == ActionHold {
 			shouldHold = true
 			holdReason = "AI: explicit HOLD recommendation"
-		}
-		if ai.AISignalStrength < MinSignalStrength {
-			shouldHold = true
-			holdReason = fmt.Sprintf(
-				"AI: signal strength %.2f below minimum %.2f",
-				ai.AISignalStrength, MinSignalStrength)
 		}
 		if event.Trade.Inverse {
 			if event.Trade.PositionType == "buy" && ai.AIMarketBullish {
