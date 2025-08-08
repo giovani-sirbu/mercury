@@ -13,6 +13,6 @@ type TradesHistory struct {
 	Fees      []TradesFees `gorm:"foreignKey:HistoryID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE"  bson:"fees" json:"fees"`
 	OrderId   int64        `gorm:"uniqueIndex:idx_trade_id_order_id,priority:2" bson:"orderId" json:"orderId"`
 	Status    string       `bson:"status" json:"status"`
-	CreatedAt time.Time    `json:"createdAt"`
+	CreatedAt time.Time    `gorm:"index" json:"createdAt"`
 	UpdatedAt time.Time    `gorm:"index" json:"updatedAt"`
 }

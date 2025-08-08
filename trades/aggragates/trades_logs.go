@@ -15,6 +15,6 @@ type TradesLogs struct {
 	Quantity   float64   `bson:"quantity" json:"quantity"`
 	Price      float64   `bson:"price" json:"price"`
 	Percentage float64   `bson:"percentage" json:"percentage"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	CreatedAt  time.Time `gorm:"index" json:"createdAt"`
+	UpdatedAt  time.Time `gorm:"index" json:"updatedAt"`
 }
