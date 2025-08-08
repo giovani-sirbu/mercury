@@ -14,5 +14,5 @@ type TradesHistory struct {
 	OrderId   int64        `gorm:"uniqueIndex:idx_trade_id_order_id,priority:2" bson:"orderId" json:"orderId"`
 	Status    string       `bson:"status" json:"status"`
 	CreatedAt time.Time    `json:"createdAt"`
-	UpdatedAt time.Time    `json:"updatedAt"`
+	UpdatedAt time.Time    `gorm:"index" json:"updatedAt"`
 }
