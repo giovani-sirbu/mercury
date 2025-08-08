@@ -6,6 +6,7 @@ import (
 
 const LOG_INFO = "INFO"
 const LOG_WARNING = "WARNING"
+const LOG_ERROR = "ERROR"
 
 type TradesLogs struct {
 	ID         uint      `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
