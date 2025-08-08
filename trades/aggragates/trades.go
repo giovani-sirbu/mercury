@@ -20,7 +20,7 @@ type (
 		StrategyID      int             `gorm:"uniqueIndex:idx_symbol_strategy_id,priority:2;" form:"strategyId" json:"strategyId" xml:"strategyId"`
 		Strategy        Strategies      `gorm:"foreignKey:StrategyID;references:ID"  form:"strategyInfo" json:"strategyInfo" xml:"strategyInfo"`
 		StrategyPair    StrategiesPairs `gorm:"foreignKey:Symbol,StrategyID,ExchangeName;references:Symbol,StrategyID,Exchange" json:"strategyPair"`
-		USDProfit       float64         `bson:"usdProfit" json:"usdProfit"`
+		USDProfit       float64         `gorm:"index" bson:"usdProfit" json:"usdProfit"`
 		Profit          float64         `bson:"profit" json:"profit"`
 		ProfitAsset     string          `bson:"profitAsset" json:"profitAsset"`
 		Dust            float64         `bson:"dust" json:"dust"`
