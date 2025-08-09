@@ -112,7 +112,8 @@ func HasFunds(event events.Events) (events.Events, error) {
 	remainedQuantity, neededQuantity, assetSymbol, err := GetFundsQuantities(event)
 
 	if err != nil {
-		return events.Events{}, err
+		return SaveError(event, err)
+		//return events.Events{}, err // TODO - gs
 	}
 
 	if remainedQuantity < neededQuantity {
