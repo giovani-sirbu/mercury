@@ -59,8 +59,6 @@ func (e Events) Run() error {
 
 	newEvent, err := eventFunc(e)
 
-	fmt.Println(newEvent, currentEvent, "asd")
-
 	if err != nil {
 		e.LockTradeWithBackOff()
 		return e.logEventError(err)
