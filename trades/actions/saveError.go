@@ -75,7 +75,8 @@ func isAPIError(input string) bool {
 }
 
 func hasInsufficientBalance(input string) bool {
-	if strings.Contains(RemoveNumbersFromString(input), "Available quantity:") {
+	if strings.Contains(RemoveNumbersFromString(input), "Available quantity:") ||
+		strings.Contains(RemoveNumbersFromString(input), "Insufficient funds") {
 
 		// Regular expression to match floating-point numbers
 		re := regexp.MustCompile(`\d+\.\d+`)
