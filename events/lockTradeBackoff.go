@@ -2,7 +2,6 @@ package events
 
 import (
 	"fmt"
-	"github.com/giovani-sirbu/mercury/log"
 	"sync"
 	"time"
 )
@@ -20,7 +19,7 @@ const (
 // LockTrade locks the trade with a specified duration.
 func (e Events) LockTrade(lockDuration time.Duration) error {
 	lockKey := fmt.Sprintf("trade:%d:is_locked", e.Trade.ID) // Create lock trade key
-	log.Debug(lockKey, lockDuration)
+	//log.Debug(lockKey, lockDuration)
 	return e.Storage.Set(lockKey, true, lockDuration)
 }
 
