@@ -116,8 +116,7 @@ func HasFunds(event events.Events) (events.Events, error) {
 	}
 
 	if remainedQuantity < neededQuantity {
-		// If nou enough funds update to impasse and return
-		msg := fmt.Sprintf("%s to %s failed for %f %s. Available quantity: %f", event.Params.OldPosition, event.Trade.PositionType, neededQuantity, assetSymbol, remainedQuantity)
+		// set trade to impasse if this feature is activated for this strategy
 		if event.Trade.Strategy.Params.Impasse && event.Trade.ParentID == 0 {
 			usedAmount := GetUsedQuantities(event) * event.Trade.PositionPrice
 			_, hasFundsError := trades.CalculateInitialBid(usedAmount, event.Trade, 0)
@@ -125,6 +124,8 @@ func HasFunds(event events.Events) (events.Events, error) {
 				event.Trade.PositionType = "impasse"
 			}
 		}
+
+		msg := fmt.Sprintf("Insufficient funds (%f %s) for the requested action (%s). You need at least %f %s to resume this trade.", remainedQuantity, assetSymbol, event.Trade.PositionType, neededQuantity, assetSymbol)
 		return SaveError(event, fmt.Errorf(msg))
 	}
 
