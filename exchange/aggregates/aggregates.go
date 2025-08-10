@@ -1,6 +1,8 @@
 package aggregates
 
-import "github.com/adshao/go-binance/v2/common"
+import (
+	"github.com/adshao/go-binance/v2/common"
+)
 
 type (
 	// Exchange structure to initialize an exchange
@@ -292,25 +294,40 @@ type (
 		IsBestPriceMatch bool   `json:"M"`
 	}
 
+	APIKeyPermission struct {
+		IPRestrict                     bool   `json:"ipRestrict"`
+		CreateTime                     uint64 `json:"createTime"`
+		EnableWithdrawals              bool   `json:"enableWithdrawals"`
+		EnableInternalTransfer         bool   `json:"enableInternalTransfer"`
+		PermitsUniversalTransfer       bool   `json:"permitsUniversalTransfer"`
+		EnableVanillaOptions           bool   `json:"enableVanillaOptions"`
+		EnableReading                  bool   `json:"enableReading"`
+		EnableFutures                  bool   `json:"enableFutures"`
+		EnableMargin                   bool   `json:"enableMargin"`
+		EnableSpotAndMarginTrading     bool   `json:"enableSpotAndMarginTrading"`
+		TradingAuthorityExpirationTime uint64 `json:"tradingAuthorityExpirationTime"`
+	}
+
 	// Actions All exchange actions types
 	Actions struct {
-		Buy             func(symbol string, quantity float64, price string) (CreateOrderResponse, *common.APIError)
-		Sell            func(symbol string, quantity float64, price string) (CreateOrderResponse, *common.APIError)
-		MarketBuy       func(symbol string, quantity float64) (CreateOrderResponse, *common.APIError)
-		MarketSell      func(symbol string, quantity float64) (CreateOrderResponse, *common.APIError)
-		GetOrder        func(orderId int64, symbol string) (Order, *common.APIError)
-		CancelOrder     func(orderId int64, symbol string) (CancelOrderResponse, *common.APIError)
-		GetTrades       func(orderId int64, symbol string) ([]Trade, *common.APIError)
-		GetExchangeInfo func(symbol string) (ExchangeInfo, *common.APIError)
-		GetFees         func(symbol string) (TradeFeeDetails, *common.APIError)
-		GetPrice        func(symbol string) (float64, *common.APIError)
-		GetProfile      func() (Account, *common.APIError)
-		GetUserAssets   func() ([]UserAssetRecord, *common.APIError)
-		PriceWSHandler  func(pairs []string, handler func(PriceWSResponseData), done <-chan string)
-		UserWSHandler   func(listenKey string, handler func(order WsUserDataEvent, expireEvent string), done <-chan string)
-		PingUserStream  func(listenKey string) *common.APIError
-		StartUserStream func() (string, *common.APIError)
-		AggTrades       func(payload AggTradesPayload) ([]AggTradesResponse, *common.APIError)
-		KlineData       func(KlinePayload) ([]KlineResponse, *common.APIError)
+		Buy              func(symbol string, quantity float64, price string) (CreateOrderResponse, *common.APIError)
+		Sell             func(symbol string, quantity float64, price string) (CreateOrderResponse, *common.APIError)
+		MarketBuy        func(symbol string, quantity float64) (CreateOrderResponse, *common.APIError)
+		MarketSell       func(symbol string, quantity float64) (CreateOrderResponse, *common.APIError)
+		GetOrder         func(orderId int64, symbol string) (Order, *common.APIError)
+		CancelOrder      func(orderId int64, symbol string) (CancelOrderResponse, *common.APIError)
+		GetTrades        func(orderId int64, symbol string) ([]Trade, *common.APIError)
+		GetExchangeInfo  func(symbol string) (ExchangeInfo, *common.APIError)
+		GetFees          func(symbol string) (TradeFeeDetails, *common.APIError)
+		GetPrice         func(symbol string) (float64, *common.APIError)
+		GetProfile       func() (Account, *common.APIError)
+		GetUserAssets    func() ([]UserAssetRecord, *common.APIError)
+		PriceWSHandler   func(pairs []string, handler func(PriceWSResponseData), done <-chan string)
+		UserWSHandler    func(listenKey string, handler func(order WsUserDataEvent, expireEvent string), done <-chan string)
+		PingUserStream   func(listenKey string) *common.APIError
+		StartUserStream  func() (string, *common.APIError)
+		AggTrades        func(payload AggTradesPayload) ([]AggTradesResponse, *common.APIError)
+		KlineData        func(KlinePayload) ([]KlineResponse, *common.APIError)
+		APIKeyPermission func() (APIKeyPermission, *common.APIError)
 	}
 )

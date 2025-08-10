@@ -49,24 +49,25 @@ func ApiError(err error) *common.APIError {
 func GetBinanceActions(e aggregates.Exchange) aggregates.Actions {
 	var binanceStruct = Binance{e}
 	var actions = aggregates.Actions{
-		Buy:             binanceStruct.Buy,
-		Sell:            binanceStruct.Sell,
-		MarketBuy:       binanceStruct.MarketBuy,
-		MarketSell:      binanceStruct.MarketSell,
-		GetOrder:        binanceStruct.GetOrder,
-		CancelOrder:     binanceStruct.CancelOrder,
-		GetTrades:       binanceStruct.GetTrades,
-		GetExchangeInfo: binanceStruct.GetExchangeInfo,
-		GetFees:         binanceStruct.GetFees,
-		GetProfile:      binanceStruct.GetProfile,
-		GetPrice:        binanceStruct.GetPrice,
-		GetUserAssets:   binanceStruct.GetUserAssets,
-		PriceWSHandler:  binanceStruct.PriceWSHandler,
-		UserWSHandler:   binanceStruct.UserWs,
-		StartUserStream: binanceStruct.StartUserStream,
-		PingUserStream:  binanceStruct.PingUserStream,
-		AggTrades:       binanceStruct.AggTrades,
-		KlineData:       binanceStruct.Klines,
+		Buy:              binanceStruct.Buy,
+		Sell:             binanceStruct.Sell,
+		MarketBuy:        binanceStruct.MarketBuy,
+		MarketSell:       binanceStruct.MarketSell,
+		GetOrder:         binanceStruct.GetOrder,
+		CancelOrder:      binanceStruct.CancelOrder,
+		GetTrades:        binanceStruct.GetTrades,
+		GetExchangeInfo:  binanceStruct.GetExchangeInfo,
+		GetFees:          binanceStruct.GetFees,
+		GetProfile:       binanceStruct.GetProfile,
+		GetPrice:         binanceStruct.GetPrice,
+		GetUserAssets:    binanceStruct.GetUserAssets,
+		PriceWSHandler:   binanceStruct.PriceWSHandler,
+		UserWSHandler:    binanceStruct.UserWs,
+		StartUserStream:  binanceStruct.StartUserStream,
+		PingUserStream:   binanceStruct.PingUserStream,
+		AggTrades:        binanceStruct.AggTrades,
+		KlineData:        binanceStruct.Klines,
+		APIKeyPermission: binanceStruct.APIKeyPermission,
 	}
 	return actions
 }
@@ -373,4 +374,21 @@ func (e Binance) AggTrades(payload aggregates.AggTradesPayload) ([]aggregates.Ag
 	var data []aggregates.AggTradesResponse
 	copier.Copy(&data, &clientData)
 	return data, nil
+}
+
+// APIKeyPermission
+func (e Binance) APIKeyPermission() (aggregates.APIKeyPermission, *common.APIError) {
+	client, initErr := InitExchange(e)
+	if initErr != nil {
+		return aggregates.APIKeyPermission{}, initErr
+	}
+	var permissions aggregates.APIKeyPermission
+	clientInfo, err := client.NewGetAPIKeyPermission().Do(context.Background())
+	if err != nil {
+		return permissions, ApiError(err)
+	}
+
+	copier.Copy(&permissions, &clientInfo)
+
+	return permissions, nil
 }
