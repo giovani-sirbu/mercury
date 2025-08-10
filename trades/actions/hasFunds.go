@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"errors"
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
@@ -43,10 +44,21 @@ func GetUsedQuantities(event events.Events) float64 {
 
 func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
 	client, _ := event.Exchange.Client()
+
+	// get user assets (and check IP restrictions if any)
 	assets, assetsErr := client.GetUserAssets() // Get user balance
 	sellAction := false
 	if assetsErr != nil {
 		return 0, 0, "", assetsErr
+	}
+
+	// check if spot & margin trading is enabled
+	permissions, permissionsErr := client.APIKeyPermission()
+	if permissionsErr != nil {
+		return 0, 0, "", permissionsErr
+	}
+	if !permissions.EnableSpotAndMarginTrading {
+		return 0, 0, "", errors.New("Spot & Margin Trading is not enabled")
 	}
 
 	historyCount := len(event.Trade.History)
