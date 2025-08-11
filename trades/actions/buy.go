@@ -96,11 +96,11 @@ func Buy(event events.Events) (events.Events, error) {
 	// set min qty
 	minQuantity := CalculateMinOrderQty(event.Trade)
 
-	fmt.Println(minQuantity, "minQuantity")
+	fmt.Println(quantity, minQuantity, "quantity vs minQuantity")
 
 	quantity = math.Max(quantity, minQuantity)
 
-	fmt.Println(quantity, "q3")
+	fmt.Println(quantity, "final qty")
 
 	event.Params.Quantity = quantity
 
@@ -131,18 +131,16 @@ func Buy(event events.Events) (events.Events, error) {
 
 // CalculateMinOrderQty returns the minimum amount based on lotSize (decimal places) and minNotional
 func CalculateMinOrderQty(trade aggragates.Trades) float64 {
-	quantity := trade.StrategyPair.TradeFilters.MinNotional
-
-	// Calculate minNotional * 10^(-lotSize)
-	if trade.StrategyPair.TradeFilters.LotSize > 0 {
-		quantity = trade.StrategyPair.TradeFilters.MinNotional * math.Pow(10, -float64(trade.StrategyPair.TradeFilters.LotSize))
+	if trade.StrategyPair.TradeFilters.MinNotional == 0 ||
+		trade.StrategyPair.TradeFilters.LotSize == 0 {
+		return 0
 	}
 
-	fmt.Println(quantity, "without inverse")
-	fmt.Println(quantity*trade.PositionPrice, "WITH inverse")
+	quantity := trade.StrategyPair.TradeFilters.MinNotional
 
-	if trade.Inverse {
-		quantity *= trade.PositionPrice
+	if !trade.Inverse {
+		quantity /= trade.PositionPrice
+		quantity += math.Pow(10, -float64(trade.StrategyPair.TradeFilters.LotSize))
 	}
 
 	return ToFixed(quantity, int(trade.StrategyPair.TradeFilters.LotSize))
