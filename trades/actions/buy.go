@@ -6,6 +6,7 @@ import (
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -87,7 +88,8 @@ func Buy(event events.Events) (events.Events, error) {
 		quantity = quantity - sellQty
 	}
 
-	quantity = ToFixed(quantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
+	lotSize := int(event.Trade.StrategyPair.TradeFilters.LotSize)
+	quantity = math.Max(ToFixed(quantity, lotSize), float64(lotSize))
 
 	event.Params.Quantity = quantity
 
