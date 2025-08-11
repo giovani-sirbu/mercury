@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"fmt"
 	"github.com/adshao/go-binance/v2/common"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
@@ -88,8 +89,21 @@ func Buy(event events.Events) (events.Events, error) {
 		quantity = quantity - sellQty
 	}
 
-	lotSize := int(event.Trade.StrategyPair.TradeFilters.LotSize)
-	quantity = math.Max(ToFixed(quantity, lotSize), float64(lotSize))
+	quantity = ToFixed(quantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
+
+	fmt.Println(quantity, "q1")
+
+	// set min qty
+	minQuantity := event.Trade.StrategyPair.TradeFilters.MinNotional
+	if !event.Trade.Inverse {
+		minQuantity /= event.Trade.PositionPrice
+	}
+
+	fmt.Println(event.Trade.StrategyPair.TradeFilters.MinNotional, minQuantity, "q2")
+
+	quantity = math.Max(quantity, minQuantity)
+
+	fmt.Println(quantity, "q3")
 
 	event.Params.Quantity = quantity
 
