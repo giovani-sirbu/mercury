@@ -39,8 +39,9 @@ func Sell(event events.Events) (events.Events, error) {
 	var dust float64
 	quantity = ToFixed(quantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
 
-	// if no bought quantity, return event and close it
+	// if no bought quantity, update event status and close it
 	if quantity <= 0 {
+		event.Trade.Status = aggragates.Closed
 		//errMsg := fmt.Sprintf("Invalid quantity: %f", quantity)
 		return event, nil
 	}
