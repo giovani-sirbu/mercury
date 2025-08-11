@@ -117,6 +117,9 @@ func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
 		neededQuantity = ToFixed(neededQuantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
 	}
 
+	// increase initial bid by 10% to fix NOTIONAL err on market buy
+	neededQuantity *= 1.1
+
 	return remainedQuantity, neededQuantity, assetSymbol, nil
 }
 
