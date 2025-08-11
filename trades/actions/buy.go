@@ -145,5 +145,5 @@ func CalculateMinOrderQty(trade aggragates.Trades) float64 {
 		quantity *= trade.PositionPrice
 	}
 
-	return quantity
+	return ToFixed(quantity, int(trade.StrategyPair.TradeFilters.LotSize))
 }
