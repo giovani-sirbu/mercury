@@ -1,10 +1,9 @@
 package actions
 
-import (
-	"math"
-)
+import "github.com/shopspring/decimal"
 
 func ToFixed(num float64, precision int) float64 {
-	output := math.Pow(10, float64(precision))
-	return float64(int(num*output)) / output
+	d := decimal.NewFromFloat(num).RoundFloor(int32(precision))
+	result, _ := d.Float64()
+	return result
 }
