@@ -74,6 +74,8 @@ func Sell(event events.Events) (events.Events, error) {
 	priceInString := strconv.FormatFloat(event.Trade.PositionPrice, 'f', -1, 64)
 	event.Params.Quantity = quantity
 
+	fmt.Println(quantity, buyQuantity, sellQuantity, feeInBase, "qtys")
+	fmt.Println(priceInString, "priceInString")
 	if event.Trade.Inverse {
 		response, err = client.Buy(event.Trade.Symbol, quantity, priceInString)
 	} else {
