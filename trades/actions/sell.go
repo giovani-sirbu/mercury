@@ -80,6 +80,7 @@ func Sell(event events.Events) (events.Events, error) {
 	if event.Trade.Inverse {
 		response, err = client.Buy(event.Trade.Symbol, quantity, priceInString)
 	} else {
+		log.Debug(quantity, priceInString, "sell")
 		response, err = client.Sell(event.Trade.Symbol, quantity, priceInString)
 	}
 
@@ -87,6 +88,7 @@ func Sell(event events.Events) (events.Events, error) {
 	event.Trade.Dust = dust
 
 	if err != nil {
+		log.Debug(event.Params, event.Params.Quantity, quantity, "params,pqty, qty")
 		return SaveError(event, err)
 	}
 	return event, nil
