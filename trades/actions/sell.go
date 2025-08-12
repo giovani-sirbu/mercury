@@ -5,7 +5,6 @@ import (
 	"github.com/adshao/go-binance/v2/common"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
-	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"strconv"
@@ -47,7 +46,6 @@ func Sell(event events.Events) (events.Events, error) {
 	}
 
 	if quantityBeforeLotSize > quantity {
-		log.Debug(quantityBeforeLotSize, "quantityBeforeLotSize")
 		dust = quantityBeforeLotSize - quantity
 	}
 
@@ -80,7 +78,6 @@ func Sell(event events.Events) (events.Events, error) {
 	if event.Trade.Inverse {
 		response, err = client.Buy(event.Trade.Symbol, quantity, priceInString)
 	} else {
-		log.Debug(quantity, priceInString, "sell")
 		response, err = client.Sell(event.Trade.Symbol, quantity, priceInString)
 	}
 
@@ -88,7 +85,6 @@ func Sell(event events.Events) (events.Events, error) {
 	event.Trade.Dust = dust
 
 	if err != nil {
-		log.Debug(event.Params, event.Params.Quantity, quantity, "params,pqty, qty")
 		return SaveError(event, err)
 	}
 	return event, nil

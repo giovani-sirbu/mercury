@@ -132,9 +132,6 @@ func CalculateInitialBid(amount float64, trade aggragates.Trades, strategyIndex 
 		}
 	}
 
-	// increase initial bid by 10% to fix NOTIONAL err on market buy
-	//initialBid *= 1.1
-
 	if initialBidInQuote < trade.StrategyPair.TradeFilters.MinNotional {
 		msg := fmt.Sprintf("Insufficient funds (%f) to start trading for %s. Starting qty (%f) is lower than minimum required qty (%f) based on %f depths.", amount, trade.Symbol, initialBidInQuote, trade.StrategyPair.TradeFilters.MinNotional, depth)
 		return initialBid, fmt.Errorf(msg)
