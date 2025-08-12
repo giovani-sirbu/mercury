@@ -5,6 +5,7 @@ import (
 	"github.com/adshao/go-binance/v2/common"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
+	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"strconv"
@@ -46,6 +47,7 @@ func Sell(event events.Events) (events.Events, error) {
 	}
 
 	if quantityBeforeLotSize > quantity {
+		log.Debug(quantityBeforeLotSize, "quantityBeforeLotSize")
 		dust = quantityBeforeLotSize - quantity
 	}
 

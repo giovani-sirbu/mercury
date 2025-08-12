@@ -84,7 +84,7 @@ func (e Events) logEventError(err error) error {
 	assetSymbol := pairSymbols[1]
 
 	msg := fmt.Sprintf(
-		"%s | User ID: #%d | Trade Info: (ID: #%d, Position Type: %s, Position Price: %f, Impasse: %t, Profit: %f, Depths: %d, Inverse used: %f)",
+		"%s | User ID: #%d | Trade Info: (ID: #%d, Position Type: %s, Position Price: %f, Impasse: %t, Profit: %f, Quantity: %f, Dust: %f, Depths: %d, Inverse used: %f)",
 		err.Error(),
 		e.Trade.UserID,
 		e.Trade.ID,
@@ -92,6 +92,8 @@ func (e Events) logEventError(err error) error {
 		e.Trade.PositionPrice,
 		e.Trade.Inverse,
 		e.Params.Profit,
+		e.Params.Quantity,
+		e.Trade.Dust,
 		len(e.Trade.History),
 		aggragates.FindUsedAmount(e.Params.InverseUsedAmount, assetSymbol),
 	)
