@@ -21,6 +21,7 @@ type TradesExchanges struct {
 	TestNet      bool                         `gorm:"type:boolean;default:false" bson:"testNet" json:"testNet" form:"testNet" xml:"testNet"`
 	TradesStatus Status                       `gorm:"type:varchar(50);default:new" bson:"tradesStatus" json:"tradesStatus" form:"tradesStatus" xml:"tradesStatus"`
 	Status       Status                       `gorm:"type:varchar(50);default:new;index:idx_status_created_at,priority:1" bson:"status" json:"status" form:"status" xml:"status"`
+	TradeType    TradeTypes                   `gorm:"type:varchar(50)" bson:"tradeType" json:"tradeType" form:"tradeType" xml:"tradeType"`
 	Balance      float64                      `form:"balance" json:"balance" xml:"balance"`
 	Assets       []aggregates.UserAssetRecord `gorm:"type:jsonb;serializer:json;" bson:"assets" form:"assets" json:"assets" xml:"assets"`
 	CreatedAt    time.Time                    `gorm:"index:idx_status_created_at,priority:2" form:"createdAt" json:"createdAt" xml:"createdAt"`

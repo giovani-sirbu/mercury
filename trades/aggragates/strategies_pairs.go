@@ -24,6 +24,9 @@ type (
 		InitialBid         float64 `bson:"initialBid" json:"initialBid"`
 		Percentage         float64 `bson:"percentage" json:"percentage"`
 		Multiplier         float64 `bson:"multiplier" json:"multiplier"`
+		Leverage           uint8   `bson:"leverage" json:"leverage"`
+		StopLoss           uint8   `bson:"stopLoss" json:"stopLoss"`
+		CancelTimeM        int     `bson:"cancelTime" json:"cancelTime"`
 	}
 	ImpassePairs struct {
 		Symbol  string `bson:"symbol" json:"symbol"`
