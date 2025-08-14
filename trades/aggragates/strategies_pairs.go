@@ -16,17 +16,17 @@ type (
 		MinNotional float64 `bson:"minNotional" json:"minNotional" form:"minNotional" xml:"minNotional" validate:"required"`
 	}
 	StrategySettings struct {
-		Tolerance          float64 `bson:"tolerance" json:"tolerance"`
-		MinDepths          float64 `bson:"minDepths" json:"minDepths"`
-		Depths             float64 `bson:"depths" json:"depths"`
-		ImpasseDepth       float64 `bson:"impasseDepths" json:"impasseDepths"`
-		TrailingTakeProfit float64 `bson:"trailingTakeProfit" json:"trailingTakeProfit"`
-		InitialBid         float64 `bson:"initialBid" json:"initialBid"`
-		Percentage         float64 `bson:"percentage" json:"percentage"`
-		Multiplier         float64 `bson:"multiplier" json:"multiplier"`
-		Leverage           uint8   `bson:"leverage" json:"leverage"`
-		StopLoss           uint8   `bson:"stopLoss" json:"stopLoss"`
-		CancelTimeM        int     `bson:"cancelTime" json:"cancelTime"`
+		Tolerance           float64 `bson:"tolerance" json:"tolerance"`
+		MinDepths           float64 `bson:"minDepths" json:"minDepths"`
+		Depths              float64 `bson:"depths" json:"depths"`
+		ImpasseDepth        float64 `bson:"impasseDepths" json:"impasseDepths"`
+		TrailingTakeProfit  float64 `bson:"trailingTakeProfit" json:"trailingTakeProfit"`
+		InitialBid          float64 `bson:"initialBid" json:"initialBid"`
+		Percentage          float64 `bson:"percentage" json:"percentage"`
+		Multiplier          float64 `bson:"multiplier" json:"multiplier"`
+		Leverage            uint8   `bson:"leverage" json:"leverage"`
+		StopLoss            uint8   `bson:"stopLoss" json:"stopLoss"`
+		CancelTimeInMinutes int     `bson:"cancelTimeInMinutes" json:"cancelTimeInMinutes"`
 	}
 	ImpassePairs struct {
 		Symbol  string `bson:"symbol" json:"symbol"`
