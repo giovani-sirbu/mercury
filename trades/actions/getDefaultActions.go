@@ -17,5 +17,8 @@ func GetDefaultActions() map[string]func(events.Events) (events.Events, error) {
 	newActions["shouldHold"] = ShouldHold
 	newActions["hasEnoughFunds"] = HasEnoughFunds
 	newActions["regulatePriceChange"] = RegulatePriceChange
+	newActions["closeFuturesTrade"] = CloseFuturesTrade
+	newActions["checkOldFuturesOrders"] = CheckOldFuturesOrders
+	newActions["createFuturesOrders"] = CreateFuturesOrders
 	return newActions
 }
