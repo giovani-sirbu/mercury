@@ -2,7 +2,6 @@ package binanceAdaptor
 
 import (
 	"context"
-	"fmt"
 	"github.com/adshao/go-binance/v2/common"
 	"github.com/adshao/go-binance/v2/futures"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
@@ -37,7 +36,7 @@ func InitFuturesExchange(exchange Binance) (*futures.Client, *common.APIError) {
 	return client, nil
 }
 
-func (e Binance) CreateFutureOrder(sideType string, orderType string, symbol string, quantity float64, price string, reduceOnly bool) (aggregates.CreateOrderResponse, *common.APIError) {
+func (e Binance) CreateFutureOrder(sideType string, orderType string, symbol string, quantity string, price string, reduceOnly bool) (aggregates.CreateOrderResponse, *common.APIError) {
 	var order aggregates.CreateOrderResponse
 
 	client, initErr := InitFuturesExchange(e)
@@ -46,13 +45,11 @@ func (e Binance) CreateFutureOrder(sideType string, orderType string, symbol str
 	}
 	formattedSymbol := strings.Replace(symbol, "/", "", 1)
 
-	stringQuantity := fmt.Sprintf("%f", quantity)
-
 	orderResponse, err := client.NewCreateOrderService().
 		Symbol(formattedSymbol).
 		Side(futures.SideType(sideType)).
 		Type(futures.OrderType(orderType)).
-		Quantity(stringQuantity).
+		Quantity(quantity).
 		Price(price).
 		ReduceOnly(reduceOnly).
 		TimeInForce(futures.TimeInForceTypeGTC).
@@ -100,6 +97,7 @@ func (e Binance) GetSymbolPosition(symbol string) ([]aggregates.PositionRisk, *c
 	}
 	formattedSymbol := strings.Replace(symbol, "/", "", 1)
 	positionsResponse, err := client.NewGetPositionRiskService().Symbol(formattedSymbol).Do(context.Background())
+
 	copier.Copy(&positions, &positionsResponse)
 
 	return positions, ApiError(err)
