@@ -17,3 +17,15 @@ func GetExchangeActions(e aggregates.Exchange) (aggregates.Actions, error) {
 	}
 	return aggregates.Actions{}, fmt.Errorf("exchange not allowed")
 }
+
+// GetExchangeActions method to fetch actions by exchange name
+func GetFuturesExchangeActions(e aggregates.Exchange) (aggregates.FuturesActions, error) {
+	if e.Name == "" {
+		return aggregates.FuturesActions{}, fmt.Errorf("missing required payload")
+	}
+	if e.Name == "binance" {
+		actions := binanceAdaptor.GetFuturesBinanceActions(e)
+		return actions, nil
+	}
+	return aggregates.FuturesActions{}, fmt.Errorf("exchange not allowed")
+}

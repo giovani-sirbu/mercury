@@ -25,7 +25,13 @@ type (
 		ExecutedQuantity         string `json:"executedQty"`
 		CummulativeQuoteQuantity string `json:"cummulativeQuoteQty"`
 		Status                   string `json:"status"`
+		IsIsolated               bool   `json:"isIsolated"` // for isolated margin
+
+		TimeInForce string `json:"timeInForce"`
+		Type        string `json:"type"`
+		Side        string `json:"side"`
 	}
+
 	// Order structure
 	Order struct {
 		Symbol                   string `json:"symbol"`
@@ -45,6 +51,37 @@ type (
 		UpdateTime               int64  `json:"updateTime"`
 		OrigQuoteOrderQuantity   string `json:"origQuoteOrderQty"`
 	}
+
+	FuturesOrder struct {
+		Symbol                  string `json:"symbol"`
+		OrderID                 int64  `json:"orderId"`
+		ClientOrderID           string `json:"clientOrderId"`
+		Price                   string `json:"price"`
+		ReduceOnly              bool   `json:"reduceOnly"`
+		OrigQuantity            string `json:"origQty"`
+		ExecutedQuantity        string `json:"executedQty"`
+		CumQuantity             string `json:"cumQty"`
+		CumQuote                string `json:"cumQuote"`
+		Status                  string `json:"status"`
+		TimeInForce             string `json:"timeInForce"`
+		Type                    string `json:"type"`
+		Side                    string `json:"side"`
+		StopPrice               string `json:"stopPrice"`
+		Time                    int64  `json:"time"`
+		UpdateTime              int64  `json:"updateTime"`
+		WorkingType             string `json:"workingType"`
+		ActivatePrice           string `json:"activatePrice"`
+		PriceRate               string `json:"priceRate"`
+		AvgPrice                string `json:"avgPrice"`
+		OrigType                string `json:"origType"`
+		PositionSide            string `json:"positionSide"`
+		PriceProtect            bool   `json:"priceProtect"`
+		ClosePosition           bool   `json:"closePosition"`
+		PriceMatch              string `json:"priceMatch"`
+		SelfTradePreventionMode string `json:"selfTradePreventionMode"`
+		GoodTillDate            int64  `json:"goodTillDate"`
+	}
+
 	// CancelOrderResponse may be returned included in a CancelOpenOrdersResponse.
 	CancelOrderResponse struct {
 		Symbol                   string `json:"symbol"`
@@ -61,6 +98,31 @@ type (
 		Type                     string `json:"type"`
 		Side                     string `json:"side"`
 	}
+
+	CancelFuturesOrderResponse struct {
+		ClientOrderID    string `json:"clientOrderId"`
+		CumQuantity      string `json:"cumQty"`
+		CumQuote         string `json:"cumQuote"`
+		ExecutedQuantity string `json:"executedQty"`
+		OrderID          int64  `json:"orderId"`
+		OrigQuantity     string `json:"origQty"`
+		Price            string `json:"price"`
+		ReduceOnly       bool   `json:"reduceOnly"`
+		Side             string `json:"side"`
+		Status           string `json:"status"`
+		StopPrice        string `json:"stopPrice"`
+		Symbol           string `json:"symbol"`
+		TimeInForce      string `json:"timeInForce"`
+		Type             string `json:"type"`
+		UpdateTime       int64  `json:"updateTime"`
+		WorkingType      string `json:"workingType"`
+		ActivatePrice    string `json:"activatePrice"`
+		PriceRate        string `json:"priceRate"`
+		OrigType         string `json:"origType"`
+		PositionSide     string `json:"positionSide"`
+		PriceProtect     bool   `json:"priceProtect"`
+	}
+
 	Trade struct {
 		ID              int64  `json:"id"`
 		Symbol          string `json:"symbol"`
@@ -102,6 +164,30 @@ type (
 		RateLimits      []RateLimit   `json:"rateLimits"`
 		ExchangeFilters []interface{} `json:"exchangeFilters"`
 		Symbols         []Symbol      `json:"symbols"`
+	}
+
+	PositionRisk struct {
+		EntryPrice       string `json:"entryPrice"`
+		BreakEvenPrice   string `json:"breakEvenPrice"`
+		MarginType       string `json:"marginType"`
+		IsAutoAddMargin  string `json:"isAutoAddMargin"`
+		IsolatedMargin   string `json:"isolatedMargin"`
+		Leverage         string `json:"leverage"`
+		LiquidationPrice string `json:"liquidationPrice"`
+		MarkPrice        string `json:"markPrice"`
+		MaxNotionalValue string `json:"maxNotionalValue"`
+		PositionAmt      string `json:"positionAmt"`
+		Symbol           string `json:"symbol"`
+		UnRealizedProfit string `json:"unRealizedProfit"`
+		PositionSide     string `json:"positionSide"`
+		Notional         string `json:"notional"`
+		IsolatedWallet   string `json:"isolatedWallet"`
+	}
+
+	SymbolLeverage struct {
+		Leverage         int    `json:"leverage"`
+		MaxNotionalValue string `json:"maxNotionalValue"`
+		Symbol           string `json:"symbol"`
 	}
 
 	// TradeFeeDetails represents details about fees
@@ -329,5 +415,14 @@ type (
 		AggTrades        func(payload AggTradesPayload) ([]AggTradesResponse, *common.APIError)
 		KlineData        func(KlinePayload) ([]KlineResponse, *common.APIError)
 		APIKeyPermission func() (APIKeyPermission, *common.APIError)
+	}
+
+	FuturesActions struct {
+		CreateFuturesOrder     func(sideType string, orderType string, symbol string, quantity float64, price string, reduceOnly bool) (CreateOrderResponse, *common.APIError)
+		ListOrders             func(symbol string) ([]FuturesOrder, *common.APIError)
+		CancelOrders           func(symbol string, orderId int64) (CancelFuturesOrderResponse, *common.APIError)
+		GetSymbolPosition      func(symbol string) ([]PositionRisk, *common.APIError)
+		SetSymbolLeverage      func(symbol string, leverage int) (SymbolLeverage, *common.APIError)
+		GetFuturesExchangeInfo func() (ExchangeInfo, *common.APIError)
 	}
 )
