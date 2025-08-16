@@ -45,17 +45,21 @@ func (e Binance) CreateFutureOrder(sideType string, orderType string, symbol str
 	}
 	formattedSymbol := strings.Replace(symbol, "/", "", 1)
 
-	orderResponse, err := client.NewCreateOrderService().
+	orderResponse := client.NewCreateOrderService().
 		Symbol(formattedSymbol).
 		Side(futures.SideType(sideType)).
 		Type(futures.OrderType(orderType)).
 		Quantity(quantity).
 		Price(price).
-		ReduceOnly(reduceOnly).
-		TimeInForce(futures.TimeInForceTypeGTC).
-		Do(context.Background())
+		ReduceOnly(reduceOnly)
 
-	copier.Copy(&order, &orderResponse)
+	if orderType == "LIMIT" {
+		orderResponse.TimeInForce(futures.TimeInForceTypeGTC)
+	}
+
+	response, err := orderResponse.Do(context.Background())
+
+	copier.Copy(&order, &response)
 
 	return order, ApiError(err)
 }
