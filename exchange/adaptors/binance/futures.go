@@ -15,6 +15,7 @@ func GetFuturesBinanceActions(e aggregates.Exchange) aggregates.FuturesActions {
 	var actions = aggregates.FuturesActions{
 		CreateFuturesOrder:     binanceStruct.CreateFutureOrder,
 		ListOrders:             binanceStruct.ListOrders,
+		GetOrderById:           binanceStruct.GetOrderById,
 		CancelOrders:           binanceStruct.CancelOrders,
 		GetSymbolPosition:      binanceStruct.GetSymbolPosition,
 		SetSymbolLeverage:      binanceStruct.SetSymbolLeverage,
@@ -75,6 +76,23 @@ func (e Binance) ListOrders(symbol string) ([]aggregates.FuturesOrder, *common.A
 	responseOrders, err := client.NewListOpenOrdersService().Symbol(formattedSymbol).Do(context.Background())
 	copier.Copy(&orders, &responseOrders)
 	return orders, ApiError(err)
+}
+
+func (e Binance) GetOrderById(symbol string, orderID int64) (aggregates.FuturesOrder, *common.APIError) {
+	var order aggregates.FuturesOrder
+	client, initErr := InitFuturesExchange(e)
+	if initErr != nil {
+		return aggregates.FuturesOrder{}, initErr
+	}
+	formattedSymbol := strings.Replace(symbol, "/", "", 1)
+	responseOrder, err := client.NewGetOrderService().
+		Symbol(formattedSymbol).
+		OrderID(orderID).
+		Do(context.Background())
+
+	copier.Copy(&order, &responseOrder)
+
+	return order, ApiError(err)
 }
 
 func (e Binance) CancelOrders(symbol string, orderId int64) (aggregates.CancelFuturesOrderResponse, *common.APIError) {
