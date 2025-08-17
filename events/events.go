@@ -2,6 +2,7 @@ package events
 
 import (
 	"fmt"
+	"github.com/adshao/go-binance/v2/common"
 	"github.com/giovani-sirbu/mercury/exchange"
 	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/messagebroker"
@@ -83,9 +84,22 @@ func (e Events) logEventError(err error) error {
 	pairSymbols := strings.Split(e.Trade.Symbol, "/")
 	assetSymbol := pairSymbols[1]
 
+	var errorMessage string
+
+	if err != nil {
+		// Handle nil pointer of *APIError safely
+		if apiErr, ok := err.(*common.APIError); ok && apiErr == nil {
+			errorMessage = "<nil APIError>"
+		} else {
+			errorMessage = err.Error()
+		}
+	} else {
+		errorMessage = "<nil error>"
+	}
+
 	msg := fmt.Sprintf(
 		"%s | User ID: #%d | Trade Info: (ID: #%d, Position Type: %s, Position Price: %f, Impasse: %t, Profit: %f, Quantity: %f, Dust: %f, Depths: %d, Inverse used: %f)",
-		err.Error(),
+		errorMessage,
 		e.Trade.UserID,
 		e.Trade.ID,
 		e.Trade.PositionType,
