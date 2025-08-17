@@ -50,11 +50,12 @@ func (e Binance) CreateFutureOrder(sideType string, orderType string, symbol str
 		Side(futures.SideType(sideType)).
 		Type(futures.OrderType(orderType)).
 		Quantity(quantity).
-		Price(price).
 		ReduceOnly(reduceOnly)
 
-	if orderType == "LIMIT" {
-		orderResponse.TimeInForce(futures.TimeInForceTypeGTC)
+	if orderType == string(futures.OrderTypeLimit) {
+		orderResponse.Price(price).TimeInForce(futures.TimeInForceTypeGTC)
+	} else if orderType == string(futures.OrderTypeStopMarket) {
+		orderResponse.StopPrice(price)
 	}
 
 	response, err := orderResponse.Do(context.Background())
