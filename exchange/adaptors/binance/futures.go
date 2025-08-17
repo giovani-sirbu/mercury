@@ -20,6 +20,7 @@ func GetFuturesBinanceActions(e aggregates.Exchange) aggregates.FuturesActions {
 		GetSymbolPosition:      binanceStruct.GetSymbolPosition,
 		SetSymbolLeverage:      binanceStruct.SetSymbolLeverage,
 		GetFuturesExchangeInfo: binanceStruct.GetFuturesExchangeInfo,
+		GetIncomeHistory:       binanceStruct.GetIncomeHistory,
 	}
 	return actions
 }
@@ -153,4 +154,20 @@ func (e Binance) GetFuturesExchangeInfo() (aggregates.ExchangeInfo, *common.APIE
 	exchangeInfoResponse, err := client.NewExchangeInfoService().Do(context.Background())
 	copier.Copy(&exchangeInfo, &exchangeInfoResponse)
 	return exchangeInfo, ApiError(err)
+}
+
+func (e Binance) GetIncomeHistory(symbol string) ([]aggregates.IncomeHistory, *common.APIError) {
+	var incomeHistory []aggregates.IncomeHistory
+	client, initErr := InitFuturesExchange(e)
+	if initErr != nil {
+		return incomeHistory, initErr
+	}
+	formattedSymbol := strings.Replace(symbol, "/", "", 1)
+	income, incomeErr := client.NewGetIncomeHistoryService().
+		Symbol(formattedSymbol).
+		IncomeType("REALIZED_PNL").
+		Do(context.Background())
+
+	copier.Copy(&incomeHistory, &income)
+	return incomeHistory, ApiError(incomeErr)
 }

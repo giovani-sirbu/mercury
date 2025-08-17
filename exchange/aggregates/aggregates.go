@@ -166,6 +166,17 @@ type (
 		Symbols         []Symbol      `json:"symbols"`
 	}
 
+	IncomeHistory struct {
+		Asset      string `json:"asset"`
+		Income     string `json:"income"`
+		IncomeType string `json:"incomeType"`
+		Info       string `json:"info"`
+		Symbol     string `json:"symbol"`
+		Time       int64  `json:"time"`
+		TranID     int64  `json:"tranId"`
+		TradeID    string `json:"tradeId"`
+	}
+
 	PositionRisk struct {
 		EntryPrice       string `json:"entryPrice"`
 		BreakEvenPrice   string `json:"breakEvenPrice"`
@@ -425,5 +436,6 @@ type (
 		GetSymbolPosition      func(symbol string) ([]PositionRisk, *common.APIError)
 		SetSymbolLeverage      func(symbol string, leverage int) (SymbolLeverage, *common.APIError)
 		GetFuturesExchangeInfo func() (ExchangeInfo, *common.APIError)
+		GetIncomeHistory       func(symbol string) ([]IncomeHistory, *common.APIError)
 	}
 )
