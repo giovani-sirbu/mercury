@@ -66,7 +66,7 @@ func CreateFuturesOrders(event events.Events) (events.Events, error) {
 		stopPrice = price * (1 - stopLoss/float64(leverage))
 		price = price * (1 + adjustment)
 
-	} else { // TODO use else if for not alow hold actions
+	} else if event.Params.AIIndicators.AIAction == "SHORT" {
 		orderSide = string(futures.SideTypeSell)
 		oppositeSide = string(futures.SideTypeBuy)
 		stopPrice = price * (1 + stopLoss/float64(leverage))
