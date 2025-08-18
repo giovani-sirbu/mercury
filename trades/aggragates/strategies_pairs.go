@@ -26,6 +26,7 @@ type (
 		Multiplier          float64 `bson:"multiplier" json:"multiplier"`
 		Leverage            uint8   `bson:"leverage" json:"leverage"`
 		StopLoss            uint8   `bson:"stopLoss" json:"stopLoss"`
+		PriceAdjustment     float64 `bson:"priceAdjustment" json:"priceAdjustment"`
 		CancelTimeInMinutes int     `bson:"cancelTimeInMinutes" json:"cancelTimeInMinutes"`
 	}
 	ImpassePairs struct {
