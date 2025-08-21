@@ -29,7 +29,7 @@ type (
 		PriceAdjustment     float64 `bson:"priceAdjustment" json:"priceAdjustment"`
 		CancelTimeInMinutes int     `bson:"cancelTimeInMinutes" json:"cancelTimeInMinutes"`
 		KeepAliveInterval   string  `bson:"keepAliveInterval" json:"keepAliveInterval"`
-		KlineInterval       int     `bson:"klineInterval" json:"klineInterval"`
+		KlineInterval       string  `bson:"klineInterval" json:"klineInterval"`
 	}
 	ImpassePairs struct {
 		Symbol  string `bson:"symbol" json:"symbol"`
