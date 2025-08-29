@@ -30,6 +30,7 @@ type (
 		CancelTimeInMinutes int     `bson:"cancelTimeInMinutes" json:"cancelTimeInMinutes"`
 		KeepAliveInterval   string  `bson:"keepAliveInterval" json:"keepAliveInterval"`
 		KlineInterval       string  `bson:"klineInterval" json:"klineInterval"`
+		CoolOffInMinutes    int     `bson:"coolOffInMinutes" json:"coolOffInMinutes"`
 	}
 	ImpassePairs struct {
 		Symbol  string `bson:"symbol" json:"symbol"`
