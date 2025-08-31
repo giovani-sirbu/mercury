@@ -139,7 +139,8 @@ func (e Binance) ModifyFuturesOrderPrice(symbol string, orderId int64, newPrice 
 		Side(cancelResp.Side).
 		Type(cancelResp.Type).
 		Quantity(cancelResp.OrigQuantity).
-		Price(newPrice).
+		StopPrice(newPrice).
+		ReduceOnly(true).
 		Do(context.Background())
 	if err != nil {
 		return updateResponse, ApiError(err)
