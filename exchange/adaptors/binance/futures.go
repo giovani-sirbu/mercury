@@ -13,14 +13,15 @@ import (
 func GetFuturesBinanceActions(e aggregates.Exchange) aggregates.FuturesActions {
 	var binanceStruct = Binance{e}
 	var actions = aggregates.FuturesActions{
-		CreateFuturesOrder:     binanceStruct.CreateFutureOrder,
-		ListOrders:             binanceStruct.ListOrders,
-		GetOrderById:           binanceStruct.GetOrderById,
-		CancelOrders:           binanceStruct.CancelOrders,
-		GetSymbolPosition:      binanceStruct.GetSymbolPosition,
-		SetSymbolLeverage:      binanceStruct.SetSymbolLeverage,
-		GetFuturesExchangeInfo: binanceStruct.GetFuturesExchangeInfo,
-		GetIncomeHistory:       binanceStruct.GetIncomeHistory,
+		CreateFuturesOrder:      binanceStruct.CreateFutureOrder,
+		ModifyFuturesOrderPrice: binanceStruct.ModifyFuturesOrderPrice,
+		ListOrders:              binanceStruct.ListOrders,
+		GetOrderById:            binanceStruct.GetOrderById,
+		CancelOrders:            binanceStruct.CancelOrders,
+		GetSymbolPosition:       binanceStruct.GetSymbolPosition,
+		SetSymbolLeverage:       binanceStruct.SetSymbolLeverage,
+		GetFuturesExchangeInfo:  binanceStruct.GetFuturesExchangeInfo,
+		GetIncomeHistory:        binanceStruct.GetIncomeHistory,
 	}
 	return actions
 }
@@ -111,6 +112,41 @@ func (e Binance) CancelOrders(symbol string, orderId int64) (aggregates.CancelFu
 	copier.Copy(&cancelOrder, &orderResponse)
 
 	return cancelOrder, ApiError(err)
+}
+
+func (e Binance) ModifyFuturesOrderPrice(symbol string, orderId int64, newPrice string) (aggregates.CreateOrderResponse, *common.APIError) {
+	var updateResponse aggregates.CreateOrderResponse
+
+	client, initErr := InitFuturesExchange(e)
+	if initErr != nil {
+		return updateResponse, initErr
+	}
+
+	formattedSymbol := strings.Replace(symbol, "/", "", 1)
+
+	// 1. Cancel the existing order
+	cancelResp, err := client.NewCancelOrderService().
+		Symbol(formattedSymbol).
+		OrderID(orderId).
+		Do(context.Background())
+	if err != nil {
+		return updateResponse, ApiError(err)
+	}
+
+	// 2. Place a new order using the same quantity, side, and type but new price
+	newOrder, err := client.NewCreateOrderService().
+		Symbol(cancelResp.Symbol).
+		Side(cancelResp.Side).
+		Type(cancelResp.Type).
+		Quantity(cancelResp.OrigQuantity).
+		Price(newPrice).
+		Do(context.Background())
+	if err != nil {
+		return updateResponse, ApiError(err)
+	}
+
+	copier.Copy(&updateResponse, &newOrder)
+	return updateResponse, nil
 }
 
 func (e Binance) GetSymbolPosition(symbol string) ([]aggregates.PositionRisk, *common.APIError) {
