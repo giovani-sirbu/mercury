@@ -144,7 +144,7 @@ func (e Binance) ModifyFuturesOrderPrice(symbol string, orderID int64, price str
 	params := url.Values{}
 	params.Add("symbol", oldOrder.Symbol)
 	params.Add("orderId", strconv.FormatInt(orderID, 10))
-	params.Add("stopPrice", price)
+	params.Add("price", price)
 	params.Add("side", oldOrder.Side)
 	params.Add("quantity", oldOrder.OrigQuantity)
 	params.Add("type", oldOrder.Type)
