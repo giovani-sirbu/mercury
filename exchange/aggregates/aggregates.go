@@ -446,7 +446,7 @@ type (
 
 	FuturesActions struct {
 		CreateFuturesOrder      func(sideType string, orderType string, symbol string, quantity string, price string, reduceOnly bool) (CreateOrderResponse, *common.APIError)
-		ModifyFuturesOrderPrice func(symbol string, orderId int64, price string) (ModifyFuturesOrderResponse, *common.APIError)
+		ModifyFuturesOrderPrice func(symbol string, orderId int64, price string) (CreateOrderResponse, *common.APIError)
 		ListOrders              func(symbol string) ([]FuturesOrder, *common.APIError)
 		GetOrderById            func(symbol string, orderId int64) (FuturesOrder, *common.APIError)
 		CancelOrders            func(symbol string, orderId int64) (CancelFuturesOrderResponse, *common.APIError)
