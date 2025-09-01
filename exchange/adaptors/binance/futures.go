@@ -132,11 +132,22 @@ func (e Binance) ModifyFuturesOrderPrice(symbol string, orderID int64, price str
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	var response aggregates.ModifyFuturesOrderResponse
+
+	oldOrder, getOrderErr := e.GetOrderById(symbol, orderID)
+
+	if getOrderErr != nil {
+		return response, ApiError(fmt.Errorf("failed to get old order request: %v", getOrderErr))
+	}
+
 	// Prepare query parameters
 	params := url.Values{}
 	params.Add("symbol", symbol)
 	params.Add("orderId", strconv.FormatInt(orderID, 10))
 	params.Add("price", price)
+	params.Add("side", oldOrder.Side)
+	params.Add("quantity", oldOrder.Side)
+	params.Add("type", oldOrder.Type)
 	params.Add("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
 	params.Add("recvWindow", "5000") // Optional: adjust as needed
 
@@ -146,8 +157,6 @@ func (e Binance) ModifyFuturesOrderPrice(symbol string, orderID int64, price str
 	hmac.Write([]byte(queryString))
 	signature := hex.EncodeToString(hmac.Sum(nil))
 	params.Add("signature", signature)
-
-	var response aggregates.ModifyFuturesOrderResponse
 
 	// Create HTTP request
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint+"?"+params.Encode(), nil)
