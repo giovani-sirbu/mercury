@@ -23,10 +23,10 @@ func UpdateStopLossOrder(event events.Events) (events.Events, error) {
 	var stopPrice float64
 
 	if event.Trade.PositionType == "sell" {
-		stopPrice = price * (1 - stopLoss/float64(leverage))
+		stopPrice = price * (1 + stopLoss/float64(leverage))
 
 	} else if event.Trade.PositionType == "buy" {
-		stopPrice = price * (1 + stopLoss/float64(leverage))
+		stopPrice = price * (1 - stopLoss/float64(leverage))
 
 	}
 
