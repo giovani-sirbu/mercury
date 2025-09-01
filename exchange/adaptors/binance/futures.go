@@ -159,7 +159,7 @@ func (e Binance) ModifyFuturesOrderPrice(symbol string, orderID int64, price str
 	params.Add("signature", signature)
 
 	// Create HTTP request
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint+"?"+params.Encode(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint+"?"+params.Encode(), nil)
 	if err != nil {
 		return response, ApiError(fmt.Errorf("failed to create request: %v", err))
 	}
