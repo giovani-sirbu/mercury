@@ -2,11 +2,20 @@ package binanceAdaptor
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"github.com/adshao/go-binance/v2/common"
 	"github.com/adshao/go-binance/v2/futures"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/jinzhu/copier"
+	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // GetFuturesBinanceActions map all binance actions
@@ -114,40 +123,68 @@ func (e Binance) CancelOrders(symbol string, orderId int64) (aggregates.CancelFu
 	return cancelOrder, ApiError(err)
 }
 
-func (e Binance) ModifyFuturesOrderPrice(symbol string, orderId int64, newPrice string) (aggregates.CreateOrderResponse, *common.APIError) {
-	var updateResponse aggregates.CreateOrderResponse
+// ModifyFuturesOrder modifies an existing futures order on Binance
+func (e Binance) ModifyFuturesOrderPrice(symbol string, orderID int64, price string) (aggregates.ModifyFuturesOrderResponse, *common.APIError) {
+	// API endpoint
+	const endpoint = "https://fapi.binance.com/fapi/v1/order"
 
-	client, initErr := InitFuturesExchange(e)
-	if initErr != nil {
-		return updateResponse, initErr
-	}
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	formattedSymbol := strings.Replace(symbol, "/", "", 1)
+	// Prepare query parameters
+	params := url.Values{}
+	params.Add("symbol", symbol)
+	params.Add("orderId", strconv.FormatInt(orderID, 10))
+	params.Add("price", price)
+	params.Add("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Add("recvWindow", "5000") // Optional: adjust as needed
 
-	// 1. Cancel the existing order
-	cancelResp, err := client.NewCancelOrderService().
-		Symbol(formattedSymbol).
-		OrderID(orderId).
-		Do(context.Background())
+	// Create HMAC-SHA256 signature
+	queryString := params.Encode()
+	hmac := hmac.New(sha256.New, []byte(e.ApiSecret))
+	hmac.Write([]byte(queryString))
+	signature := hex.EncodeToString(hmac.Sum(nil))
+	params.Add("signature", signature)
+
+	var response aggregates.ModifyFuturesOrderResponse
+
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint+"?"+params.Encode(), nil)
 	if err != nil {
-		return updateResponse, ApiError(err)
+		return response, ApiError(fmt.Errorf("failed to create request: %v", err))
 	}
 
-	// 2. Place a new order using the same quantity, side, and type but new price
-	newOrder, err := client.NewCreateOrderService().
-		Symbol(cancelResp.Symbol).
-		Side(cancelResp.Side).
-		Type(cancelResp.Type).
-		Quantity(cancelResp.OrigQuantity).
-		StopPrice(newPrice).
-		ReduceOnly(true).
-		Do(context.Background())
+	// Set headers
+	req.Header.Set("X-MBX-APIKEY", e.ApiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Send request
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
-		return updateResponse, ApiError(err)
+		return response, ApiError(fmt.Errorf("failed to send request: %v", err))
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode != http.StatusOK {
+		var errorResp struct {
+			Code int    `json:"code"`
+			Msg  string `json:"msg"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&errorResp); err != nil {
+			return response, ApiError(fmt.Errorf("failed to decode error response: %v", err))
+		}
+		return response, ApiError(fmt.Errorf("API error: code=%d, msg=%s", errorResp.Code, errorResp.Msg))
 	}
 
-	copier.Copy(&updateResponse, &newOrder)
-	return updateResponse, nil
+	// Parse response
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return response, ApiError(fmt.Errorf("failed to parse response: %v", err))
+	}
+
+	return response, nil
 }
 
 func (e Binance) GetSymbolPosition(symbol string) ([]aggregates.PositionRisk, *common.APIError) {

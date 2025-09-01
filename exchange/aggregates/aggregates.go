@@ -364,6 +364,22 @@ type (
 		TakerBuyQuoteAssetVolume string `json:"takerBuyQuoteAssetVolume"`
 	}
 
+	// ModifyFuturesOrderResponse represents the response from the Binance modify order endpoint
+	ModifyFuturesOrderResponse struct {
+		OrderID       int64  `json:"orderId"`
+		Symbol        string `json:"symbol"`
+		Status        string `json:"status"`
+		ClientOrderID string `json:"clientOrderId"`
+		Price         string `json:"price"`
+		OrigQty       string `json:"origQty"`
+		ExecutedQty   string `json:"executedQty"`
+		CumQuote      string `json:"cumQuote"`
+		TimeInForce   string `json:"timeInForce"`
+		Type          string `json:"type"`
+		Side          string `json:"side"`
+		UpdateTime    int64  `json:"updateTime"`
+	}
+
 	KlinePayload struct {
 		Symbol    string
 		Interval  string
@@ -430,7 +446,7 @@ type (
 
 	FuturesActions struct {
 		CreateFuturesOrder      func(sideType string, orderType string, symbol string, quantity string, price string, reduceOnly bool) (CreateOrderResponse, *common.APIError)
-		ModifyFuturesOrderPrice func(symbol string, orderId int64, price string) (CreateOrderResponse, *common.APIError)
+		ModifyFuturesOrderPrice func(symbol string, orderId int64, price string) (ModifyFuturesOrderResponse, *common.APIError)
 		ListOrders              func(symbol string) ([]FuturesOrder, *common.APIError)
 		GetOrderById            func(symbol string, orderId int64) (FuturesOrder, *common.APIError)
 		CancelOrders            func(symbol string, orderId int64) (CancelFuturesOrderResponse, *common.APIError)
