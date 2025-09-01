@@ -146,7 +146,7 @@ func (e Binance) ModifyFuturesOrderPrice(symbol string, orderID int64, price str
 	params.Add("orderId", strconv.FormatInt(orderID, 10))
 	params.Add("price", price)
 	params.Add("side", oldOrder.Side)
-	params.Add("quantity", oldOrder.Side)
+	params.Add("quantity", oldOrder.OrigQuantity)
 	params.Add("type", oldOrder.Type)
 	params.Add("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
 	params.Add("recvWindow", "5000") // Optional: adjust as needed
