@@ -26,7 +26,11 @@ func CloseOrKeepALiveTrade(event events.Events) (events.Events, error) {
 	}
 
 	if stopLossOrder.Status == "FILLED" {
+		pnl, _ := GetLatestIncome(event)
+
 		event.Trade.Status = aggragates.Closed
+		event.Trade.Profit = pnl
+		event.Trade.USDProfit = pnl
 		return event, nil
 	}
 

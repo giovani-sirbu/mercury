@@ -9,6 +9,31 @@ import (
 	"strconv"
 )
 
+func GetLatestIncome(event events.Events) (float64, error) {
+	// Init futures client
+	client, clientError := event.Exchange.FuturesClient()
+	if clientError != nil {
+		return 0, clientError
+	}
+
+	// Fetch realized PnL from income history
+	income, incomeErr := client.GetIncomeHistory(event.Trade.Symbol)
+
+	if incomeErr != nil {
+		return 0, incomeErr
+	}
+
+	// Get the most recent PnL record
+	if len(income) > 0 {
+		latest := income[len(income)-1]
+		pnl, _ := strconv.ParseFloat(latest.Income, 64)
+
+		return pnl, nil
+	}
+
+	return 0, fmt.Errorf("couldn't fetch income")
+}
+
 func CloseFuturesTrade(event events.Events) (events.Events, error) {
 	// Init futures client
 	client, clientError := event.Exchange.FuturesClient()
@@ -59,20 +84,14 @@ func CloseFuturesTrade(event events.Events) (events.Events, error) {
 		_, closeThePositionErr = client.CreateFuturesOrder(string(closeSide), string(futures.OrderTypeMarket), event.Trade.Symbol, qtyStr, "", true)
 	}
 
-	// Fetch realized PnL from income history
-	income, incomeErr := client.GetIncomeHistory(event.Trade.Symbol)
+	pnl, incomeErr := GetLatestIncome(event)
 
 	if incomeErr != nil {
 		return events.Events{}, incomeErr
 	}
 
-	// Get the most recent PnL record
-	if len(income) > 0 {
-		latest := income[len(income)-1]
-		pnl, _ := strconv.ParseFloat(latest.Income, 64)
-		event.Trade.Profit = pnl
-		event.Trade.USDProfit = pnl
-	}
+	event.Trade.Profit = pnl
+	event.Trade.USDProfit = pnl
 
 	if closeThePositionErr != nil {
 		return events.Events{}, closeThePositionErr
