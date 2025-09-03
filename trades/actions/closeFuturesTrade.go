@@ -6,32 +6,57 @@ import (
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"math"
+	"sort"
 	"strconv"
+	"time"
 )
 
-func GetLatestIncome(event events.Events) (float64, error) {
+func GetLatestIncome(event events.Events, timeWindow time.Duration) (float64, error) {
 	// Init futures client
 	client, clientError := event.Exchange.FuturesClient()
 	if clientError != nil {
 		return 0, clientError
 	}
 
-	// Fetch realized PnL from income history
+	// Fetch income history for the symbol
 	income, incomeErr := client.GetIncomeHistory(event.Trade.Symbol)
-
 	if incomeErr != nil {
 		return 0, incomeErr
 	}
 
-	// Get the most recent PnL record
-	if len(income) > 0 {
-		latest := income[len(income)-1]
-		pnl, _ := strconv.ParseFloat(latest.Income, 64)
-
-		return pnl, nil
+	if len(income) == 0 {
+		return 0, fmt.Errorf("couldn't fetch income")
 	}
 
-	return 0, fmt.Errorf("couldn't fetch income")
+	// Sort income records by timestamp (descending, most recent first)
+	sort.Slice(income, func(i, j int) bool {
+		return income[i].Time > income[j].Time
+	})
+
+	// Group records within the same time window for the latest closed position
+	var totalPNL float64
+	latestTime := time.UnixMilli(income[0].Time) // Convert int64 to time.Time
+	for _, record := range income {
+		recordTime := time.UnixMilli(record.Time) // Convert int64 to time.Time
+		// Only include records within the time window of the latest record
+		if latestTime.Sub(recordTime) <= timeWindow {
+			if record.IncomeType == "REALIZED_PNL" {
+				pnl, err := strconv.ParseFloat(record.Income, 64)
+				if err != nil {
+					return 0, fmt.Errorf("failed to parse PNL: %v", err)
+				}
+				totalPNL += pnl
+			}
+		} else {
+			break // Exit once we go beyond the time window
+		}
+	}
+
+	if totalPNL == 0 {
+		return 0, fmt.Errorf("no realized PNL found in the time window")
+	}
+
+	return totalPNL, nil
 }
 
 func CloseFuturesTrade(event events.Events) (events.Events, error) {
@@ -84,7 +109,7 @@ func CloseFuturesTrade(event events.Events) (events.Events, error) {
 		_, closeThePositionErr = client.CreateFuturesOrder(string(closeSide), string(futures.OrderTypeMarket), event.Trade.Symbol, qtyStr, "", true)
 	}
 
-	pnl, incomeErr := GetLatestIncome(event)
+	pnl, incomeErr := GetLatestIncome(event, 2*time.Second)
 
 	if incomeErr != nil {
 		return events.Events{}, incomeErr

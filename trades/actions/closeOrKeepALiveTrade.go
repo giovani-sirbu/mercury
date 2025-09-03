@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"time"
 )
 
 func CloseOrKeepALiveTrade(event events.Events) (events.Events, error) {
@@ -26,7 +27,7 @@ func CloseOrKeepALiveTrade(event events.Events) (events.Events, error) {
 	}
 
 	if stopLossOrder.Status == "FILLED" {
-		pnl, _ := GetLatestIncome(event)
+		pnl, _ := GetLatestIncome(event, 2*time.Second)
 
 		event.Trade.Status = aggragates.Closed
 		event.Trade.Profit = pnl
