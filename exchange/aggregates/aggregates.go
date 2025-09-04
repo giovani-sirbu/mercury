@@ -444,6 +444,16 @@ type (
 		APIKeyPermission func() (APIKeyPermission, *common.APIError)
 	}
 
+	FuturesBalance struct {
+		AccountAlias       string `json:"accountAlias"`
+		Asset              string `json:"asset"`
+		Balance            string `json:"balance"`
+		CrossWalletBalance string `json:"crossWalletBalance"`
+		CrossUnPnl         string `json:"crossUnPnl"`
+		AvailableBalance   string `json:"availableBalance"`
+		MaxWithdrawAmount  string `json:"maxWithdrawAmount"`
+	}
+
 	FuturesActions struct {
 		CreateFuturesOrder      func(sideType string, orderType string, symbol string, quantity string, price string, reduceOnly bool) (CreateOrderResponse, *common.APIError)
 		ModifyFuturesOrderPrice func(symbol string, orderId int64, price string) (CreateOrderResponse, *common.APIError)
@@ -454,5 +464,6 @@ type (
 		SetSymbolLeverage       func(symbol string, leverage int) (SymbolLeverage, *common.APIError)
 		GetFuturesExchangeInfo  func() (ExchangeInfo, *common.APIError)
 		GetIncomeHistory        func(symbol string) ([]IncomeHistory, *common.APIError)
+		GetFuturesBalance       func() ([]FuturesBalance, *common.APIError)
 	}
 )

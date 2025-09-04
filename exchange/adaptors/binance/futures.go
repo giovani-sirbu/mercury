@@ -22,6 +22,7 @@ func GetFuturesBinanceActions(e aggregates.Exchange) aggregates.FuturesActions {
 		SetSymbolLeverage:       binanceStruct.SetSymbolLeverage,
 		GetFuturesExchangeInfo:  binanceStruct.GetFuturesExchangeInfo,
 		GetIncomeHistory:        binanceStruct.GetIncomeHistory,
+		GetFuturesBalance:       binanceStruct.GetFuturesBalance,
 	}
 	return actions
 }
@@ -207,4 +208,16 @@ func (e Binance) GetIncomeHistory(symbol string) ([]aggregates.IncomeHistory, *c
 
 	copier.Copy(&incomeHistory, &income)
 	return incomeHistory, ApiError(incomeErr)
+}
+
+func (e Binance) GetFuturesBalance() ([]aggregates.FuturesBalance, *common.APIError) {
+	var balance []aggregates.FuturesBalance
+	client, initErr := InitFuturesExchange(e)
+	if initErr != nil {
+		return balance, initErr
+	}
+	income, incomeErr := client.NewGetBalanceService().Do(context.Background())
+
+	copier.Copy(&balance, &income)
+	return balance, ApiError(incomeErr)
 }

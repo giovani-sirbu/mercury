@@ -36,13 +36,15 @@ func CreateFuturesOrders(event events.Events) (events.Events, error) {
 		return events.Events{}, precisionErr
 	}
 
-	// Set a initial amount value
-	usdAmount := 2.0
-	if len(event.Trade.History) > 0 {
-		// TODO: take user assets and use 10%
-		usdAmount = event.Trade.History[0].Quantity
-	} else {
-		return events.Events{}, fmt.Errorf("history is mandatory in v1")
+	// set default margin percentage amount
+	marginPercentage := event.Trade.StrategyPair.StrategySettings[0].MarginPercentage
+	if marginPercentage == 0 {
+		marginPercentage = 10 // default 10%
+	}
+	usdAmount := event.Trade.Exchange.Balance
+	usdAmount *= marginPercentage / 100
+	if usdAmount <= 0 {
+		return events.Events{}, fmt.Errorf("failed to set margin percentage amount")
 	}
 
 	// Calculate position value by the usd value
@@ -85,11 +87,13 @@ func CreateFuturesOrders(event events.Events) (events.Events, error) {
 	}
 
 	// Update history
-	if len(event.Trade.History) > 0 {
-		event.Trade.History = []aggragates.TradesHistory{{Price: price, Quantity: usdAmount, Type: orderSide, OrderId: order.OrderID, Status: "CREATED"}}
-	} else {
-		event.Trade.History = append(event.Trade.History, aggragates.TradesHistory{Price: price, Quantity: usdAmount, Type: orderSide, OrderId: order.OrderID, Status: "CREATED"})
-	}
+	event.Trade.History = append(event.Trade.History, aggragates.TradesHistory{
+		Price:    price,
+		Quantity: usdAmount / price,
+		Type:     orderSide,
+		OrderId:  order.OrderID,
+		Status:   "CREATED",
+	})
 
 	stopPriceStr := fmt.Sprintf("%.*f", priceFilter, stopPrice)
 	// Create Stop loss order

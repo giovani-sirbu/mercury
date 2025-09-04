@@ -31,6 +31,7 @@ type (
 		KeepAliveInterval   string  `bson:"keepAliveInterval" json:"keepAliveInterval"`
 		KlineInterval       string  `bson:"klineInterval" json:"klineInterval"`
 		CoolOffInMinutes    int     `bson:"coolOffInMinutes" json:"coolOffInMinutes"`
+		MarginPercentage    float64 `bson:"marginPercentage" json:"marginPercentage"`
 	}
 	ImpassePairs struct {
 		Symbol  string `bson:"symbol" json:"symbol"`
