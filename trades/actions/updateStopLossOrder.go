@@ -13,6 +13,11 @@ func UpdateStopLossOrder(event events.Events) (events.Events, error) {
 	leverage := int(event.Trade.StrategyPair.StrategySettings[0].Leverage)
 	// Store stop loss value
 	stopLoss := float64(event.Trade.StrategyPair.StrategySettings[0].StopLoss) * 0.01
+	trailingTakeProfit := event.Trade.StrategyPair.StrategySettings[0].TrailingTakeProfit
+
+	if trailingTakeProfit > 0 {
+		stopLoss = trailingTakeProfit
+	}
 
 	price := event.Trade.PositionPrice
 
