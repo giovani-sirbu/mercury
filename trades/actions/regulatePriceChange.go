@@ -21,16 +21,21 @@ import (
 //   - error: Nil if the price is valid, or an error if the current position price exceeds the adjusted last position price.
 func RegulatePriceChange(event events.Events) (events.Events, error) {
 	var lastPositionPrice float64
+	pricePositionError := false
 
 	if event.Trade.Inverse {
 		lastPositionPrice = trades.GetLatestTradePrice(event.Trade.History, "SELL")
 		lastPositionPrice += lastPositionPrice * (event.Trade.StrategyPair.StrategySettings[0].Percentage / 100)
+
+		pricePositionError = event.Trade.PositionPrice < lastPositionPrice
 	} else {
 		lastPositionPrice = trades.GetLatestTradePrice(event.Trade.History, "BUY")
 		lastPositionPrice -= lastPositionPrice * (event.Trade.StrategyPair.StrategySettings[0].Percentage / 100)
+
+		pricePositionError = event.Trade.PositionPrice > lastPositionPrice
 	}
 
-	if event.Trade.PositionPrice > lastPositionPrice {
+	if pricePositionError {
 		var err = fmt.Sprintf("Current price %f is bigger than last position price %f", event.Trade.PositionPrice, lastPositionPrice)
 		return events.Events{}, errors.New(err)
 	}
