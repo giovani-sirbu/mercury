@@ -55,18 +55,6 @@ func ShouldHold(event events.Events) (events.Events, error) {
 	// ✅ 1) AI Mode: If AI signals are enabled, use them instead
 	// ============================================================
 	if ai.UseAI {
-		if event.Trade.PositionType == "buy" && ai.AIMarketBearish {
-			shouldHold = true
-			holdReason = "AI: market is bearish"
-		}
-		if event.Trade.PositionType == "sell" && ai.AIMarketBullish {
-			shouldHold = true
-			holdReason = "AI: market is bullish"
-		}
-		if ai.AIAction == ActionHold {
-			shouldHold = true
-			holdReason = "AI: explicit HOLD recommendation"
-		}
 		if event.Trade.Inverse {
 			if event.Trade.PositionType == "buy" && ai.AIMarketBullish {
 				shouldHold = true
@@ -76,6 +64,19 @@ func ShouldHold(event events.Events) (events.Events, error) {
 				shouldHold = true
 				holdReason = "Inverse: AI says market is bearish"
 			}
+		} else {
+			if event.Trade.PositionType == "buy" && ai.AIMarketBearish {
+				shouldHold = true
+				holdReason = "AI: market is bearish"
+			}
+			if event.Trade.PositionType == "sell" && ai.AIMarketBullish {
+				shouldHold = true
+				holdReason = "AI: market is bullish"
+			}
+			if ai.AIAction == ActionHold {
+				shouldHold = true
+				holdReason = "AI: explicit HOLD recommendation"
+			}
 		}
 	}
 
@@ -83,14 +84,6 @@ func ShouldHold(event events.Events) (events.Events, error) {
 	// ✅ 2) Classic Cooldown: If AI is disabled, fallback to indicators
 	// ================================================================
 	if !ai.UseAI {
-		if event.Trade.PositionType == "buy" && cool.MarketBearish {
-			shouldHold = true
-			holdReason = "Classic: market is bearish"
-		}
-		if event.Trade.PositionType == "sell" && cool.MarketBullish {
-			shouldHold = true
-			holdReason = "Classic: market is bullish"
-		}
 		if event.Trade.Inverse {
 			if event.Trade.PositionType == "buy" && cool.MarketBullish {
 				shouldHold = true
@@ -99,6 +92,15 @@ func ShouldHold(event events.Events) (events.Events, error) {
 			if event.Trade.PositionType == "sell" && cool.MarketBearish {
 				shouldHold = true
 				holdReason = "Inverse: classic market is bearish"
+			}
+		} else {
+			if event.Trade.PositionType == "buy" && cool.MarketBearish {
+				shouldHold = true
+				holdReason = "Classic: market is bearish"
+			}
+			if event.Trade.PositionType == "sell" && cool.MarketBullish {
+				shouldHold = true
+				holdReason = "Classic: market is bullish"
 			}
 		}
 	}
