@@ -6,6 +6,7 @@ import (
 	"github.com/adshao/go-binance/v2/futures"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/jinzhu/copier"
+	"strconv"
 	"strings"
 )
 
@@ -134,14 +135,49 @@ func (e Binance) ModifyFuturesOrderPrice(symbol string, orderId int64, newPrice 
 		return updateResponse, ApiError(err)
 	}
 
-	// 2. Place a new order using the same quantity, side, and type but new price
+	// Parse new stop price
+	stopPrice, _ := strconv.ParseFloat(newPrice, 64)
+
+	// 2. Get current mark price
+	markPriceResp, err := client.NewPremiumIndexService().
+		Symbol(formattedSymbol).
+		Do(context.Background())
+	if err != nil {
+		return updateResponse, ApiError(err)
+	}
+	currPrice, _ := strconv.ParseFloat(markPriceResp[0].MarkPrice, 64)
+
+	// 3. Validate stop price relative to current price
+	if cancelResp.Side == futures.SideTypeSell && stopPrice >= currPrice {
+		return updateResponse, &common.APIError{Message: "Invalid stop: sell stop must be below current price"}
+	}
+	if cancelResp.Side == futures.SideTypeBuy && stopPrice <= currPrice {
+		return updateResponse, &common.APIError{Message: "Invalid stop: buy stop must be above current price"}
+	}
+
+	// 4. Check position before setting ReduceOnly
+	positions, err := client.NewGetPositionRiskService().Symbol(formattedSymbol).Do(context.Background())
+	if err != nil {
+		return updateResponse, ApiError(err)
+	}
+	reduceOnly := false
+	for _, p := range positions {
+		qty, _ := strconv.ParseFloat(p.PositionAmt, 64)
+		if qty != 0 {
+			reduceOnly = true
+			break
+		}
+	}
+
+	// 5. Place a new STOP_MARKET order with validated params
 	newOrder, err := client.NewCreateOrderService().
-		Symbol(cancelResp.Symbol).
+		Symbol(formattedSymbol).
 		Side(cancelResp.Side).
-		Type(cancelResp.Type).
+		Type(futures.OrderTypeStopMarket). // force STOP_MARKET
 		Quantity(cancelResp.OrigQuantity).
 		StopPrice(newPrice).
-		ReduceOnly(true).
+		ReduceOnly(reduceOnly).
+		WorkingType(futures.WorkingTypeMarkPrice). // safer trigger
 		Do(context.Background())
 	if err != nil {
 		return updateResponse, ApiError(err)
