@@ -64,12 +64,12 @@ func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
 	// check if symbol is whitelisted
 	if event.Trade.PositionPrice > 0 {
 		priceInString := strconv.FormatFloat(event.Trade.PositionPrice, 'f', -1, 64)
-		_, err := client.Sell(event.Trade.Symbol, 0.000001, priceInString)
+		_, err := client.Sell(event.Trade.Symbol, 0, priceInString)
 		if err != nil {
-			fmt.Println(err.Code, "-2010")
-			fmt.Println(err.Error(), "sell err")
-
-			return 0, 0, "", err
+			// -2010 is code for whitelisted symbol
+			if err.Code == -2010 {
+				return 0, 0, "", err
+			}
 		}
 	}
 
