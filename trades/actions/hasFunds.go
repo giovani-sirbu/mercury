@@ -61,6 +61,16 @@ func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
 		return 0, 0, "", errors.New("Spot & Margin Trading is not enabled")
 	}
 
+	// check if symbol is whitelisted
+	priceInString := strconv.FormatFloat(event.Trade.PositionPrice, 'f', -1, 64)
+	response, err := client.Sell(event.Trade.Symbol, 0.000001, priceInString)
+	fmt.Println(response, "sell res")
+	if err != nil {
+		fmt.Println(err.Error(), "sell err")
+
+		return 0, 0, "", err
+	}
+
 	historyCount := len(event.Trade.History)
 	strategySettings := event.Trade.StrategyPair.StrategySettings
 	var settingsIndex int
