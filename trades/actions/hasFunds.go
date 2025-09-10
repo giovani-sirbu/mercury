@@ -62,13 +62,15 @@ func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
 	}
 
 	// check if symbol is whitelisted
-	priceInString := strconv.FormatFloat(event.Trade.PositionPrice, 'f', -1, 64)
-	response, err := client.Sell(event.Trade.Symbol, 0.000001, priceInString)
-	fmt.Println(response, "sell res")
-	if err != nil {
-		fmt.Println(err.Error(), "sell err")
+	if event.Trade.PositionPrice > 0 {
+		priceInString := strconv.FormatFloat(event.Trade.PositionPrice, 'f', -1, 64)
+		_, err := client.Sell(event.Trade.Symbol, 0.000001, priceInString)
+		if err != nil {
+			fmt.Println(err.Code, "-2010")
+			fmt.Println(err.Error(), "sell err")
 
-		return 0, 0, "", err
+			return 0, 0, "", err
+		}
 	}
 
 	historyCount := len(event.Trade.History)
