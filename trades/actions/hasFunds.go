@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
+	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"strconv"
@@ -61,15 +62,39 @@ func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
 		return 0, 0, "", errors.New("Spot & Margin Trading is not enabled")
 	}
 
-	// check if symbol is whitelisted
-	if event.Trade.PositionPrice > 0 {
-		priceInString := strconv.FormatFloat(event.Trade.PositionPrice, 'f', -1, 64)
-		_, err := client.Sell(event.Trade.Symbol, 0, priceInString)
-		if err != nil {
-			// -2010 is code for whitelisted symbol
-			if err.Code == -2010 {
-				return 0, 0, "", err
+	// flag required when using CheckExchangeBalanceAndPermissions from Agora Service
+	if event.Params.FetchLatestPositionPrice {
+		// set default position type
+		if event.Trade.PositionType == "" {
+			event.Trade.PositionType = "buy"
+		}
+
+		// set price position
+		price, priceErr := client.GetPrice(event.Trade.Symbol)
+		if priceErr != nil {
+			log.Error(priceErr.Error(), "GetPrice", "hasFunds")
+		}
+		if price > 0 {
+			event.Trade.PositionPrice = ToFixed(price, int(event.Trade.StrategyPair.TradeFilters.PriceFilter))
+		}
+
+		// check has profit
+		if len(event.Trade.History) > 0 && event.Trade.PositionPrice > 0 {
+			eventHasProfit, _ := HasProfit(event)
+
+			if eventHasProfit.Params.Profit > 0 {
+				event.Trade.PositionType = "takeProfit"
 			}
+		}
+	}
+
+	// check if symbol is whitelisted
+	priceInString := strconv.FormatFloat(event.Trade.PositionPrice, 'f', -1, 64)
+	_, err := client.Sell(event.Trade.Symbol, 0, priceInString)
+	if err != nil {
+		// -2010 is code for whitelisted symbol
+		if err.Code == -2010 {
+			return 0, 0, "", err
 		}
 	}
 
