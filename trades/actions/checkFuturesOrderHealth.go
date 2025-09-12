@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/adshao/go-binance/v2/futures"
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"math"
 	"slices"
 	"strconv"
@@ -28,8 +29,8 @@ func CheckFuturesOrderHealth(event events.Events) (events.Events, error) {
 			return events.Events{}, listOrderErr
 		}
 		if len(orders) == 0 {
-			newEvent, newError := CloseFuturesTrade(event)
-			newEvent, newError = event.Events["updateTrade"](newEvent)
+			event.Trade.Status = aggragates.Closed
+			newEvent, newError := event.Events["updateTrade"](event)
 			return newEvent, newError
 		}
 	}
