@@ -22,19 +22,6 @@ func CheckFuturesOrderHealth(event events.Events) (events.Events, error) {
 		return events.Events{}, positionsErr
 	}
 
-	// If no position open and no open orders close trade and create a new one
-	if len(positions) == 0 {
-		orders, listOrderErr := client.ListOrders(event.Trade.Symbol)
-		if listOrderErr != nil {
-			return events.Events{}, listOrderErr
-		}
-		if len(orders) == 0 {
-			event.Trade.Status = aggragates.Closed
-			newEvent, newError := event.Events["updateTrade"](event)
-			return newEvent, newError
-		}
-	}
-
 	// Trade has active position on symbol and no pending order should create stop loss order
 	// Trade has active position on symbol and pending order is canceled, filled or expired should create stop loss order
 	var closeThePositionErr error
@@ -45,6 +32,19 @@ func CheckFuturesOrderHealth(event events.Events) (events.Events, error) {
 		stopLoss := float64(event.Trade.StrategyPair.StrategySettings[0].StopLoss) * 0.01
 		price := event.Params.OldPositionPrice
 		posAmt, _ := strconv.ParseFloat(p.PositionAmt, 64)
+
+		// If no position open and no open orders close trade and create a new one
+		if posAmt == 0 {
+			orders, listOrderErr := client.ListOrders(event.Trade.Symbol)
+			if listOrderErr != nil {
+				return events.Events{}, listOrderErr
+			}
+			if len(orders) == 0 {
+				event.Trade.Status = aggragates.Closed
+				newEvent, newError := event.Events["updateTrade"](event)
+				return newEvent, newError
+			}
+		}
 
 		absQty := math.Abs(posAmt)
 
