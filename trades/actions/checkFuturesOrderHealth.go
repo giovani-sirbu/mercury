@@ -39,7 +39,7 @@ func CheckFuturesOrderHealth(event events.Events) (events.Events, error) {
 			if listOrderErr != nil {
 				return events.Events{}, listOrderErr
 			}
-			if len(orders) == 0 {
+			if len(orders) == 0 { // TODO: close not filled open orders if time > kline time
 				event.Trade.Status = aggragates.Closed
 				newEvent, newError := event.Events["updateTrade"](event)
 				return newEvent, newError
@@ -67,6 +67,7 @@ func CheckFuturesOrderHealth(event events.Events) (events.Events, error) {
 
 		if event.Trade.PendingOrder == 0 {
 			createOrder, createOrderErr := client.CreateFuturesOrder(oppositeSide, string(futures.OrderTypeStopMarket), event.Trade.Symbol, quantityStr, stopPriceStr, true)
+			fmt.Println("CheckFuturesOrderHealth, pending order 0", oppositeSide, string(futures.OrderTypeStopMarket), event.Trade.Symbol, quantityStr, stopPriceStr)
 			if createOrderErr != nil {
 				return events.Events{}, createOrderErr
 			}
@@ -78,6 +79,7 @@ func CheckFuturesOrderHealth(event events.Events) (events.Events, error) {
 			orderClosedStatuses := []string{string(futures.OrderStatusTypeFilled), string(futures.OrderStatusTypeExpired), string(futures.OrderStatusTypeCanceled)}
 			if slices.Contains(orderClosedStatuses, stopLossOrder.Status) {
 				createOrder, createOrderErr := client.CreateFuturesOrder(oppositeSide, string(futures.OrderTypeStopMarket), event.Trade.Symbol, quantityStr, stopPriceStr, true)
+				fmt.Println("CheckFuturesOrderHealth", oppositeSide, string(futures.OrderTypeStopMarket), event.Trade.Symbol, quantityStr, stopPriceStr)
 				if createOrderErr != nil {
 					return events.Events{}, createOrderErr
 				}

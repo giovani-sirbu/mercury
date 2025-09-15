@@ -82,6 +82,7 @@ func CloseFuturesTrade(event events.Events) (events.Events, error) {
 	for _, order := range orders {
 		if event.Trade.PendingOrder == order.OrderID || event.Trade.History[0].OrderId == order.OrderID {
 			_, closeOrdersErr = client.CancelOrders(event.Trade.Symbol, order.OrderID)
+			fmt.Println("CloseFuturesTrade, close orders", event.Trade.Symbol, order.OrderID)
 		}
 	}
 
@@ -107,6 +108,7 @@ func CloseFuturesTrade(event events.Events) (events.Events, error) {
 
 		// Step 3: Close the position
 		_, closeThePositionErr = client.CreateFuturesOrder(string(closeSide), string(futures.OrderTypeMarket), event.Trade.Symbol, qtyStr, "", true)
+		fmt.Println("CloseFuturesTrade, close position", string(closeSide), string(futures.OrderTypeMarket), event.Trade.Symbol, qtyStr)
 	}
 
 	pnl, incomeErr := GetLatestIncome(event, 2*time.Second)

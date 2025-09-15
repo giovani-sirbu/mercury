@@ -80,6 +80,7 @@ func CreateFuturesOrders(event events.Events) (events.Events, error) {
 
 	// Create main Order
 	order, createErr := client.CreateFuturesOrder(orderSide, string(futures.OrderTypeLimit), event.Trade.Symbol, quantityStr, entryPriceStr, false)
+	fmt.Println("CreateFuturesOrders: Create order::", orderSide, string(futures.OrderTypeLimit), event.Trade.Symbol, quantityStr, entryPriceStr)
 
 	if createErr != nil {
 		fmt.Println("create main order error", orderSide, string(futures.OrderTypeLimit), event.Trade.Symbol, quantityStr, entryPriceStr, false)
@@ -98,6 +99,7 @@ func CreateFuturesOrders(event events.Events) (events.Events, error) {
 	stopPriceStr := fmt.Sprintf("%.*f", priceFilter, stopPrice)
 	// Create Stop loss order
 	createOrder, createStopLossErr := client.CreateFuturesOrder(oppositeSide, string(futures.OrderTypeStopMarket), event.Trade.Symbol, quantityStr, stopPriceStr, true)
+	fmt.Println("CreateFuturesOrders: Create stop loss order::", oppositeSide, string(futures.OrderTypeStopMarket), event.Trade.Symbol, quantityStr, stopPriceStr)
 
 	// Set stop loss order into pending order
 	event.Trade.PendingOrder = createOrder.OrderID

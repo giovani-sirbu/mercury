@@ -40,6 +40,8 @@ func UpdateStopLossOrder(event events.Events) (events.Events, error) {
 
 	createOrder, createStopLossErr := client.ModifyFuturesOrderPrice(event.Trade.Symbol, event.Trade.PendingOrder, stopPriceStr)
 
+	fmt.Println("UpdateStopLossOrder", event.Trade.Symbol, event.Trade.PositionType, price, stopPriceStr)
+
 	event.Trade.PendingOrder = createOrder.OrderID
 
 	if createStopLossErr != nil {
