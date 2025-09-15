@@ -80,7 +80,12 @@ func GetInitialBidByDepth(amount float64, depth float64, multiplier float64, per
 	return initialBid
 }
 
-func CalculateMinimumQuantity(depth int, initial, percent float64) float64 {
+func CalculateMinimumQuantity(trade aggragates.Trades) float64 {
+	strategySettings := trade.StrategyPair.StrategySettings[0]
+	depth := int(strategySettings.MinDepths)
+	initial := trade.StrategyPair.TradeFilters.MinNotional
+	percent := strategySettings.Percentage
+
 	latestSum := initial * (1 + (percent / 100))
 	var neededSum float64 = 0
 
@@ -91,6 +96,11 @@ func CalculateMinimumQuantity(depth int, initial, percent float64) float64 {
 
 	// increase amount by 5%
 	neededSum *= 1.05
+
+	// handle inverse
+	if trade.Inverse {
+		neededSum /= trade.PositionPrice
+	}
 
 	return neededSum
 }

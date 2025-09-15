@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
-	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"strconv"
@@ -60,32 +59,6 @@ func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
 	}
 	if !permissions.EnableSpotAndMarginTrading {
 		return 0, 0, "", errors.New("Spot & Margin Trading is not enabled")
-	}
-
-	// flag required when using CheckExchangeBalanceAndPermissions from Agora Service
-	if event.Params.FetchLatestPositionPrice {
-		// set default position type
-		if event.Trade.PositionType == "" {
-			event.Trade.PositionType = "buy"
-		}
-
-		// set price position
-		price, priceErr := client.GetPrice(event.Trade.Symbol)
-		if priceErr != nil {
-			log.Error(priceErr.Error(), "GetPrice", "hasFunds")
-		}
-		if price > 0 {
-			event.Trade.PositionPrice = ToFixed(price, int(event.Trade.StrategyPair.TradeFilters.PriceFilter))
-		}
-
-		// check has profit
-		if len(event.Trade.History) > 0 && event.Trade.PositionPrice > 0 {
-			eventHasProfit, _ := HasProfit(event)
-
-			if eventHasProfit.Params.Profit > 0 {
-				event.Trade.PositionType = "takeProfit"
-			}
-		}
 	}
 
 	// check if symbol is whitelisted

@@ -8,9 +8,6 @@ import (
 
 func main() {
 	/*
-		result := trades.CalculateMinimumQuantity(7, 5, 2.5) // depth, initial amount, percentage (as a decimal)
-		fmt.Println("Total needed sum:", result)
-
 		event := aggragates.Trades{
 			Inverse:       false,
 			PositionPrice: 10,
@@ -28,6 +25,9 @@ func main() {
 				},
 			},
 		}
+		result := trades.CalculateMinimumQuantity(event) // depth, initial amount, percentage (as a decimal)
+		fmt.Println("Total needed sum:", result)
+
 		initialBid, err := trades.CalculateInitialBid(560, event, 0)
 
 		fmt.Println(initialBid, err)

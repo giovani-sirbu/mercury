@@ -55,15 +55,14 @@ type (
 	}
 
 	Params struct {
-		OldPositionPrice         float64
-		Percentage               float64
-		OldPosition              string
-		PreventInfoLog           bool
-		Quantity                 float64
-		Profit                   float64
-		InverseUsedAmount        []UsedAmountResult
-		CoolDownIndicators       CoolDownIndicators
-		AIIndicators             AIIndicators
-		FetchLatestPositionPrice bool
+		OldPositionPrice   float64
+		Percentage         float64
+		OldPosition        string
+		PreventInfoLog     bool
+		Quantity           float64
+		Profit             float64
+		InverseUsedAmount  []UsedAmountResult
+		CoolDownIndicators CoolDownIndicators
+		AIIndicators       AIIndicators
 	}
 )
