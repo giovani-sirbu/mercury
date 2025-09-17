@@ -40,13 +40,11 @@ func GetLatestIncome(event events.Events, timeWindow time.Duration) (float64, er
 		recordTime := time.UnixMilli(record.Time) // Convert int64 to time.Time
 		// Only include records within the time window of the latest record
 		if latestTime.Sub(recordTime) <= timeWindow {
-			if record.IncomeType == "REALIZED_PNL" {
-				pnl, err := strconv.ParseFloat(record.Income, 64)
-				if err != nil {
-					return 0, fmt.Errorf("failed to parse PNL: %v", err)
-				}
-				totalPNL += pnl
+			pnl, err := strconv.ParseFloat(record.Income, 64)
+			if err != nil {
+				return 0, fmt.Errorf("failed to parse PNL: %v", err)
 			}
+			totalPNL += pnl
 		} else {
 			break // Exit once we go beyond the time window
 		}

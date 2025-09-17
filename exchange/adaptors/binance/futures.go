@@ -242,6 +242,17 @@ func (e Binance) GetIncomeHistory(symbol string) ([]aggregates.IncomeHistory, *c
 		IncomeType("REALIZED_PNL").
 		Do(context.Background())
 
+	fees, feesErr := client.NewGetIncomeHistoryService().
+		Symbol(formattedSymbol).
+		IncomeType("COMMISSION").
+		Do(context.Background())
+
+	if feesErr != nil {
+		incomeErr = feesErr
+	}
+
+	income = append(income, fees...)
+
 	copier.Copy(&incomeHistory, &income)
 	return incomeHistory, ApiError(incomeErr)
 }
