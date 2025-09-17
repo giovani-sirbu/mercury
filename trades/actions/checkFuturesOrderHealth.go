@@ -75,7 +75,14 @@ func CheckFuturesOrderHealth(event events.Events) (events.Events, error) {
 			minutes := int(timeSinceUpdated.Minutes())
 			klineInterval := IntervalToMinutes(event.Trade.StrategyPair.StrategySettings[0].KeepAliveInterval)
 
-			if len(orders) == 0 || minutes >= klineInterval {
+			if len(orders) == 0 {
+				event.Trade.Status = aggragates.Closed
+				newEvent, newError := event.Events["updateTrade"](event)
+				return newEvent, newError
+			} else if minutes >= klineInterval {
+				for _, order := range orders {
+					client.CancelOrders(event.Trade.Symbol, order.OrderID)
+				}
 				event.Trade.Status = aggragates.Closed
 				newEvent, newError := event.Events["updateTrade"](event)
 				return newEvent, newError
