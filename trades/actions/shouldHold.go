@@ -73,10 +73,10 @@ func ShouldHold(event events.Events) (events.Events, error) {
 				shouldHold = true
 				holdReason = "AI: market is bullish"
 			}
-			if ai.AIAction == ActionHold {
-				shouldHold = true
-				holdReason = "AI: explicit HOLD recommendation"
-			}
+		}
+		if ai.AIAction == ActionHold {
+			shouldHold = true
+			holdReason = "AI: explicit HOLD recommendation"
 		}
 	}
 
