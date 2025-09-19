@@ -76,6 +76,20 @@ func (a *TradeFilters) Scan(value interface{}) error {
 }
 
 // Value Marshal
+func (a StrategySettings) Value() (driver.Value, error) {
+	return json.Marshal(a)
+}
+
+// Scan Unmarshal
+func (a *StrategySettings) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New("type assertion to []byte failed")
+	}
+	return json.Unmarshal(b, &a)
+}
+
+// Value Marshal
 func (a ImpassePairs) Value() (driver.Value, error) {
 	return json.Marshal(a)
 }
