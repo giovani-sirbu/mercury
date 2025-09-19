@@ -119,7 +119,7 @@ func CheckFuturesOrderHealth(event events.Events) (events.Events, error) {
 			return newEvent, newError
 		} else {
 			stopLossOrder, _ := client.GetOrderById(event.Trade.Symbol, event.Trade.PendingOrder)
-			orderClosedStatuses := []string{string(futures.OrderStatusTypeFilled), string(futures.OrderStatusTypeExpired), string(futures.OrderStatusTypeCanceled)}
+			orderClosedStatuses := []string{string(futures.OrderStatusTypeExpired), string(futures.OrderStatusTypeCanceled)}
 			if slices.Contains(orderClosedStatuses, stopLossOrder.Status) {
 				createOrder, createOrderErr := client.CreateFuturesOrder(oppositeSide, string(futures.OrderTypeStopMarket), event.Trade.Symbol, quantityStr, stopPriceStr, true)
 				fmt.Println("CheckFuturesOrderHealth", oppositeSide, string(futures.OrderTypeStopMarket), event.Trade.Symbol, quantityStr, stopPriceStr)
