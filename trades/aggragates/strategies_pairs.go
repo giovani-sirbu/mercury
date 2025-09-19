@@ -15,25 +15,31 @@ type (
 		PriceFilter uint8   `bson:"priceFilter" json:"priceFilter" form:"priceFilter" xml:"priceFilter" validate:"required"`
 		MinNotional float64 `bson:"minNotional" json:"minNotional" form:"minNotional" xml:"minNotional" validate:"required"`
 	}
+	Timeframes struct {
+		MinTimeframes int      `bson:"minTimeframes" json:"minTimeframes"`
+		Values        []string `bson:"values" json:"values"`
+		Required      []string `bson:"required" json:"required"`
+	}
 	StrategySettings struct {
-		Tolerance           float64 `bson:"tolerance" json:"tolerance"`
-		MinDepths           float64 `bson:"minDepths" json:"minDepths"`
-		Depths              float64 `bson:"depths" json:"depths"`
-		ImpasseDepth        float64 `bson:"impasseDepths" json:"impasseDepths"`
-		TrailingTakeProfit  float64 `bson:"trailingTakeProfit" json:"trailingTakeProfit"`
-		InitialBid          float64 `bson:"initialBid" json:"initialBid"`
-		Percentage          float64 `bson:"percentage" json:"percentage"`
-		Multiplier          float64 `bson:"multiplier" json:"multiplier"`
-		Leverage            uint8   `bson:"leverage" json:"leverage"`
-		StopLoss            uint8   `bson:"stopLoss" json:"stopLoss"`
-		PriceAdjustment     float64 `bson:"priceAdjustment" json:"priceAdjustment"`
-		CancelTimeInMinutes int     `bson:"cancelTimeInMinutes" json:"cancelTimeInMinutes"`
-		KeepAliveInterval   string  `bson:"keepAliveInterval" json:"keepAliveInterval"`
-		KlineInterval       string  `bson:"klineInterval" json:"klineInterval"`
-		CoolOffInMinutes    int     `bson:"coolOffInMinutes" json:"coolOffInMinutes"`
-		MarginPercentage    float64 `bson:"marginPercentage" json:"marginPercentage"`
-		IncrementCoolOff    int     `bson:"incrementCoolOff" json:"incrementCoolOff"`
-		RangeIntervals      int     `bson:"rangeIntervals" json:"rangeIntervals"`
+		Tolerance           float64    `bson:"tolerance" json:"tolerance"`
+		MinDepths           float64    `bson:"minDepths" json:"minDepths"`
+		Depths              float64    `bson:"depths" json:"depths"`
+		ImpasseDepth        float64    `bson:"impasseDepths" json:"impasseDepths"`
+		TrailingTakeProfit  float64    `bson:"trailingTakeProfit" json:"trailingTakeProfit"`
+		InitialBid          float64    `bson:"initialBid" json:"initialBid"`
+		Percentage          float64    `bson:"percentage" json:"percentage"`
+		Multiplier          float64    `bson:"multiplier" json:"multiplier"`
+		Leverage            uint8      `bson:"leverage" json:"leverage"`
+		StopLoss            uint8      `bson:"stopLoss" json:"stopLoss"`
+		PriceAdjustment     float64    `bson:"priceAdjustment" json:"priceAdjustment"`
+		CancelTimeInMinutes int        `bson:"cancelTimeInMinutes" json:"cancelTimeInMinutes"`
+		KeepAliveInterval   string     `bson:"keepAliveInterval" json:"keepAliveInterval"`
+		KlineInterval       string     `bson:"klineInterval" json:"klineInterval"`
+		CoolOffInMinutes    int        `bson:"coolOffInMinutes" json:"coolOffInMinutes"`
+		MarginPercentage    float64    `bson:"marginPercentage" json:"marginPercentage"`
+		IncrementCoolOff    int        `bson:"incrementCoolOff" json:"incrementCoolOff"`
+		RangeIntervals      int        `bson:"rangeIntervals" json:"rangeIntervals"`
+		Timeframes          Timeframes `bson:"timeframes" json:"timeframes"`
 	}
 	ImpassePairs struct {
 		Symbol  string `bson:"symbol" json:"symbol"`
