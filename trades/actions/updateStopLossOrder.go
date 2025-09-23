@@ -45,6 +45,10 @@ func UpdateStopLossOrder(event events.Events) (events.Events, error) {
 	event.Trade.PendingOrder = createOrder.OrderID
 
 	if createStopLossErr != nil {
+		_, healthError := CheckFuturesOrderHealth(event)
+		if healthError != nil {
+			fmt.Println("update stop loss check health error", healthError)
+		}
 		fmt.Println("update stop loss order error", string(futures.OrderTypeStopMarket), event.Trade.Symbol, stopPriceStr, true)
 		return events.Events{}, createStopLossErr
 	}
