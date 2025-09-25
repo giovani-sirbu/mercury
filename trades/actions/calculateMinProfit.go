@@ -7,7 +7,7 @@ import (
 func CalculateMinProfit(trade aggragates.Trades) float64 {
 	profit := trade.StrategyPair.TradeFilters.MinNotional * (trade.StrategyPair.StrategySettings[0].Percentage / 100)
 	if trade.Inverse {
-		profit = profit / trade.PositionPrice
+		profit /= trade.PositionPrice
 	}
 	return profit
 }

@@ -23,7 +23,7 @@ func Buy(event events.Events) (events.Events, error) {
 	}
 
 	quantity := trades.GetLatestQuantityByHistory(event.Trade.History, quantityType)
-	buyQty, sellQty := trades.GetQuantities(event.Trade.History)
+	buyQty, sellQty := trades.GetQuantitiesOld(event.Trade.History)
 
 	historyCount := len(event.Trade.History)
 	strategySettings := event.Trade.StrategyPair.StrategySettings

@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func GetQuantities(history []aggragates.TradesHistory) (float64, float64) {
+func GetQuantitiesOld(history []aggragates.TradesHistory) (float64, float64) {
 	var buyTotal float64
 	var sellTotal float64
 

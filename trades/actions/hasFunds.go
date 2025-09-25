@@ -26,8 +26,8 @@ func GetAssetBudget(assets []aggregates.UserAssetRecord, assetSymbol string) flo
 }
 
 func GetUsedQuantities(event events.Events) float64 {
-	buyQuantity, sellQuantity := trades.GetQuantities(event.Trade.History)
-	feeInBase, _ := CalculateFees(event.Trade.History, event.Trade.Symbol)
+	buyQuantity, sellQuantity := trades.GetQuantitiesOld(event.Trade.History)
+	feeInBase, _ := CalculateFeesOld(event)
 	quantity := buyQuantity - sellQuantity - feeInBase
 
 	if event.Trade.Inverse {
@@ -96,11 +96,11 @@ func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
 	}
 
 	if sellAction {
-		buyQty, sellQty := trades.GetQuantities(event.Trade.History)
+		buyQty, sellQty := trades.GetQuantitiesOld(event.Trade.History)
 		assetSymbol = pairSymbols[0]
 		neededQuantity = buyQty - sellQty
 
-		feeInBase, feeInQuote := CalculateFees(event.Trade.History, event.Trade.Symbol)
+		feeInBase, feeInQuote := CalculateFeesOld(event)
 		neededQuantity -= feeInBase
 
 		if event.Trade.Inverse {

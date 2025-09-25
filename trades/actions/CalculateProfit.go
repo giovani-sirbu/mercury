@@ -1,35 +1,18 @@
 package actions
 
 import (
-	"github.com/giovani-sirbu/mercury/log"
-	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"strings"
+	"github.com/giovani-sirbu/mercury/events"
 )
 
-func CalculateProfit(trade aggragates.Trades) float64 {
-	var fee float64
-	var dust float64
+// CalculateProfit is used in Agora service to return total profit for closed pending orders
+func CalculateProfit(event events.Events) float64 {
+	trade := event.Trade
 
-	sellTotal, buyTotal := GetProfit(trade.History)
-	profit := sellTotal - buyTotal                                      // Get profit from history
-	feeInBase, feeInQuote := CalculateFees(trade.History, trade.Symbol) // Calculate fees
-	fee = feeInQuote
-	dust = trade.Dust * trade.PositionPrice
-	log.Debug("Dust:", dust)
+	// get trade profit
+	profit := GetProfit(trade)
 
-	// Get profit and fees for inverse case
-	if trade.Inverse {
-		fee = feeInBase
-		sellTotal, buyTotal = GetProfitInBase(trade.History)
-		profit = buyTotal - sellTotal
-		split := strings.Split(trade.Symbol, "/")
-		trade.ProfitAsset = split[0]
-		dust = trade.Dust
-		log.Debug("Inverse dust:", dust)
-	}
+	// return event fees
+	fees := GetFees(event)
 
-	log.Debug("Total profit", profit+dust-fee)
-	log.Debug("Profit info", profit, dust, fee)
-
-	return profit + dust - fee
+	return profit - fees
 }

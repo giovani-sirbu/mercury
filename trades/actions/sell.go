@@ -23,8 +23,8 @@ func Sell(event events.Events) (events.Events, error) {
 	if clientError != nil {
 		return SaveError(event, clientError)
 	}
-	buyQuantity, sellQuantity := trades.GetQuantities(event.Trade.History)
-	feeInBase, feeInQuote := CalculateFees(event.Trade.History, event.Trade.Symbol)
+	buyQuantity, sellQuantity := trades.GetQuantitiesOld(event.Trade.History)
+	feeInBase, feeInQuote := CalculateFeesOld(event)
 	quantity := buyQuantity - sellQuantity - feeInBase
 
 	if event.Trade.Inverse {
