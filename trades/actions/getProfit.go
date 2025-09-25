@@ -67,7 +67,7 @@ func GetProfit(trade aggragates.Trades) float64 {
 		profit = buyTotal - sellTotal + dust
 	}
 
-	log.Debug(fmt.Sprintf("getProfit: profit(%f), dust(%f), sellTotal(%f), buyTotal(%f), inverse(%t)", profit, dust, sellTotal, buyTotal, trade.Inverse))
+	log.Debug(fmt.Sprintf("getProfit(%s, #%d): profit(%f), dust(%f), sellTotal(%f), buyTotal(%f), inverse(%t)", trade.Symbol, trade.ID, profit, dust, sellTotal, buyTotal, trade.Inverse))
 
 	return profit
 }
