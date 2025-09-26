@@ -56,20 +56,20 @@ func ShouldHold(event events.Events) (events.Events, error) {
 	// ============================================================
 	if ai.UseAI {
 		if event.Trade.Inverse {
-			if event.Trade.PositionType == "buy" && ai.AIMarketBullish {
+			if event.Trade.PositionType == "stopLoss" && ai.AIMarketBullish {
 				shouldHold = true
 				holdReason = "Inverse: AI says market is bullish"
 			}
-			if event.Trade.PositionType == "sell" && ai.AIMarketBearish {
+			if event.Trade.PositionType == "takeProfit" && ai.AIMarketBearish {
 				shouldHold = true
 				holdReason = "Inverse: AI says market is bearish"
 			}
 		} else {
-			if event.Trade.PositionType == "buy" && ai.AIMarketBearish {
+			if event.Trade.PositionType == "stopLoss" && ai.AIMarketBearish {
 				shouldHold = true
 				holdReason = "AI: market is bearish"
 			}
-			if event.Trade.PositionType == "sell" && ai.AIMarketBullish {
+			if event.Trade.PositionType == "takeProfit" && ai.AIMarketBullish {
 				shouldHold = true
 				holdReason = "AI: market is bullish"
 			}
@@ -85,20 +85,20 @@ func ShouldHold(event events.Events) (events.Events, error) {
 	// ================================================================
 	if !ai.UseAI {
 		if event.Trade.Inverse {
-			if event.Trade.PositionType == "buy" && cool.MarketBullish {
+			if event.Trade.PositionType == "stopLoss" && cool.MarketBullish {
 				shouldHold = true
 				holdReason = "Inverse: classic market is bullish"
 			}
-			if event.Trade.PositionType == "sell" && cool.MarketBearish {
+			if event.Trade.PositionType == "takeProfit" && cool.MarketBearish {
 				shouldHold = true
 				holdReason = "Inverse: classic market is bearish"
 			}
 		} else {
-			if event.Trade.PositionType == "buy" && cool.MarketBearish {
+			if event.Trade.PositionType == "stopLoss" && cool.MarketBearish {
 				shouldHold = true
 				holdReason = "Classic: market is bearish"
 			}
-			if event.Trade.PositionType == "sell" && cool.MarketBullish {
+			if event.Trade.PositionType == "takeProfit" && cool.MarketBullish {
 				shouldHold = true
 				holdReason = "Classic: market is bullish"
 			}
