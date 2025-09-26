@@ -64,10 +64,10 @@ func HasProfit(event events.Events) (events.Events, error) {
 		profitt = buyTotal - sellTotal
 	}
 
+	fmt.Println("")
 	fmt.Println("getQuantity:", quantity, historyType, "[NEW] vs ", quantityy, historyTypee, "[OLD]")
 	fmt.Println("getProfit:", profit, "[NEW] vs ", profitt, "[OLD]")
 	fmt.Println("getFees:", fees, "[NEW] vs ", fee, "[OLD]")
-	fmt.Println("")
 	// ------ just for debug
 
 	if profit < minProfit {
