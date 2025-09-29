@@ -1,7 +1,6 @@
 package actions
 
 import (
-	"errors"
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/log"
@@ -39,22 +38,15 @@ func GetFees(event events.Events) float64 {
 			default:
 				// handle price for fees like BNB
 				if !slices.Contains([]string{baseSymbol, quoteSymbol}, fee.Asset) {
-					data.Price = fee.Fee
-
 					feeAssetPrice, _ := getSymbolPrice(event, fee.Asset)
 					if feeAssetPrice > 0 {
-						data.Price *= feeAssetPrice
+						feesInQuote += fee.Fee * feeAssetPrice
 					}
 
 					profitAssetPrice, _ := getSymbolPrice(event, event.Trade.ProfitAsset)
 					if profitAssetPrice > 0 {
-						data.Price /= profitAssetPrice
+						feesInBase += feesInQuote / profitAssetPrice
 					}
-
-					log.Debug(fee.Asset, fee.Fee, feeAssetPrice, profitAssetPrice, "getFees 1")
-
-					// format price
-					feesInBase += ToFixed(data.Price, int(event.Trade.StrategyPair.TradeFilters.PriceFilter))
 				}
 			}
 		}
@@ -73,10 +65,8 @@ func GetFees(event events.Events) float64 {
 
 // getSymbolPrice return symbol real time price
 func getSymbolPrice(event events.Events, asset string) (float64, error) {
-	log.Debug("getSymbolPrice: ", asset)
-
 	if slices.Contains([]string{"USDT", "USDC"}, asset) {
-		return 0, errors.New(fmt.Sprintf("getSymbolPrice invalid asset: %s", asset))
+		return event.Trade.PositionPrice, nil
 	}
 
 	symbol := fmt.Sprintf("%s/USDC", asset)
@@ -86,8 +76,6 @@ func getSymbolPrice(event events.Events, asset string) (float64, error) {
 
 	// default price fetched from cache
 	price := wsPrices[symbol]
-
-	log.Debug("getSymbolPrice: ", symbol, price)
 
 	// fallback: fetch price from exchange if cache price no available
 	if wsPrices[symbol] == 0 {
