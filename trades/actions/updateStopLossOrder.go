@@ -4,7 +4,11 @@ import (
 	"fmt"
 	"github.com/adshao/go-binance/v2/futures"
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"strconv"
 )
+
+const UpdateStopLossStatus = "UPDATED_STOP_LOSS"
 
 func UpdateStopLossOrder(event events.Events) (events.Events, error) {
 	// Init futures client
@@ -14,9 +18,17 @@ func UpdateStopLossOrder(event events.Events) (events.Events, error) {
 	// Store stop loss value
 	stopLoss := float64(event.Trade.StrategyPair.StrategySettings[0].StopLoss) * 0.01
 	trailingTakeProfit := event.Trade.StrategyPair.StrategySettings[0].TrailingTakeProfit
+	takeProfitPercentage := event.Trade.StrategyPair.StrategySettings[0].Percentage
+	tolerance := event.Trade.StrategyPair.StrategySettings[0].Tolerance
 
 	if trailingTakeProfit > 0 {
 		stopLoss = trailingTakeProfit
+	}
+
+	lastHistoryStatus := event.Trade.History[len(event.Trade.History)-1].Status
+
+	if takeProfitPercentage > 0 && lastHistoryStatus != UpdateStopLossStatus {
+		stopLoss = takeProfitPercentage - tolerance
 	}
 
 	price := event.Trade.PositionPrice
@@ -52,6 +64,15 @@ func UpdateStopLossOrder(event events.Events) (events.Events, error) {
 		fmt.Println("update stop loss order error", string(futures.OrderTypeStopMarket), event.Trade.Symbol, stopPriceStr, true)
 		return events.Events{}, createStopLossErr
 	}
+
+	orderQty, _ := strconv.ParseFloat(createOrder.OrigQuantity, 64)
+	event.Trade.History = append(event.Trade.History, aggragates.TradesHistory{
+		Price:    price,
+		Quantity: orderQty,
+		Type:     createOrder.Side,
+		OrderId:  createOrder.OrderID,
+		Status:   UpdateStopLossStatus,
+	})
 
 	return event, nil
 }
