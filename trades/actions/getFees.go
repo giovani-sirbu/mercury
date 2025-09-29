@@ -51,6 +51,8 @@ func GetFees(event events.Events) float64 {
 						data.Price /= profitAssetPrice
 					}
 
+					log.Debug(fee.Asset, fee.Fee, feeAssetPrice, profitAssetPrice, "getFees 1")
+
 					// format price
 					feesInBase += ToFixed(data.Price, int(event.Trade.StrategyPair.TradeFilters.PriceFilter))
 				}
@@ -71,6 +73,8 @@ func GetFees(event events.Events) float64 {
 
 // getSymbolPrice return symbol real time price
 func getSymbolPrice(event events.Events, asset string) (float64, error) {
+	log.Debug("getSymbolPrice: ", asset)
+
 	if slices.Contains([]string{"USDT", "USDC"}, asset) {
 		return 0, errors.New(fmt.Sprintf("getSymbolPrice invalid asset: %s", asset))
 	}
@@ -83,14 +87,15 @@ func getSymbolPrice(event events.Events, asset string) (float64, error) {
 	// default price fetched from cache
 	price := wsPrices[symbol]
 
+	log.Debug("getSymbolPrice: ", symbol, price)
+
 	// fallback: fetch price from exchange if cache price no available
 	if wsPrices[symbol] == 0 {
 		client, clientErr := event.Exchange.Client()
 		if clientErr != nil {
 			return 0, clientErr
 		}
-		baseSymbol, quoteSymbol := splitSymbol(symbol)
-		clientPrice, priceErr := client.GetPrice(fmt.Sprintf("%s%s", baseSymbol, quoteSymbol))
+		clientPrice, priceErr := client.GetPrice(symbol)
 
 		fmt.Println("client.GetPrice for: ", symbol)
 
