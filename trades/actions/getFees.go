@@ -45,7 +45,7 @@ func GetFees(event events.Events) float64 {
 
 					profitAssetPrice, _ := getSymbolPrice(event, event.Trade.ProfitAsset)
 					if profitAssetPrice > 0 {
-						feesInBase += feesInQuote / profitAssetPrice
+						feesInBase += fee.Fee * feeAssetPrice / profitAssetPrice
 					}
 				}
 			}
