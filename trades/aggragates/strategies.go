@@ -12,5 +12,6 @@ type (
 		Impasse  bool  `form:"impasse" bson:"impasse" json:"impasse"`
 		Cooldown bool  `form:"cooldown" bson:"cooldown" json:"cooldown"`
 		UseAI    bool  `form:"useAI" bson:"useAI" json:"useAI"`
+		SkipHold bool  `form:"skipHold" bson:"skipHold" json:"skipHold"`
 	}
 )
