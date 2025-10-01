@@ -85,8 +85,6 @@ func getSymbolPrice(event events.Events, asset string) (float64, error) {
 		}
 		clientPrice, priceErr := client.GetPrice(symbol)
 
-		fmt.Println("client.GetPrice for: ", symbol)
-
 		if priceErr != nil {
 			return 0, priceErr
 		}

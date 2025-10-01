@@ -17,15 +17,15 @@ func ParentTradeHasProfit(event events.Events) (events.Events, error) {
 		Quantity: quantity,
 		Price:    trade.PositionPrice,
 	})
+
+	// get gross profit
 	profit := GetProfit(trade)
 
-	// return event fees
+	// return event fees & multiply by 2 to simulate total fees for the sell event
 	fees := GetFees(event)
-
-	// simulate sell fees also which are total buy sees multiply by 2
 	fees *= 2
 
-	// subtract fees from gross profit
+	// subtract fees and return net profit
 	profit -= fees
 
 	// gen children profits

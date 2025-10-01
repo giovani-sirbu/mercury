@@ -36,10 +36,7 @@ func GetProfitInBase(history []aggragates.TradesHistory) (float64, float64) {
 }
 
 func GetProfit(trade aggragates.Trades) float64 {
-	var buyTotal float64
-	var sellTotal float64
-	var dust float64
-	var profit float64
+	var buyTotal, sellTotal, dust, profit float64
 
 	for _, data := range trade.History {
 		if strings.ToLower(data.Type) == "buy" {

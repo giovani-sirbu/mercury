@@ -5,6 +5,7 @@ import (
 	"github.com/adshao/go-binance/v2/common"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
+	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"strconv"
@@ -87,5 +88,8 @@ func Sell(event events.Events) (events.Events, error) {
 	if err != nil {
 		return SaveError(event, err)
 	}
+
+	log.Debug(fmt.Sprintf("Sell(TradeID:#%d): PositionPrice(%f), quantity(%f)", event.Trade.ID, event.Trade.PositionPrice, quantity))
+
 	return event, nil
 }

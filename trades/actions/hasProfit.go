@@ -3,13 +3,11 @@ package actions
 import (
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
 func HasProfit(event events.Events) (events.Events, error) {
-	// deduct strategy settings tolerance from position price to simulate unrealised PnL
-	event.Trade.PositionPrice = subtractToleranceFromPrice(event.Trade)
-
 	// get trade quantities and history type
 	quantity, historyType := GetQuantities(event)
 
@@ -18,14 +16,14 @@ func HasProfit(event events.Events) (events.Events, error) {
 	trade.History = append(trade.History, aggragates.TradesHistory{
 		Type:     historyType,
 		Quantity: quantity,
-		Price:    trade.PositionPrice,
+		Price:    subtractToleranceFromPrice(event.Trade), // deduct strategy settings tolerance from position price to simulate unrealised PnL
 	})
+
+	// get gross profit
 	profit := GetProfit(trade)
 
-	// return event fees
+	// return event fees & multiply by 2 to simulate total fees for the sell event
 	fees := GetFees(event)
-
-	// simulate sell fees also which are total buy sees multiply by 2
 	fees *= 2
 
 	// subtract fees and return net profit
@@ -33,50 +31,17 @@ func HasProfit(event events.Events) (events.Events, error) {
 
 	// assign net profit to trade
 	event.Trade.Profit = profit
+	event.Params.Profit = profit
 
 	// get min profit
 	minProfit := CalculateMinProfit(event.Trade)
 
-	// ------ just for debug
-	/*
-		simulateHistory := event.Trade.History
-		feeInBase, feeInQuote := CalculateFeesOld(event)
-		buyQty, sellQty := trades.GetQuantitiesOld(event.Trade.History)
-		quantityy := buyQty - sellQty
-		historyTypee := "sell"
-
-		if event.Trade.Inverse {
-			buyQuantity := trades.GetQuantityInQuote(event.Trade.History, "BUY")
-			sellQuantity := trades.GetQuantityInQuote(event.Trade.History, "SELL")
-			quantityy = (buyQuantity - sellQuantity) / event.Trade.PositionPrice
-			quantityy = ToFixed(quantityy, int(event.Trade.StrategyPair.TradeFilters.LotSize))
-			historyTypee = "buy"
-		}
-
-		simulateHistory = append(simulateHistory, aggragates.TradesHistory{Type: historyTypee, Quantity: quantityy, Price: event.Trade.PositionPrice})
-		sellTotal, buyTotal := GetProfitOld(simulateHistory)
-		profitt := sellTotal - buyTotal
-		fee := feeInQuote
-
-		if event.Trade.Inverse {
-			fee = feeInBase
-			sellTotal, buyTotal = GetProfitInBase(simulateHistory)
-			profitt = buyTotal - sellTotal
-		}
-
-		fmt.Println("")
-		fmt.Println("getQuantity:", quantity, historyType, "[NEW] vs ", quantityy, historyTypee, "[OLD]")
-		fmt.Println("getProfit:", profit, "[NEW] vs ", profitt, "[OLD]")
-		fmt.Println("getFees:", fees, "[NEW] vs ", fee, "[OLD]")
-	*/
-	// ------ just for debug
+	log.Debug(fmt.Sprintf("hasProfit(TradeID:#%d): PositionPrice(%f), minProfit(%f), fees(%f), netProfit(%f)", event.Trade.ID, event.Trade.PositionPrice, minProfit, fees, profit))
 
 	if profit < minProfit {
 		msg := fmt.Sprintf("profit(%f) is smaller than min profit(%f) for symbol %s | trade_id: %d | user_id: %d", profit, minProfit, event.Trade.Symbol, event.Trade.ID, event.Trade.UserID)
 		return event, fmt.Errorf(msg)
 	}
-
-	event.Params.Profit = profit
 
 	fmt.Println("")
 
