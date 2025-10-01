@@ -3,7 +3,6 @@ package actions
 import (
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
-	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
@@ -39,35 +38,37 @@ func HasProfit(event events.Events) (events.Events, error) {
 	minProfit := CalculateMinProfit(event.Trade)
 
 	// ------ just for debug
-	simulateHistory := event.Trade.History
-	feeInBase, feeInQuote := CalculateFeesOld(event)
-	buyQty, sellQty := trades.GetQuantitiesOld(event.Trade.History)
-	quantityy := buyQty - sellQty
-	historyTypee := "sell"
+	/*
+		simulateHistory := event.Trade.History
+		feeInBase, feeInQuote := CalculateFeesOld(event)
+		buyQty, sellQty := trades.GetQuantitiesOld(event.Trade.History)
+		quantityy := buyQty - sellQty
+		historyTypee := "sell"
 
-	if event.Trade.Inverse {
-		buyQuantity := trades.GetQuantityInQuote(event.Trade.History, "BUY")
-		sellQuantity := trades.GetQuantityInQuote(event.Trade.History, "SELL")
-		quantityy = (buyQuantity - sellQuantity) / event.Trade.PositionPrice
-		quantityy = ToFixed(quantityy, int(event.Trade.StrategyPair.TradeFilters.LotSize))
-		historyTypee = "buy"
-	}
+		if event.Trade.Inverse {
+			buyQuantity := trades.GetQuantityInQuote(event.Trade.History, "BUY")
+			sellQuantity := trades.GetQuantityInQuote(event.Trade.History, "SELL")
+			quantityy = (buyQuantity - sellQuantity) / event.Trade.PositionPrice
+			quantityy = ToFixed(quantityy, int(event.Trade.StrategyPair.TradeFilters.LotSize))
+			historyTypee = "buy"
+		}
 
-	simulateHistory = append(simulateHistory, aggragates.TradesHistory{Type: historyTypee, Quantity: quantityy, Price: event.Trade.PositionPrice})
-	sellTotal, buyTotal := GetProfitOld(simulateHistory)
-	profitt := sellTotal - buyTotal
-	fee := feeInQuote
+		simulateHistory = append(simulateHistory, aggragates.TradesHistory{Type: historyTypee, Quantity: quantityy, Price: event.Trade.PositionPrice})
+		sellTotal, buyTotal := GetProfitOld(simulateHistory)
+		profitt := sellTotal - buyTotal
+		fee := feeInQuote
 
-	if event.Trade.Inverse {
-		fee = feeInBase
-		sellTotal, buyTotal = GetProfitInBase(simulateHistory)
-		profitt = buyTotal - sellTotal
-	}
+		if event.Trade.Inverse {
+			fee = feeInBase
+			sellTotal, buyTotal = GetProfitInBase(simulateHistory)
+			profitt = buyTotal - sellTotal
+		}
 
-	fmt.Println("")
-	fmt.Println("getQuantity:", quantity, historyType, "[NEW] vs ", quantityy, historyTypee, "[OLD]")
-	fmt.Println("getProfit:", profit, "[NEW] vs ", profitt, "[OLD]")
-	fmt.Println("getFees:", fees, "[NEW] vs ", fee, "[OLD]")
+		fmt.Println("")
+		fmt.Println("getQuantity:", quantity, historyType, "[NEW] vs ", quantityy, historyTypee, "[OLD]")
+		fmt.Println("getProfit:", profit, "[NEW] vs ", profitt, "[OLD]")
+		fmt.Println("getFees:", fees, "[NEW] vs ", fee, "[OLD]")
+	*/
 	// ------ just for debug
 
 	if profit < minProfit {
@@ -76,6 +77,8 @@ func HasProfit(event events.Events) (events.Events, error) {
 	}
 
 	event.Params.Profit = profit
+
+	fmt.Println("")
 
 	return event, nil
 }

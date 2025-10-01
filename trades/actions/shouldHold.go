@@ -115,11 +115,10 @@ func ShouldHold(event events.Events) (events.Events, error) {
 
 		if ai.UseAI && len(ai.StayOutReasons) > 0 {
 			log.Printf("📋 StayOutReasons: %v", ai.StayOutReasons)
-			holdReason += fmt.Sprintf(" | StayOutReasons: %v", ai.StayOutReasons)
+			//holdReason += fmt.Sprintf(" | StayOutReasons: %v", ai.StayOutReasons)
 		}
 
-		err := fmt.Errorf("Position %s was held: %s",
-			event.Trade.PositionType, holdReason)
+		err := fmt.Errorf("Position %s was held: %s", event.Trade.PositionType, holdReason)
 		return SaveError(event, err)
 	}
 
