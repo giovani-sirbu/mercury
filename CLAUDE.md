@@ -1,13 +1,16 @@
-# Trading Bot — Microservices + Mobile App
+# Trading Bot — Microservices + Mobile App + Web Dashboard
 
 ## Project
-A crypto trading platform: Go microservices backend for automated trading on Binance (spot and futures) + React Native mobile app. Backend services communicate via Kafka topics and HTTP calls. Shared Go logic lives in the `mercury` library.
+A crypto trading platform: Go microservices backend for automated trading on Binance (spot and futures) + React Native mobile app + Next.js web dashboard. Backend services communicate via Kafka topics and HTTP calls. Shared Go logic lives in the `mercury` library.
+
+Full platform architecture and cross-service map: `../CLAUDE.md` (root)
 
 ## Services
 
 | Service | Type | Purpose |
 |---|---|---|
 | **hermatic** | React Native app | Mobile trading dashboard — auth, trade management, stats, exchange config |
+| **web-dashboard** | Next.js app | Web admin dashboard — trades, users, backtests, settings |
 | **agora** | Go service | Trade management — CRUD, exchanges, settings, admin |
 | **hermes** | Go service | Core trading engine — buy/sell decisions, price management |
 | **hellenes** | Go service | User service — auth, accounts, sessions |
