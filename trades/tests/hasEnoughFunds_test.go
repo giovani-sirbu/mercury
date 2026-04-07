@@ -8,10 +8,6 @@ import (
 	"testing"
 )
 
-func EmptyUpdateTrade(event events.Events) (events.Events, error) {
-	return event, nil
-}
-
 func SimpleCaseHasEnoughFunds() events.Events {
 	var tradesHistory []aggragates.TradesHistory
 	tradesHistory = append(tradesHistory, aggragates.TradesHistory{Quantity: 2, Price: 5.029, Type: "BUY"})

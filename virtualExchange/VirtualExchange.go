@@ -217,6 +217,14 @@ func setCustomActions(customActions aggregates.Actions, assets []aggregates.User
 		return price, nil
 	}
 
+	customActions.APIKeyPermission = func() (aggregates.APIKeyPermission, *common.APIError) {
+		return aggregates.APIKeyPermission{
+			EnableReading:              true,
+			EnableSpotAndMarginTrading: true,
+			EnableFutures:              true,
+		}, nil
+	}
+
 	return customActions
 }
 
