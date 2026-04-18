@@ -2,69 +2,46 @@ package messagebroker
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"fmt"
+
 	"github.com/giovani-sirbu/mercury/log"
-	"github.com/segmentio/kafka-go"
-	"os"
-	"time"
 )
 
-func (m MessageBroker) Producer() *Producer {
-	// intialize the writer with the broker addresses, and the topic
-	serviceCert := fmt.Sprintf("%s/service.cert", m.CertsPath)
-	serviceKey := fmt.Sprintf("%s/service.key", m.CertsPath)
-	caCerts := fmt.Sprintf("%s/ca.pem", m.CertsPath)
+// Produce persists a message to the outbox and fires pg_notify as a wakeup
+// signal. The write and notify run in a single transaction, so listeners never
+// wake up for a row that isn't committed. The `key` parameter is accepted for
+// API compatibility with the prior Kafka implementation but is unused.
+func (m MessageBroker) Produce(topic string, key, value []byte, producer *Producer) error {
+	ctx := context.Background()
+	prefixedTopic := topicWithPrefix(topic)
 
-	keypair, err := tls.LoadX509KeyPair(serviceCert, serviceKey)
-
+	tx, err := producer.Pool.Begin(ctx)
 	if err != nil {
-		log.Error(fmt.Sprintf("Failed to load Access Key and/or Access Certificate: %s", err), "", "Producer")
+		log.Error(fmt.Sprintf("Failed to begin tx: %s", err), "Produce", "Producer")
+		return err
 	}
+	defer tx.Rollback(ctx)
 
-	caCert, err := os.ReadFile(caCerts)
+	var id int64
+	err = tx.QueryRow(ctx,
+		`INSERT INTO message_queue (topic, payload) VALUES ($1, $2::jsonb) RETURNING id`,
+		prefixedTopic, string(value),
+	).Scan(&id)
 	if err != nil {
-		log.Error(fmt.Sprintf("Failed to read CA Certificate file: %s", err), "", "Producer")
+		log.Error(fmt.Sprintf("Failed to insert message: %s", err), "Produce", "Producer")
+		return err
 	}
 
-	caCertPool := x509.NewCertPool()
-	ok := caCertPool.AppendCertsFromPEM(caCert)
-
-	if !ok {
-		log.Error(fmt.Sprintf("Failed to parse CA Certificate file: %s", err), "", "Producer")
+	if _, err := tx.Exec(ctx, `SELECT pg_notify($1, $2)`, prefixedTopic, fmt.Sprint(id)); err != nil {
+		log.Error(fmt.Sprintf("Failed to notify: %s", err), "Produce", "Producer")
+		return err
 	}
 
-	w := &kafka.Writer{
-		Addr:         kafka.TCP(m.Address[0]),
-		BatchTimeout: m.Timeout,
-		BatchSize:    100000,
-		Transport: &kafka.Transport{
-			TLS: &tls.Config{
-				Certificates: []tls.Certificate{keypair},
-				RootCAs:      caCertPool,
-			},
-		},
-		AllowAutoTopicCreation: true,
+	if err := tx.Commit(ctx); err != nil {
+		log.Error(fmt.Sprintf("Failed to commit: %s", err), "Produce", "Producer")
+		return err
 	}
 
-	return &Producer{Writer: w}
-}
-
-// Produce messages
-func (m MessageBroker) Produce(topic string, key, value []byte, producer *Producer) (err error) {
-	topicWithPrefix := fmt.Sprintf("%s%s", os.Getenv("TOPIC_PREFIX"), topic)
-
-	// Define messages
-	msg := kafka.Message{
-		Topic: topicWithPrefix,
-		Key:   key,
-		Value: value,
-		Time:  time.Now(),
-	}
-
-	// Return message response
-	err = producer.Writer.WriteMessages(context.TODO(), msg)
-	log.Info(fmt.Sprintf("Produced on topic: %s", topicWithPrefix), "", "Producer")
-	return err
+	log.Info(fmt.Sprintf("Produced on topic: %s", prefixedTopic), "", "Producer")
+	return nil
 }

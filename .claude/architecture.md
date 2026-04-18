@@ -14,7 +14,7 @@
 | **hermes** | Go service | Core trading engine — price websocket, buy/sell logic, trade locking |
 | **hellenes** | Go service | User service — auth, accounts, sessions |
 | **sisyphus** | Go service | Backtesting + live strategy testing |
-| **iris** | Go service | Email delivery (Kafka consumer only) |
+| **iris** | Go service | Email delivery (pub/sub consumer only) |
 | **mercury** | Go library | Shared library — exchange adaptors, trade actions, message broker, crypto, log |
 | **pythia** | TBD | TBD |
 
@@ -134,7 +134,7 @@ hermatic/
 | GET | `/admin/dashboard/overview` | IsAdmin | Dashboard overview |
 | GET | `/admin/dashboard/top-profits` | IsAdmin | Top profits |
 
-**Kafka Consumers:**
+**Pub/Sub Consumers:**
 | Topic | Handler | Description |
 |---|---|---|
 | `update-trade` | UpdateTrade | Hermes updates trade after buy/sell |
@@ -148,14 +148,14 @@ hermatic/
 | handleOldBlockedTradesCronjob | Handles old blocked trades |
 | processPendingOrder | Processes pending exchange orders |
 
-**Infrastructure:** PostgreSQL, Redis (cache), Kafka
+**Infrastructure:** PostgreSQL, Redis (cache), messagebus Postgres (pub/sub outbox)
 
 ---
 
 ### hermes — Core Trading Engine
-**Purpose:** Subscribes to Binance WebSocket price feeds, runs buy/sell logic against active trades, produces Kafka events back to agora.
+**Purpose:** Subscribes to Binance WebSocket price feeds, runs buy/sell logic against active trades, produces pub/sub events back to agora.
 
-**Kafka Producers:**
+**Pub/Sub Producers:**
 | Topic | Description |
 |---|---|
 | `update-trade` | Sends trade state updates to agora |
@@ -169,7 +169,7 @@ hermatic/
 - `cacheWsPrice.go` — caches latest prices in Redis
 - `lockTrade.go` / `unlockTrade.go` — prevents concurrent processing per trade
 
-**Infrastructure:** Redis (price cache + trade locks), Kafka
+**Infrastructure:** Redis (price cache + trade locks), messagebus Postgres (pub/sub outbox)
 
 ---
 
@@ -192,12 +192,12 @@ hermatic/
 | PUT | `/admin/accounts/:id` | IsAdmin | Update account |
 | DELETE | `/admin/accounts/:id` | IsAdmin | Delete account |
 
-**Kafka Consumers:**
+**Pub/Sub Consumers:**
 | Topic | Handler |
 |---|---|
 | `update-user-data` | UpdateUserData |
 
-**Infrastructure:** PostgreSQL, Kafka
+**Infrastructure:** PostgreSQL, messagebus Postgres (pub/sub outbox)
 
 ---
 
@@ -217,12 +217,12 @@ hermatic/
 ---
 
 ### iris — Email Service
-**Kafka Consumers:**
+**Pub/Sub Consumers:**
 | Topic | Handler |
 |---|---|
 | `send-emails` | SendEmail |
 
-**Infrastructure:** Kafka, SMTP
+**Infrastructure:** messagebus Postgres (pub/sub outbox), SMTP
 
 ---
 
@@ -236,7 +236,7 @@ hermatic/
 | `exchange` | Exchange interface + Binance adaptor |
 | `exchange/adaptors/binance` | Binance spot + futures client |
 | `log` | `Error()`, `Info()`, `Warn()`, `Debug()` |
-| `messagebroker` | Kafka producer + consumer |
+| `messagebroker` | Postgres LISTEN/NOTIFY pub/sub + outbox table (drop-in replacement for the former Kafka implementation) |
 | `storage/memory` | Redis cache |
 | `strategies` | Strategy definitions |
 | `trades/actions` | buy, sell, calculateProfit, hasFunds, etc. |
@@ -267,7 +267,7 @@ new → active → inPosition → active (cycle)
 |---|---|---|
 | Separate repos per service | Independent deploy cycles, clear ownership | — |
 | mercury as shared library | Avoid duplication of exchange logic, trade math, auth | — |
-| Kafka for hermes→agora comms | Decoupled: hermes fires and forgets, agora persists | — |
+| Postgres LISTEN/NOTIFY + outbox for hermes→agora comms | Decoupled: hermes fires and forgets, agora persists. Replaces Kafka — simpler ops, durable via outbox, same messagebroker API | 2026-04-18 |
 | Redis for trade locks in hermes | Prevents concurrent buy/sell on same trade | — |
 | Redis cache in agora | Active trade IDs are hot path — reduces DB load | — |
 | GORM direct in handlers | No separate repository layer — keep services small | — |

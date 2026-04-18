@@ -87,8 +87,8 @@ No variations. Predictability is the point.
 
 ## Cross-Service Communication
 
-### CRITICAL: Async communication via Kafka topics
-Hermes produces trade updates. Agora consumes them. Hellenes produces user events. Services never share a database.
+### CRITICAL: Async communication via Postgres LISTEN/NOTIFY pub/sub (mercury `messagebroker`)
+Hermes publishes trade updates. Agora subscribes. Hellenes publishes user events. Services never share a database.
 
 ### CRITICAL: Sync communication via HTTP helpers
 When a service needs data from another service (e.g., agora calls hermes for trade logic), it uses `helpers/externalRequest.go` with the service URL from config.
@@ -105,7 +105,7 @@ Mercury provides:
 - Exchange adaptors (Binance spot + futures)
 - Trade models and aggregates (`trades/aggragates`)
 - Trade actions (buy, sell, profit calculation, fund checks)
-- Message broker (Kafka producer/consumer)
+- Message broker (Postgres LISTEN/NOTIFY pub/sub with outbox)
 - Auth middleware (`adaptors/gin`)
 - Logging (`log`)
 - Crypto (encrypt/decrypt exchange secrets)
