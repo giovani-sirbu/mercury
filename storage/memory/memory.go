@@ -56,7 +56,11 @@ func (m Memory) Get(key string, obj interface{}) error {
 	defer ctx.Done()
 
 	keyWithPrefix := fmt.Sprintf("%s%s", os.Getenv("REDIS_PREFIX"), key)
-	err := cacheHandler.Get(ctx, keyWithPrefix, &obj)
+	// obj is already an interface{} wrapping the caller's pointer (e.g. &result).
+	// Passing &obj yields *interface{}, which msgpack reflects through to a
+	// non-addressable Value and panics with "reflect.Value.Set using
+	// unaddressable value". Forwarding obj preserves the caller's pointer.
+	err := cacheHandler.Get(ctx, keyWithPrefix, obj)
 
 	return err
 }
