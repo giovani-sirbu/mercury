@@ -1,7 +1,7 @@
 # Trading Bot — Microservices + Mobile App + Web Dashboard
 
 ## Project
-A crypto trading platform: Go microservices backend for automated trading on Binance (spot and futures) + React Native mobile app + Next.js web dashboard. Backend services communicate via Kafka topics and HTTP calls. Shared Go logic lives in the `mercury` library.
+A crypto trading platform: Go microservices backend for automated trading on Binance (spot and futures) + React Native mobile app + Next.js web dashboard. Backend services communicate via Postgres LISTEN/NOTIFY pub/sub and HTTP calls. Shared Go logic lives in the `mercury` library.
 
 Full platform architecture and cross-service map: `../CLAUDE.md` (root)
 
@@ -15,13 +15,13 @@ Full platform architecture and cross-service map: `../CLAUDE.md` (root)
 | **hermes** | Go service | Core trading engine — buy/sell decisions, price management |
 | **hellenes** | Go service | User service — auth, accounts, sessions |
 | **sisyphus** | Go service | Backtesting + live strategy testing |
-| **iris** | Go service | Email delivery (Kafka consumer only) |
+| **iris** | Go service | Email delivery (pub/sub consumer only) |
 | **mercury** | Go library | Shared library — exchange adaptors, trade actions, auth, logging |
 | **pythia** | TBD | TBD |
 
-Architecture, tech stack, Kafka topics, and service relationships: `.claude/architecture.md` — always check it for current state.
+Architecture, tech stack, pub/sub topics, and service relationships: `.claude/architecture.md` — always check it for current state.
 
-**After every PR that changes service structure** (new handler, new Kafka topic, new route group, new config field), update `.claude/architecture.md` and this file. Run `/post-merge` to check.
+**After every PR that changes service structure** (new handler, new pub/sub topic, new route group, new config field), update `.claude/architecture.md` and this file. Run `/post-merge` to check.
 
 ---
 
@@ -32,7 +32,7 @@ Architecture, tech stack, Kafka topics, and service relationships: `.claude/arch
 |---|---|
 | HTTP framework | Gin |
 | Database ORM | GORM (PostgreSQL) |
-| Message broker | Kafka (via mercury `messagebroker`) |
+| Message broker | Postgres LISTEN/NOTIFY + outbox (via mercury `messagebroker`) |
 | Cache | Redis (via mercury `storage/memory`) |
 | Crypto exchange | Binance (via mercury `exchange/adaptors/binance`) |
 | Auth | JWT middleware via mercury `adaptors/gin` |
@@ -77,7 +77,7 @@ Every service follows this exact layout:
       aggregates.go    # Handler struct, constructor, payload types, response types
       [verb][Noun].go  # One handler action per file
   consumers/
-    consumers.go       # Register all Kafka consumers
+    consumers.go       # Register all pub/sub consumers
   jobs/
     aggregates.go      # Jobs handler struct + constructor
     [job].go           # One cron job per file
