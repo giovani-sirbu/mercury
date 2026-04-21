@@ -1,0 +1,135 @@
+# When mercury lands a commit on master, bump every Go service that imports it:
+# run `go get github.com/giovani-sirbu/mercury@<new-sha>` + `go mod tidy`, commit
+# the refreshed go.mod/go.sum, and push to the consumer's master. The subsequent
+# push on each consumer triggers its own deploy workflow (infra/ci/go-service-deploy.yml).
+#
+# No-op safety: if the consumer already pins the same commit (e.g. a second run of
+# the same mercury SHA, or a mercury commit that does not change module graph),
+# the step sees a clean working tree and exits without committing.
+#
+# Required repo secret:
+#   MERCURY_BUMP_TOKEN — a PAT (or GitHub App installation token) with:
+#     - repo: write  on every consumer listed in the matrix
+#     - repo: read   on giovani-sirbu/mercury (so `go get` can resolve it)
+#   Expires: long-lived (set a calendar reminder or use a GitHub App so
+#   rotation is automated).
+
+name: bump-consumers
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      mercury_sha:
+        description: "Mercury commit SHA to pin (defaults to this workflow's SHA)"
+        required: false
+        default: ""
+
+concurrency:
+  # Do not cancel an in-flight bump — we want each SHA to land on every consumer.
+  group: bump-consumers-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    strategy:
+      # One consumer's failure should not block the others. The operator can
+      # re-run individual matrix entries via workflow_dispatch afterwards.
+      fail-fast: false
+      matrix:
+        consumer:
+          - agora
+          - hermes
+          - hellenes
+          - sisyphus
+          - iris
+          - sophos
+
+    steps:
+      - name: Resolve mercury SHA
+        id: sha
+        run: |
+          # Use the workflow's own SHA on push; allow override via workflow_dispatch.
+          sha="${{ github.event.inputs.mercury_sha || github.sha }}"
+          echo "full=$sha" >> "$GITHUB_OUTPUT"
+          echo "short=$(echo "$sha" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out consumer
+        uses: actions/checkout@v4
+        with:
+          repository: giovani-sirbu/${{ matrix.consumer }}
+          ref: master
+          token: ${{ secrets.MERCURY_BUMP_TOKEN }}
+          # A clean history is all we need; we push a single commit on top.
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Detect Go version from consumer go.mod
+        id: goversion
+        run: |
+          # `go mod edit -json` gives us the declared Go version; fall back to
+          # the `go X.Y` directive parsed by awk if `jq` isn't available.
+          if command -v jq >/dev/null 2>&1; then
+            version=$(go mod edit -json | jq -r '.Go')
+          else
+            version=$(awk '$1=="go"{print $2; exit}' go.mod)
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          # Use the consumer's declared Go version so the bump does not
+          # accidentally upgrade Go itself. setup-go accepts "1.24" or "1.24.0".
+          go-version: ${{ steps.goversion.outputs.version }}
+          cache: false
+
+      - name: Configure auth for private mercury module
+        env:
+          TOKEN: ${{ secrets.MERCURY_BUMP_TOKEN }}
+        run: |
+          # `go get` hits GOPROXY by default; for a private module we need
+          # GOPRIVATE set and HTTPS git rewritten to use the token.
+          git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
+          echo "GOPRIVATE=github.com/giovani-sirbu/*" >> "$GITHUB_ENV"
+          echo "GONOSUMCHECK=*" >> "$GITHUB_ENV"
+
+      - name: Bump mercury dependency
+        env:
+          SHA: ${{ steps.sha.outputs.full }}
+        run: |
+          go get "github.com/giovani-sirbu/mercury@${SHA}"
+          # go mod tidy keeps go.sum aligned with the new require line and
+          # prunes unused indirect entries. Without it, the commit would
+          # contain a go.mod change with a stale go.sum.
+          go mod tidy
+
+      - name: Detect whether anything actually changed
+        id: diff
+        run: |
+          if git diff --quiet -- go.mod go.sum; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No go.mod / go.sum change — consumer is already on this mercury SHA."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          SHORT: ${{ steps.sha.outputs.short }}
+          FULL: ${{ steps.sha.outputs.full }}
+        run: |
+          git config user.name  "mercury-bot"
+          git config user.email "mercury-bot@users.noreply.github.com"
+          git add go.mod go.sum
+          # A trailing link makes it one click from this commit to the mercury
+          # commit that triggered the bump.
+          git commit -m "chore: bump mercury to ${SHORT}
+
+          https://github.com/giovani-sirbu/mercury/commit/${FULL}"
+          git push origin HEAD:master
