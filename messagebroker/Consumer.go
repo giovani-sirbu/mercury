@@ -23,16 +23,27 @@ const (
 // handler. Claims rows competitively (SELECT FOR UPDATE SKIP LOCKED) so each
 // message is processed by exactly one replica. Runs forever; reconnects with
 // exponential backoff on connection loss.
+//
+// Top-level panic recovery guarantees that a panic inside pgx or a handler
+// does not take down the consumer goroutine (and therefore the entire stream
+// of messages for that topic). Individual handler panics are also caught
+// inside runHandler so one bad message does not kill the connection.
 func (m MessageBroker) Consumer(topic string, handler fn) {
 	prefixedTopic := topicWithPrefix(topic)
 	commonLog.Info(fmt.Sprintf("Consumer started on topic: %s", prefixedTopic), "", "Consumer")
 
 	backoff := time.Second
 	for {
-		err := m.listen(prefixedTopic, handler)
-		if err != nil {
-			commonLog.Error(fmt.Sprintf("Listener lost on %s: %s (reconnecting in %s)", prefixedTopic, err, backoff), "", "Consumer")
-		}
+		func() {
+			defer func() {
+				if rec := recover(); rec != nil {
+					commonLog.Error(fmt.Sprintf("Consumer panic on %s: %v\n%s", prefixedTopic, rec, debug.Stack()), "", "Consumer")
+				}
+			}()
+			if err := m.listen(prefixedTopic, handler); err != nil {
+				commonLog.Error(fmt.Sprintf("Listener lost on %s: %s (reconnecting in %s)", prefixedTopic, err, backoff), "", "Consumer")
+			}
+		}()
 		time.Sleep(backoff)
 		backoff *= 2
 		if backoff > reconnectMaxBackoff {
@@ -67,6 +78,11 @@ func (m MessageBroker) listen(prefixedTopic string, handler fn) error {
 	errCh := make(chan error, 1)
 
 	go func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				errCh <- fmt.Errorf("WaitForNotification panic: %v\n%s", rec, debug.Stack())
+			}
+		}()
 		for {
 			if _, err := conn.WaitForNotification(ctx); err != nil {
 				errCh <- err

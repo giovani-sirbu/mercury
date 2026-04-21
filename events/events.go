@@ -13,7 +13,16 @@ import (
 
 type (
 	Events struct {
-		Storage        memory.Memory
+		// Storage is the shared cache client. Pointer semantics are required because
+		// *memory.Memory owns singleton state (sync.Once + reused Redis client).
+		Storage *memory.Memory
+
+		// WsPrices is an in-process snapshot of symbol prices, typically populated
+		// by hermes before running an event pipeline. Lookups here avoid a Redis
+		// round-trip on the trade decision hot path. Nil is valid — callers fall
+		// back to Storage and then to the exchange API.
+		WsPrices map[string]float64
+
 		Broker         messagebroker.BrokerMethods
 		Exchange       exchange.Exchange
 		Trade          aggragates.Trades

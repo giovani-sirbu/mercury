@@ -43,7 +43,10 @@ func GetUsedQuantities(event events.Events) float64 {
 }
 
 func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
-	client, _ := event.Exchange.Client()
+	client, clientErr := event.Exchange.Client()
+	if clientErr != nil {
+		return 0, 0, "", clientErr
+	}
 
 	// get user assets (and check IP restrictions if any)
 	assets, assetsErr := client.GetUserAssets() // Get user balance
@@ -147,8 +150,7 @@ func HasFunds(event events.Events) (events.Events, error) {
 			}
 		}
 
-		msg := fmt.Sprintf("Insufficient funds (%f %s) for the requested action (%s). You need at least %f %s to resume this trade.", remainedQuantity, assetSymbol, event.Trade.PositionType, neededQuantity, assetSymbol)
-		return SaveError(event, fmt.Errorf(msg))
+		return SaveError(event, fmt.Errorf("Insufficient funds (%f %s) for the requested action (%s). You need at least %f %s to resume this trade.", remainedQuantity, assetSymbol, event.Trade.PositionType, neededQuantity, assetSymbol))
 	}
 
 	return event, nil

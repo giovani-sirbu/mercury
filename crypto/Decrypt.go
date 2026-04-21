@@ -11,7 +11,10 @@ func Decrypt(text, MySecret string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cipherText := Decode(text)
+	cipherText, err := Decode(text)
+	if err != nil {
+		return "", err
+	}
 	cfb := cipher.NewCFBDecrypter(block, bytes)
 	plainText := make([]byte, len(cipherText))
 	cfb.XORKeyStream(plainText, cipherText)

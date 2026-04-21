@@ -2,13 +2,12 @@ package actions
 
 import (
 	"fmt"
-	"github.com/giovani-sirbu/mercury/events"
-	"github.com/giovani-sirbu/mercury/log"
 	"slices"
 	"strings"
-)
 
-var wsPrices = make(map[string]float64)
+	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/log"
+)
 
 // GetFees processes trading history and calculates fees in base and quote assets.
 func GetFees(event events.Events) float64 {
@@ -36,14 +35,20 @@ func GetFees(event events.Events) float64 {
 				feesInBase += fee.Fee / data.Price
 				continue
 			default:
-				// handle price for fees like BNB
+				// handle price for fees paid in a third asset (e.g. BNB)
 				if !slices.Contains([]string{baseSymbol, quoteSymbol}, fee.Asset) {
-					feeAssetPrice, _ := getSymbolPrice(event, fee.Asset)
+					feeAssetPrice, err := getSymbolPrice(event, fee.Asset)
+					if err != nil {
+						log.Error(err.Error(), "getSymbolPrice", "GetFees")
+					}
 					if feeAssetPrice > 0 {
 						feesInQuote += fee.Fee * feeAssetPrice
 					}
 
-					profitAssetPrice, _ := getSymbolPrice(event, event.Trade.ProfitAsset)
+					profitAssetPrice, err := getSymbolPrice(event, event.Trade.ProfitAsset)
+					if err != nil {
+						log.Error(err.Error(), "getSymbolPrice", "GetFees")
+					}
 					if profitAssetPrice > 0 {
 						feesInBase += fee.Fee * feeAssetPrice / profitAssetPrice
 					}
@@ -63,44 +68,51 @@ func GetFees(event events.Events) float64 {
 	return fees
 }
 
-// getSymbolPrice return symbol real time price
+// getSymbolPrice returns the real-time price of `asset` quoted in USDC.
+//
+// Lookup order (cheapest first):
+//  1. event.WsPrices — in-process snapshot passed by hermes (sub-microsecond).
+//  2. event.Storage — shared cache (Dragonfly / Redis); fallback for services that don't
+//     populate WsPrices (e.g. sisyphus backtesting on non-virtual exchanges).
+//  3. exchange API — last-resort network call.
+//
+// A prior version held a package-level `var wsPrices` map to memoise results across calls.
+// That variable was shared by every concurrent goroutine calling GetFees and was never
+// protected by a lock, producing a real race condition on a financial code path. It has
+// been removed; the stateful cache now lives where it belongs — on the event.
 func getSymbolPrice(event events.Events, asset string) (float64, error) {
 	if slices.Contains([]string{"USDT", "USDC"}, asset) {
 		return event.Trade.PositionPrice, nil
 	}
 
 	symbol := fmt.Sprintf("%s/USDC", asset)
+	precision := int(event.Trade.StrategyPair.TradeFilters.PriceFilter)
 
-	// get ws prices from cache
-	event.Storage.Get("ws-symbols-price", &wsPrices)
-
-	// default price fetched from cache
-	price := wsPrices[symbol]
-
-	// fallback: fetch price from exchange if cache price no available
-	if wsPrices[symbol] == 0 {
-		client, clientErr := event.Exchange.Client()
-		if clientErr != nil {
-			return 0, clientErr
-		}
-		clientPrice, priceErr := client.GetPrice(symbol)
-
-		if priceErr != nil {
-			return 0, priceErr
-		}
-
-		price = clientPrice
+	// 1. In-process snapshot (hermes primary path).
+	if p, ok := event.WsPrices[symbol]; ok && p > 0 {
+		return ToFixed(p, precision), nil
 	}
 
-	// format price
-	price = ToFixed(price, int(event.Trade.StrategyPair.TradeFilters.PriceFilter))
-
-	// set price to cache
-	if wsPrices[symbol] == 0 {
-		wsPrices[symbol] = price
+	// 2. Shared cache fallback (services without in-process map).
+	if event.Storage != nil {
+		cached := map[string]float64{}
+		if err := event.Storage.Get("ws-symbols-price", &cached); err == nil {
+			if p := cached[symbol]; p > 0 {
+				return ToFixed(p, precision), nil
+			}
+		}
 	}
 
-	return price, nil
+	// 3. Exchange API fallback.
+	client, err := event.Exchange.Client()
+	if err != nil {
+		return 0, err
+	}
+	price, err := client.GetPrice(symbol)
+	if err != nil {
+		return 0, err
+	}
+	return ToFixed(price, precision), nil
 }
 
 // splitSymbol splits a trading pair symbol into base and quote symbols.

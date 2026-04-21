@@ -217,6 +217,16 @@ func setCustomActions(customActions aggregates.Actions, assets []aggregates.User
 		return price, nil
 	}
 
+	// APIKeyPermission is meaningless for a virtual exchange but real handlers
+	// (e.g. hasFunds) require it. Return a permissive stub so tests can exercise
+	// the happy path without having to branch on IsCustom everywhere.
+	customActions.APIKeyPermission = func() (aggregates.APIKeyPermission, *common.APIError) {
+		return aggregates.APIKeyPermission{
+			EnableSpotAndMarginTrading: true,
+			EnableReading:              true,
+		}, nil
+	}
+
 	return customActions
 }
 

@@ -1,11 +1,12 @@
 package ginAdaptors
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/giovani-sirbu/mercury/auth"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/gin-gonic/gin"
+	"github.com/giovani-sirbu/mercury/auth"
 )
 
 func stringToUint(s string) uint {
@@ -13,28 +14,46 @@ func stringToUint(s string) uint {
 	return uint(i)
 }
 
-func IsAuth(c *gin.Context) {
+// extractBearerToken returns the token from an `Authorization: Bearer <token>` header.
+// It returns ok=false when the header is missing or malformed so callers can reject
+// the request without indexing into an out-of-range slice (the prior version panicked
+// on headers that did not contain a space).
+func extractBearerToken(c *gin.Context) (string, bool) {
 	authHeader := c.Request.Header["Authorization"]
+	if len(authHeader) < 1 || authHeader[0] == "" {
+		return "", false
+	}
+	parts := strings.SplitN(authHeader[0], " ", 2)
+	if len(parts) != 2 || parts[1] == "" {
+		return "", false
+	}
+	return parts[1], true
+}
+
+func IsAuth(c *gin.Context) {
+	token, ok := extractBearerToken(c)
+	if !ok {
+		c.Abort()
+		Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
+		return
+	}
+
+	if err := auth.VerifyToken(token); err != nil {
+		c.Abort()
+		Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
+		return
+	}
+
+	// When the route carries a :userId path param, compare it against the token
+	// claim so users cannot operate on other users' resources by forging URLs.
 	userId := stringToUint(c.Param("userId"))
-
-	if len(authHeader) < 1 {
-		c.Abort()
-		Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
-		return
-	}
-
-	token := strings.Split(c.Request.Header["Authorization"][0], " ")[1]
-	err := auth.VerifyToken(token)
-
-	if err != nil {
-		c.Abort()
-		Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
-		return
-	}
-
-	// if userId exist in url, compare it with userId stored in token and return error if different
 	if userId != 0 {
-		userInfo, _ := auth.ParseToken(token)
+		userInfo, err := auth.ParseToken(token)
+		if err != nil {
+			c.Abort()
+			Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
+			return
+		}
 		if userInfo.Id != userId && userInfo.Role != "admin" {
 			c.Abort()
 			Response(c, http.StatusForbidden, "ACCESS_FORBIDDEN")
@@ -42,35 +61,34 @@ func IsAuth(c *gin.Context) {
 		}
 	}
 
-	// Continue down the chain, user is logged in
 	c.Next()
 }
 
 func IsAdmin(c *gin.Context) {
-	authHeader := c.Request.Header["Authorization"]
-
-	if len(authHeader) < 1 {
+	token, ok := extractBearerToken(c)
+	if !ok {
 		c.Abort()
 		Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
 		return
 	}
 
-	token := strings.Split(c.Request.Header["Authorization"][0], " ")[1]
-	err := auth.VerifyToken(token)
+	if err := auth.VerifyToken(token); err != nil {
+		c.Abort()
+		Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
+		return
+	}
 
+	userInfo, err := auth.ParseToken(token)
 	if err != nil {
 		c.Abort()
 		Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
 		return
 	}
-
-	userInfo, _ := auth.ParseToken(token)
 	if userInfo.Role != "admin" {
 		c.Abort()
 		Response(c, http.StatusForbidden, "ACCESS_FORBIDDEN")
 		return
 	}
 
-	// Continue down the chain, user is logged in
 	c.Next()
 }
