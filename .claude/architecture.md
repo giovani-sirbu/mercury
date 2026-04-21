@@ -284,16 +284,11 @@ new → active → inPosition → active (cycle)
 
 _Document deviations from the architecture rules here with rationale._
 
-### Committed secrets awaiting rotation
+### Committed secrets — provider rotation pending
 
-The stabilization branch left three secrets in-tree pending an external rotation window:
+The live values that were in-tree (`API_SECRET`, DO Postgres credentials) have been blanked in the `.env.sample` files. Git history still contains the old values, so the follow-up work owned externally is:
 
-- `sisyphus/.env.sample` — DigitalOcean Postgres credentials (host, user, password) from a live database.
-- `agora/.env.sample` and `hermes/.env.sample` — hardcoded `API_SECRET=hW^*9liK@3LF3*9z` (also used as the service-to-service token for hermes /prices since Faza 3.A).
-
-These are committed to git history. Stabilization work does not rotate them inside this branch; the rotation is owned externally and must happen alongside re-deploy:
-
-1. Rotate DO Postgres user password, update all running sisyphus deployments.
-2. Regenerate API_SECRET, update agora + hermes + any other caller, re-encrypt stored exchange secrets (mercury/crypto.Decrypt with old → Encrypt with new).
-3. Optional: rewrite git history with BFG or filter-repo to scrub the leaked values.
+1. Rotate the DO Postgres user password and update every running sisyphus deployment.
+2. Regenerate `API_SECRET` on agora + hermes + any other caller, re-encrypt stored exchange secrets (decrypt with old key, re-encrypt with new).
+3. Optional: scrub git history with BFG or filter-repo; otherwise the old values remain discoverable via `git log`.
 
