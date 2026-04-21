@@ -166,10 +166,12 @@ hermatic/
 - `handleTrade.go` — spot trade logic
 - `handleFuturesTrade.go` — futures trade logic
 - `managePrices.go` — WebSocket price subscription
-- `cacheWsPrice.go` — caches latest prices in Redis
+- `recordWsPrice.go` — records latest prices into the in-process wsPrices map (the old cacheWsPrice.go pushed the whole map to Dragonfly on every unlock; now it is a plain lock-protected write)
+- `snapshotWsPrices.go` — returns a defensive copy of the in-process map; consumed by handleTrade/handleFuturesTrade (WsPrices on events.Events) and by the new prices HTTP domain
+- `handlers/prices/` — GET /prices endpoint gated by `helpers.RequireServiceToken`, exposes the snapshot to peer services (agora)
 - `lockTrade.go` / `unlockTrade.go` — prevents concurrent processing per trade
 
-**Infrastructure:** Redis (price cache + trade locks), messagebus Postgres (pub/sub outbox)
+**Infrastructure:** Redis (trade locks only; price map is in-process since Faza 3), messagebus Postgres (pub/sub outbox)
 
 ---
 
@@ -272,9 +274,26 @@ new → active → inPosition → active (cycle)
 | Redis cache in agora | Active trade IDs are hot path — reduces DB load | — |
 | GORM direct in handlers | No separate repository layer — keep services small | — |
 | Handler returns (result, status, error) | Separates HTTP concern from business concern | — |
+| Memory cache singleton + in-process WsPrices snapshot | Prior Memory re-created the Redis client on every Set/Get/Delete (measured 3.5ms/op). Singleton with sync.Once reuses the client + TinyLFU local cache; hermes' in-process map feeds events.Events.WsPrices so GetFees no longer round-trips Dragonfly on the trade-decision hot path. Peer reads of the snapshot go through GET /prices on hermes (service-token gated) instead of a shared Dragonfly key | 2026-04-21 |
+| HTTP cross-service helpers carry timeout + retry | All externalRequest.go use a shared *http.Client with a 5s timeout and a 2-attempt retry on transport errors. Prior bare http.Client{} could hang a goroutine indefinitely when a peer stalled | 2026-04-21 |
+| agora UpdateTrade consumer gates side-effects on state transitions | At-least-once delivery means a replay of the same payload is expected. The Closed→(create futures replacement) block now fires only on a real non-Closed→Closed transition, not on every replay of the final state | 2026-04-21 |
 
 ---
 
 ## Known Deviations
 
 _Document deviations from the architecture rules here with rationale._
+
+### Committed secrets awaiting rotation
+
+The stabilization branch left three secrets in-tree pending an external rotation window:
+
+- `sisyphus/.env.sample` — DigitalOcean Postgres credentials (host, user, password) from a live database.
+- `agora/.env.sample` and `hermes/.env.sample` — hardcoded `API_SECRET=hW^*9liK@3LF3*9z` (also used as the service-to-service token for hermes /prices since Faza 3.A).
+
+These are committed to git history. Stabilization work does not rotate them inside this branch; the rotation is owned externally and must happen alongside re-deploy:
+
+1. Rotate DO Postgres user password, update all running sisyphus deployments.
+2. Regenerate API_SECRET, update agora + hermes + any other caller, re-encrypt stored exchange secrets (mercury/crypto.Decrypt with old → Encrypt with new).
+3. Optional: rewrite git history with BFG or filter-repo to scrub the leaked values.
+
