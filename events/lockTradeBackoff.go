@@ -17,8 +17,17 @@ const (
 )
 
 // LockTrade locks the trade with a specified duration.
+//
+// Nil Storage is treated as a no-op because some callers (notably backtesting
+// in sisyphus, which passes a zero-value events.Events) do not populate a
+// cache client. Previously that path panicked when it hit the backoff — now
+// it silently skips the lock and returns nil so the caller's retry logic
+// can proceed.
 func (e Events) LockTrade(lockDuration time.Duration) error {
-	lockKey := fmt.Sprintf("trade:%d:is_locked", e.Trade.ID) // Create lock trade key
+	if e.Storage == nil {
+		return nil
+	}
+	lockKey := fmt.Sprintf("trade:%d:is_locked", e.Trade.ID)
 	return e.Storage.Set(lockKey, true, lockDuration)
 }
 
