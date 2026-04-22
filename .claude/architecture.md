@@ -168,7 +168,7 @@ hermatic/
 - `managePrices.go` — WebSocket price subscription
 - `recordWsPrice.go` — records latest prices into the in-process wsPrices map (the old cacheWsPrice.go pushed the whole map to Dragonfly on every unlock; now it is a plain lock-protected write)
 - `snapshotWsPrices.go` — returns a defensive copy of the in-process map; consumed by handleTrade/handleFuturesTrade (WsPrices on events.Events) and by the new prices HTTP domain
-- `handlers/prices/` — GET /prices endpoint gated by `helpers.RequireServiceToken`, exposes the snapshot to peer services (agora)
+- `handlers/prices/` — GET /prices endpoint gated by `adapter.IsAuth`, exposes the snapshot to peer services (agora mints a service-role JWT via `helpers.GenerateToken`)
 - `lockTrade.go` / `unlockTrade.go` — prevents concurrent processing per trade
 
 **Infrastructure:** Redis (trade locks only; price map is in-process since Faza 3), messagebus Postgres (pub/sub outbox)
@@ -274,7 +274,7 @@ new → active → inPosition → active (cycle)
 | Redis cache in agora | Active trade IDs are hot path — reduces DB load | — |
 | GORM direct in handlers | No separate repository layer — keep services small | — |
 | Handler returns (result, status, error) | Separates HTTP concern from business concern | — |
-| Memory cache singleton + in-process WsPrices snapshot | Prior Memory re-created the Redis client on every Set/Get/Delete (measured 3.5ms/op). Singleton with sync.Once reuses the client + TinyLFU local cache; hermes' in-process map feeds events.Events.WsPrices so GetFees no longer round-trips Dragonfly on the trade-decision hot path. Peer reads of the snapshot go through GET /prices on hermes (service-token gated) instead of a shared Dragonfly key | 2026-04-21 |
+| Memory cache singleton + in-process WsPrices snapshot | Prior Memory re-created the Redis client on every Set/Get/Delete (measured 3.5ms/op). Singleton with sync.Once reuses the client + TinyLFU local cache; hermes' in-process map feeds events.Events.WsPrices so GetFees no longer round-trips Dragonfly on the trade-decision hot path. Peer reads of the snapshot go through GET /prices on hermes (JWT-gated via `adapter.IsAuth`; agora mints a service-role token) instead of a shared Dragonfly key | 2026-04-21 |
 | HTTP cross-service helpers carry timeout + retry | All externalRequest.go use a shared *http.Client with a 5s timeout and a 2-attempt retry on transport errors. Prior bare http.Client{} could hang a goroutine indefinitely when a peer stalled | 2026-04-21 |
 | agora UpdateTrade consumer gates side-effects on state transitions | At-least-once delivery means a replay of the same payload is expected. The Closed→(create futures replacement) block now fires only on a real non-Closed→Closed transition, not on every replay of the final state | 2026-04-21 |
 
