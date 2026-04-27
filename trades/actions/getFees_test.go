@@ -3,7 +3,10 @@ package actions
 import (
 	"testing"
 
+	"github.com/adshao/go-binance/v2/common"
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/exchange"
+	exchangeAggregates "github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
@@ -59,6 +62,24 @@ func TestGetFeesFallsBackToExchangeWhenWsPricesEmpty(t *testing.T) {
 	fees := GetFees(event)
 	if fees != 0 {
 		t.Fatalf("expected 0 fees when price resolution fails, got %f", fees)
+	}
+}
+
+func TestGetFeesHandlesNilAPIErrorFromExchangePrice(t *testing.T) {
+	event := buildTradeWithBNBFee(0.1)
+	event.Exchange = exchange.Exchange{
+		IsCustom: true,
+		CustomActions: exchangeAggregates.Actions{
+			GetPrice: func(symbol string) (float64, *common.APIError) {
+				return 500, nil
+			},
+		},
+	}
+
+	got := GetFees(event)
+	const want = 50.0
+	if got != want {
+		t.Fatalf("fees mismatch: got %f, want %f", got, want)
 	}
 }
 

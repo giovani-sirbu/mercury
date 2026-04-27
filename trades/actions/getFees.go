@@ -104,9 +104,9 @@ func getSymbolPrice(event events.Events, asset string) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	price, err := client.GetPrice(symbol)
-	if err != nil {
-		return 0, err
+	price, priceErr := client.GetPrice(symbol)
+	if priceErr != nil {
+		return 0, priceErr
 	}
 	return ToFixed(price, precision), nil
 }
