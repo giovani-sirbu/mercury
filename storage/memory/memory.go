@@ -22,6 +22,7 @@ func (m Memory) Init() (*cache.Cache, redis.UniversalClient) {
 		Password: m.Password,
 		Username: m.User,
 		PoolSize: m.PoolSize,
+		Protocol: 2,
 	})
 
 	cacheHandler := cache.New(&cache.Options{
