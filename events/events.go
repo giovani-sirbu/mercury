@@ -30,6 +30,13 @@ type (
 		EventsNames    []string
 		Params         aggragates.Params
 		Events         map[string]func(Events) (Events, error)
+
+		// CorrelationID is the per-action-chain correlation id. Hermes's
+		// ManageTrade / ManageFuturesTrade populate it before calling Run()
+		// so every action in the chain — including the update-trade and
+		// create-children-trades producers — tags the resulting message and
+		// log lines with the same id.
+		CorrelationID string
 	}
 )
 

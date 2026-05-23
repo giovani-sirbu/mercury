@@ -81,6 +81,28 @@ func (m *Memory) Set(key string, obj interface{}, expiration time.Duration) erro
 	return nil
 }
 
+// SetNX atomically sets key only if it does not already exist. Returns
+// (true, nil) if this caller acquired the key, (false, nil) if another caller
+// already holds it, or (false, err) on transport error.
+//
+// Used as a distributed mutex: bypasses the TinyLFU local cache (a stale local
+// hit would falsely report the key as free) and goes straight to Redis SETNX.
+// Fails closed on remote outage — callers must treat (false, err) as "did not
+// acquire" and not proceed with the protected action.
+func (m *Memory) SetNX(key string, expiration time.Duration) (bool, error) {
+	m.init()
+	if err := m.remoteUnavailable(); err != nil {
+		return false, err
+	}
+	acquired, err := m.client.SetNX(context.Background(), prefixed(key), "1", expiration).Result()
+	if err != nil {
+		m.recordRemoteError(err)
+		return false, err
+	}
+	m.recordRemoteSuccess()
+	return acquired, nil
+}
+
 // Get decodes the value stored at key into obj. obj must already be a pointer
 // (e.g. &result). Passing &obj yields *interface{}, which msgpack reflects through
 // to a non-addressable Value and panics with "reflect.Value.Set using unaddressable

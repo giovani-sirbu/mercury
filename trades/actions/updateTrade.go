@@ -32,6 +32,6 @@ func UpdateTrade(event events.Events) (events.Events, error) {
 	}
 	tradeInBytes, _ := json.Marshal(event.Trade)
 	topic := "update-trade"
-	event.Broker.Produce(topic, nil, tradeInBytes, event.Broker.Producer)
+	event.Broker.ProduceWithCorrelation(topic, tradeInBytes, event.CorrelationID, event.Broker.Producer)
 	return event, nil
 }

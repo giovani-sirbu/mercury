@@ -7,7 +7,7 @@ import (
 	logs "github.com/sirupsen/logrus"
 )
 
-func Warn(msg string, track string, parent string) {
+func Warn(msg string, track string, parent string, fields ...Field) {
 	file, err := os.OpenFile("warn.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	mw := io.MultiWriter(os.Stdout, file)
 
@@ -21,9 +21,9 @@ func Warn(msg string, track string, parent string) {
 
 	logWrapper.SetFormatter(&logs.JSONFormatter{})
 
-	logWrapper.WithFields(logs.Fields{
+	logWrapper.WithFields(applyFields(logs.Fields{
 		"span":   os.Getenv("SERVICE_NAME"),
 		"track":  track,
 		"parent": parent,
-	}).Warn(msg)
+	}, fields...)).Warn(msg)
 }

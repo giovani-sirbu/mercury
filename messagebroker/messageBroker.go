@@ -32,6 +32,18 @@ type BrokerMethods struct {
 	Producer *Producer
 	Produce  func(topic string, key, value []byte, producer *Producer) error
 	Consumer func(topic string, handler fn)
+
+	// ProduceWithCorrelation persists a message tagged with a correlation id.
+	// Use it from any code path that already has one (HTTP handlers via
+	// ginAdaptors.GetCorrelationID, pub/sub consumers via
+	// log.CorrelationFromContext, hermes action chains via events.CorrelationID).
+	ProduceWithCorrelation func(topic string, value []byte, correlationID string, producer *Producer) error
+
+	// ConsumerCtx subscribes a context-aware handler. The context delivered to
+	// the handler carries the message's correlation id (via
+	// log.ContextWithCorrelation), so downstream HTTP / pub/sub / log calls
+	// can propagate the id without it being passed as an explicit argument.
+	ConsumerCtx func(topic string, handler ContextHandler)
 }
 
 type brokerState struct {
@@ -62,9 +74,11 @@ func (broker MessageBroker) Init() BrokerMethods {
 	}
 
 	return BrokerMethods{
-		Producer: &Producer{Pool: state.pool},
-		Produce:  broker.Produce,
-		Consumer: broker.Consumer,
+		Producer:               &Producer{Pool: state.pool},
+		Produce:                broker.Produce,
+		Consumer:               broker.Consumer,
+		ProduceWithCorrelation: broker.ProduceWithCorrelation,
+		ConsumerCtx:            broker.ConsumerCtx,
 	}
 }
 

@@ -9,7 +9,7 @@ import (
 	logs "github.com/sirupsen/logrus"
 )
 
-func Error(msg string, track string, parent string) {
+func Error(msg string, track string, parent string, fields ...Field) {
 	file, err := os.OpenFile("error.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	mw := io.MultiWriter(os.Stdout, file)
 
@@ -32,9 +32,9 @@ func Error(msg string, track string, parent string) {
 
 	messageWithFileLocation := fmt.Sprintf("%s\n%s", msg, fileLocation)
 
-	logWrapper.WithFields(logs.Fields{
+	logWrapper.WithFields(applyFields(logs.Fields{
 		"span":   os.Getenv("SERVICE_NAME"),
 		"track":  track,
 		"parent": parent,
-	}).Error(messageWithFileLocation)
+	}, fields...)).Error(messageWithFileLocation)
 }
