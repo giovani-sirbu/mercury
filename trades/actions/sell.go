@@ -76,7 +76,11 @@ func Sell(event events.Events) (events.Events, error) {
 	priceInString := strconv.FormatFloat(event.Trade.PositionPrice, 'f', -1, 64)
 	event.Params.Quantity = quantity
 
-	if event.Trade.Inverse {
+	if event.Params.MarketSellOrder && event.Trade.Inverse {
+		response, err = client.MarketBuy(event.Trade.Symbol, quantity)
+	} else if event.Params.MarketSellOrder {
+		response, err = client.MarketSell(event.Trade.Symbol, quantity)
+	} else if event.Trade.Inverse {
 		response, err = client.Buy(event.Trade.Symbol, quantity, priceInString)
 	} else {
 		response, err = client.Sell(event.Trade.Symbol, quantity, priceInString)

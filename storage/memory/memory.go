@@ -29,22 +29,30 @@ type Memory struct {
 	User     string
 	PoolSize int
 
-	once    sync.Once
-	handler *cache.Cache
-	client  redis.UniversalClient
+	once       sync.Once
+	handler    *cache.Cache
+	localCache cache.LocalCache
+	client     redis.UniversalClient
+
+	remoteMu               sync.RWMutex
+	remoteUnavailableUntil time.Time
+	remoteUnavailableErr   error
+	remoteRetryInterval    time.Duration
 }
 
 func (m *Memory) init() {
 	m.once.Do(func() {
+		localCache := cache.NewTinyLFU(10000, time.Minute)
 		m.client = redis.NewUniversalClient(&redis.UniversalOptions{
 			Addrs:    m.Address,
 			Password: m.Password,
 			Username: m.User,
 			PoolSize: m.PoolSize,
 		})
+		m.localCache = localCache
 		m.handler = cache.New(&cache.Options{
 			Redis:      m.client,
-			LocalCache: cache.NewTinyLFU(10000, time.Minute),
+			LocalCache: localCache,
 		})
 	})
 }
@@ -56,12 +64,21 @@ func prefixed(key string) string {
 // Set stores obj under key with the given TTL.
 func (m *Memory) Set(key string, obj interface{}, expiration time.Duration) error {
 	m.init()
-	return m.handler.Set(&cache.Item{
+	if err := m.remoteUnavailable(); err != nil {
+		return err
+	}
+	err := m.handler.Set(&cache.Item{
 		Ctx:   context.Background(),
 		Key:   prefixed(key),
 		Value: obj,
 		TTL:   expiration,
 	})
+	if err != nil {
+		m.recordRemoteError(err)
+		return err
+	}
+	m.recordRemoteSuccess()
+	return nil
 }
 
 // Get decodes the value stored at key into obj. obj must already be a pointer
@@ -70,13 +87,39 @@ func (m *Memory) Set(key string, obj interface{}, expiration time.Duration) erro
 // value". Forwarding obj directly preserves the caller's pointer.
 func (m *Memory) Get(key string, obj interface{}) error {
 	m.init()
-	return m.handler.Get(context.Background(), prefixed(key), obj)
+	cacheKey := prefixed(key)
+	if err := m.remoteUnavailable(); err != nil {
+		if m.localCache != nil {
+			if _, ok := m.localCache.Get(cacheKey); ok {
+				return m.handler.Get(context.Background(), cacheKey, obj)
+			}
+		}
+		return err
+	}
+	err := m.handler.Get(context.Background(), cacheKey, obj)
+	if err != nil {
+		m.recordRemoteError(err)
+		return err
+	}
+	m.recordRemoteSuccess()
+	return nil
 }
 
 // Delete removes key from both the local and the remote cache.
 func (m *Memory) Delete(key string) error {
 	m.init()
-	return m.handler.Delete(context.Background(), prefixed(key))
+	cacheKey := prefixed(key)
+	if err := m.remoteUnavailable(); err != nil {
+		m.handler.DeleteFromLocalCache(cacheKey)
+		return err
+	}
+	err := m.handler.Delete(context.Background(), cacheKey)
+	if err != nil {
+		m.recordRemoteError(err)
+		return err
+	}
+	m.recordRemoteSuccess()
+	return nil
 }
 
 // DeleteByPattern removes every key matching keyPattern (glob style).
@@ -84,21 +127,38 @@ func (m *Memory) Delete(key string) error {
 // keys when the caller knows what was invalidated.
 func (m *Memory) DeleteByPattern(keyPattern string) error {
 	m.init()
+	if err := m.remoteUnavailable(); err != nil {
+		return err
+	}
 	ctx := context.Background()
 	keys, err := m.client.Keys(ctx, prefixed(keyPattern)).Result()
 	if err != nil {
+		m.recordRemoteError(err)
 		return err
 	}
 	if len(keys) == 0 {
+		m.recordRemoteSuccess()
 		return nil
 	}
-	return m.client.Del(ctx, keys...).Err()
+	err = m.client.Del(ctx, keys...).Err()
+	if err != nil {
+		m.recordRemoteError(err)
+		return err
+	}
+	m.recordRemoteSuccess()
+	return nil
 }
 
 // Ping checks connectivity to the remote cache.
 func (m *Memory) Ping() error {
 	m.init()
-	return m.client.Ping(context.Background()).Err()
+	err := m.client.Ping(context.Background()).Err()
+	if err != nil {
+		m.recordRemoteError(err)
+		return err
+	}
+	m.recordRemoteSuccess()
+	return nil
 }
 
 // Close releases the underlying Redis client.

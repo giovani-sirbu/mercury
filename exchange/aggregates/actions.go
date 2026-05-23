@@ -48,4 +48,5 @@ type FuturesActions struct {
 	GetFuturesExchangeInfo  func() (ExchangeInfo, *common.APIError)
 	GetIncomeHistory        func(symbol string) ([]IncomeHistory, *common.APIError)
 	GetFuturesBalance       func() ([]FuturesBalance, *common.APIError)
+	KlineData               func(KlinePayload) ([]KlineResponse, *common.APIError)
 }

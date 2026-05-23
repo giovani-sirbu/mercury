@@ -1,9 +1,10 @@
 package actions
 
 import (
+	"strings"
+
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"strings"
 )
 
 func SaveError(event events.Events, err error) (events.Events, error) {
@@ -36,6 +37,10 @@ func SaveError(event events.Events, err error) (events.Events, error) {
 		event.Trade.PositionPrice = event.Params.OldPositionPrice
 	}
 	event.Params.PreventInfoLog = true
+
+	if isAPIError(message) {
+		message = extractExchangeErrorMessage(message)
+	}
 
 	event.Trade.Logs = append(event.Trade.Logs, aggragates.TradesLogs{
 		Percentage: event.Params.Percentage,

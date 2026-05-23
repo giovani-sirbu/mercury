@@ -26,6 +26,7 @@ func GetFuturesBinanceActions(e aggregates.Exchange) aggregates.FuturesActions {
 		GetFuturesExchangeInfo:  b.GetFuturesExchangeInfo,
 		GetIncomeHistory:        b.GetIncomeHistory,
 		GetFuturesBalance:       b.GetFuturesBalance,
+		KlineData:               b.FuturesKlines,
 	}
 }
 

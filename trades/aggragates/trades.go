@@ -59,6 +59,7 @@ type (
 		Percentage         float64
 		OldPosition        string
 		PreventInfoLog     bool
+		MarketSellOrder    bool
 		Quantity           float64
 		Profit             float64
 		InverseUsedAmount  []UsedAmountResult
