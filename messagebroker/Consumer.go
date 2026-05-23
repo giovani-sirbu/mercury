@@ -10,9 +10,15 @@ import (
 )
 
 const (
-	claimBatchSize      = 10
-	pollInterval        = 5 * time.Second
-	staleLockAfter      = 5 * time.Minute
+	claimBatchSize = 10
+	pollInterval   = 5 * time.Second
+	// staleLockAfter is the window after which a row's locked_at is
+	// considered abandoned and the row can be re-claimed by another worker.
+	// 60s is enough for any healthy handler to complete (the trade /
+	// email / user handlers all finish in <5s under load) while keeping
+	// the redelivery tail short on a real worker crash. Was 5m on master
+	// — too long for trade-related messages.
+	staleLockAfter      = 60 * time.Second
 	reconnectMaxBackoff = 30 * time.Second
 )
 

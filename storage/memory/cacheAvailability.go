@@ -30,6 +30,25 @@ func (m *Memory) remoteUnavailable() error {
 	return nil
 }
 
+// Available reports whether the remote (Redis / Dragonfly) is currently
+// reachable based on the most recent operation. Cheap — does NOT perform a
+// Redis call, just reads the in-process availability sentinel maintained by
+// recordRemoteError / recordRemoteSuccess. Returns false during the retry
+// window after a recent failure, true otherwise.
+//
+// Use this to fast-fail expensive code paths that will ultimately exit at a
+// fail-closed boundary (e.g., hermes ManageTrade exits if TryLockTrade
+// cannot acquire the lock). Checking Available() at the top of those paths
+// avoids the wasted HTTP cascade to agora that would otherwise fire on
+// every tick during a Redis outage.
+//
+// Cost of a false positive (returns true while remote is actually down):
+// one cache op fails and sets the sentinel; the next call returns false.
+// One wasted tick after the outage starts, then steady state.
+func (m *Memory) Available() bool {
+	return m.remoteUnavailable() == nil
+}
+
 func (m *Memory) recordRemoteError(err error) {
 	if !isRemoteAvailabilityError(err) {
 		return

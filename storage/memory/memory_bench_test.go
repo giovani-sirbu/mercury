@@ -24,10 +24,10 @@ func redisAvailable(tb testing.TB) string {
 	return addr
 }
 
-// BenchmarkMemoryGet measures a single Get round-trip against the current Memory implementation.
-// Pre-singleton (current master): every call re-creates the Redis client + TinyLFU, so each op pays
-// connection-handshake cost. Post-singleton (Faza 1.7): the client is reused and hot keys are served
-// from TinyLFU in-memory, so expect orders-of-magnitude improvement on repeated reads.
+// BenchmarkMemoryGet measures the default (Redis-only) Get path. Every call
+// goes over the wire — no local TinyLFU consult. Compare against
+// BenchmarkLocalViewGet to see the cost of the cross-process-correctness
+// guarantee we trade for here.
 func BenchmarkMemoryGet(b *testing.B) {
 	addr := redisAvailable(b)
 	m := Memory{Address: []string{addr}, PoolSize: 3}
@@ -44,7 +44,8 @@ func BenchmarkMemoryGet(b *testing.B) {
 	}
 }
 
-// BenchmarkMemorySet measures write latency. Same pre/post-singleton contrast applies.
+// BenchmarkMemorySet measures the default (Redis-only) Set path. Writes go
+// straight to Redis without touching TinyLFU.
 func BenchmarkMemorySet(b *testing.B) {
 	addr := redisAvailable(b)
 	m := Memory{Address: []string{addr}, PoolSize: 3}
@@ -55,8 +56,9 @@ func BenchmarkMemorySet(b *testing.B) {
 	}
 }
 
-// BenchmarkMemoryGetParallel exposes connection-pool contention under concurrent load —
-// roughly simulates a hermes replica serving WS ticks from many goroutines.
+// BenchmarkMemoryGetParallel exposes connection-pool contention under
+// concurrent load — roughly simulates a hermes replica serving WS ticks from
+// many goroutines, every one of which now pays a Redis round trip per read.
 func BenchmarkMemoryGetParallel(b *testing.B) {
 	addr := redisAvailable(b)
 	m := Memory{Address: []string{addr}, PoolSize: 10}
@@ -73,4 +75,30 @@ func BenchmarkMemoryGetParallel(b *testing.B) {
 			_ = m.Get(key, &out)
 		}
 	})
+}
+
+// BenchmarkLocalViewGet measures the opt-in local-cache Get path (Memory.Local()).
+// After the first read populates TinyLFU, subsequent reads are served from
+// in-process memory without a Redis hop. Use this to decide whether a hot
+// single-writer key is worth migrating from Memory.Get to Memory.Local().Get —
+// look for at least an order-of-magnitude difference vs BenchmarkMemoryGet to
+// justify the opt-in.
+func BenchmarkLocalViewGet(b *testing.B) {
+	addr := redisAvailable(b)
+	m := Memory{Address: []string{addr}, PoolSize: 3}
+
+	key := "bench:local:get"
+	if err := m.Local().Set(key, "baseline-value", time.Minute); err != nil {
+		b.Fatalf("seed LocalView.Set failed: %v", err)
+	}
+
+	// Warm the local cache so subsequent reads measure the steady-state hot path.
+	var warm string
+	_ = m.Local().Get(key, &warm)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var out string
+		_ = m.Local().Get(key, &out)
+	}
 }

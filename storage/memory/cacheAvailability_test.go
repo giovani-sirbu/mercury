@@ -31,7 +31,11 @@ func TestDeleteClearsLocalCacheDuringRemoteBackoff(t *testing.T) {
 	}
 
 	key := "local-delete"
-	if err := cache.Set(key, "cached-value", -1); err != nil {
+	// Seed via Local() — the default Memory.Set bypasses TinyLFU and would not
+	// populate the local cache. Negative TTL keeps the go-redis/cache library
+	// from attempting the Redis hop, so the seed succeeds even with the
+	// unreachable address above.
+	if err := cache.Local().Set(key, "cached-value", -1); err != nil {
 		t.Fatalf("seed local cache: %v", err)
 	}
 	if _, ok := cache.localCache.Get(prefixed(key)); !ok {

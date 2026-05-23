@@ -1,26 +1,16 @@
 package log
 
 import (
-	logs "github.com/sirupsen/logrus"
-	"io"
 	"os"
+
+	logs "github.com/sirupsen/logrus"
 )
 
 var logWrapper = logs.New()
 
 func Info(msg string, track string, parent string, fields ...Field) {
-	file, err := os.OpenFile("info.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	mw := io.MultiWriter(os.Stdout, file)
-
-	defer file.Close()
-
-	if err == nil {
-		logWrapper.Out = mw
-	} else {
-		logs.Info("Failed to logs to file, using default stderr")
-	}
-
-	logWrapper.SetFormatter(&logs.JSONFormatter{})
+	logWrapper.Out = getInfoWriter()
+	logWrapper.SetFormatter(formatter)
 
 	logWrapper.WithFields(applyFields(logs.Fields{
 		"span":   os.Getenv("SERVICE_NAME"),

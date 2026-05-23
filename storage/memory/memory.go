@@ -11,18 +11,28 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Memory is a Redis-backed key-value store with an in-process TinyLFU front.
+// Memory is a Redis-backed key-value store.
 //
-// The struct is configured once at service bootstrap (server.NewServer) and reused
-// for the lifetime of the process. Callers must hold a *Memory — the pointer
-// receiver is required because the singleton state (sync.Once + shared client) must
-// be observed across method calls.
+// The default Get / Set methods go straight to Redis — they do NOT touch the
+// in-process TinyLFU local cache. This is the safe default for any key that
+// might be written by another service, because TinyLFU has no cross-process
+// invalidation and would otherwise serve stale values for up to localCacheTTL.
 //
-// Prior versions used a value receiver and called Init() inside every Set/Get/Delete.
-// Each call spun up a new Redis UniversalClient plus a fresh TinyLFU, so the local
-// cache was effectively dead and every operation paid connection-handshake cost
-// (measured at ~3.5ms/op on master). The singleton keeps the client pool and the
-// local cache alive for the lifetime of the process.
+// Callers that want the local layer (single-process writer, read-heavy hot
+// path, staleness tolerable) opt in explicitly via Memory.Local(), which
+// returns a view whose Get / Set go through TinyLFU.
+//
+// The struct is configured once at service bootstrap (server.NewServer) and
+// reused for the lifetime of the process. Callers must hold a *Memory — the
+// pointer receiver is required because the singleton state (sync.Once + shared
+// client) must be observed across method calls.
+//
+// Prior versions used a value receiver and called Init() inside every
+// Set/Get/Delete. Each call spun up a new Redis UniversalClient plus a fresh
+// TinyLFU, so the local cache was effectively dead and every operation paid
+// connection-handshake cost (measured at ~3.5ms/op on master). The singleton
+// keeps the client pool and the local cache alive for the lifetime of the
+// process.
 type Memory struct {
 	Address  []string
 	Password string
@@ -40,9 +50,19 @@ type Memory struct {
 	remoteRetryInterval    time.Duration
 }
 
+// localCacheCapacity bounds the TinyLFU front. 50k is sized for the platform's
+// active-trades-ids + per-trade + per-symbol fan-out (each pair owns several
+// keys); the prior 10k saturated and churned under realistic load.
+const localCacheCapacity = 50_000
+
+// localCacheTTL caps how long a locally-cached value can be served without
+// re-checking Redis. Short enough that control-plane changes (lock release,
+// status flip) propagate within a tick; long enough to absorb burst reads.
+const localCacheTTL = time.Minute
+
 func (m *Memory) init() {
 	m.once.Do(func() {
-		localCache := cache.NewTinyLFU(10000, time.Minute)
+		localCache := cache.NewTinyLFU(localCacheCapacity, localCacheTTL)
 		m.client = redis.NewUniversalClient(&redis.UniversalOptions{
 			Addrs:    m.Address,
 			Password: m.Password,
@@ -61,17 +81,29 @@ func prefixed(key string) string {
 	return fmt.Sprintf("%s%s", os.Getenv("REDIS_PREFIX"), key)
 }
 
-// Set stores obj under key with the given TTL.
+// Set stores obj under key with the given TTL. Writes go straight to Redis —
+// the in-process TinyLFU local cache is NOT populated.
+//
+// Correctness-first default: the local cache has no cross-process invalidation,
+// so writing through it would let one service's stale local entry shadow a
+// fresh remote value written by another service. The previous behaviour caused
+// the trade duplicate-buy bug (hermes kept reading PositionType="new" from its
+// local cache after agora had written "buy" to Redis).
+//
+// Opt in to the local layer via Memory.Local() only for keys with a known
+// single-process writer where serving the same value many times in a row is
+// worth a small staleness window.
 func (m *Memory) Set(key string, obj interface{}, expiration time.Duration) error {
 	m.init()
 	if err := m.remoteUnavailable(); err != nil {
 		return err
 	}
 	err := m.handler.Set(&cache.Item{
-		Ctx:   context.Background(),
-		Key:   prefixed(key),
-		Value: obj,
-		TTL:   expiration,
+		Ctx:            context.Background(),
+		Key:            prefixed(key),
+		Value:          obj,
+		TTL:            expiration,
+		SkipLocalCache: true,
 	})
 	if err != nil {
 		m.recordRemoteError(err)
@@ -79,6 +111,27 @@ func (m *Memory) Set(key string, obj interface{}, expiration time.Duration) erro
 	}
 	m.recordRemoteSuccess()
 	return nil
+}
+
+// Exists checks key presence directly against Redis, bypassing the TinyLFU
+// local cache. Use this for control-plane keys (trade locks, etc.) where a
+// stale local-cache hit (Cache.Get reading a 60s-old "locked" value after
+// the source-of-truth was deleted) would cause the caller to skip work that
+// should run. Returns true when the key exists, false when missing or on
+// remote outage (fail-open is correct here — a temporary Redis blip should
+// not appear as a permanent lock).
+func (m *Memory) Exists(key string) (bool, error) {
+	m.init()
+	if err := m.remoteUnavailable(); err != nil {
+		return false, err
+	}
+	n, err := m.client.Exists(context.Background(), prefixed(key)).Result()
+	if err != nil {
+		m.recordRemoteError(err)
+		return false, err
+	}
+	m.recordRemoteSuccess()
+	return n > 0, nil
 }
 
 // SetNX atomically sets key only if it does not already exist. Returns
@@ -103,22 +156,28 @@ func (m *Memory) SetNX(key string, expiration time.Duration) (bool, error) {
 	return acquired, nil
 }
 
-// Get decodes the value stored at key into obj. obj must already be a pointer
-// (e.g. &result). Passing &obj yields *interface{}, which msgpack reflects through
-// to a non-addressable Value and panics with "reflect.Value.Set using unaddressable
-// value". Forwarding obj directly preserves the caller's pointer.
+// Get decodes the value stored at key into obj. Reads go straight to Redis —
+// the in-process TinyLFU local cache is NOT consulted.
+//
+// obj must already be a pointer (e.g. &result). Passing &obj yields
+// *interface{}, which msgpack reflects through to a non-addressable Value and
+// panics with "reflect.Value.Set using unaddressable value". Forwarding obj
+// directly preserves the caller's pointer.
+//
+// Correctness-first default: the local cache has no cross-process invalidation
+// — another service's Cache.Delete clears Redis but cannot touch this process's
+// TinyLFU. Going straight to Redis is the only way to guarantee that a value
+// written by one service is immediately visible to readers in another.
+//
+// Opt in to the local layer via Memory.Local() only for keys with a known
+// single-process writer where serving the same value many times in a row is
+// worth a small staleness window.
 func (m *Memory) Get(key string, obj interface{}) error {
 	m.init()
-	cacheKey := prefixed(key)
 	if err := m.remoteUnavailable(); err != nil {
-		if m.localCache != nil {
-			if _, ok := m.localCache.Get(cacheKey); ok {
-				return m.handler.Get(context.Background(), cacheKey, obj)
-			}
-		}
 		return err
 	}
-	err := m.handler.Get(context.Background(), cacheKey, obj)
+	err := m.handler.GetSkippingLocalCache(context.Background(), prefixed(key), obj)
 	if err != nil {
 		m.recordRemoteError(err)
 		return err

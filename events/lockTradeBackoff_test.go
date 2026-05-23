@@ -65,7 +65,7 @@ func TestLockTradeWithBackOffGrowsExponentially(t *testing.T) {
 	for i, want := range expected {
 		_ = ev.LockTradeWithBackOff()
 		rwLocker.RLock()
-		got := backoffTries[tradeID]
+		got := backoffTries[tradeID].duration
 		rwLocker.RUnlock()
 		if got != want {
 			t.Fatalf("iteration %d: got backoff %s, want %s", i, got, want)
@@ -77,7 +77,7 @@ func TestLockTradeWithBackOffGrowsExponentially(t *testing.T) {
 		_ = ev.LockTradeWithBackOff()
 	}
 	rwLocker.RLock()
-	got := backoffTries[tradeID]
+	got := backoffTries[tradeID].duration
 	rwLocker.RUnlock()
 	if got != maxBackOff {
 		t.Fatalf("expected backoff to cap at %s, got %s", maxBackOff, got)
