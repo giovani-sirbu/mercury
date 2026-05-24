@@ -8,7 +8,13 @@ import (
 	"time"
 )
 
-var secretKey = []byte(os.Getenv("ENCRYPTION_TOKEN_KEY"))
+// secretKey reads ENCRYPTION_TOKEN_KEY at call time rather than at package
+// init. Services load .env via godotenv.Load() inside main(), which runs
+// AFTER package initialization — a package-level `var = os.Getenv(...)` would
+// freeze an empty key and silently sign/verify every JWT with zero bytes.
+func secretKey() []byte {
+	return []byte(os.Getenv("ENCRYPTION_TOKEN_KEY"))
+}
 
 type UserClaims struct {
 	jwt.RegisteredClaims
@@ -28,7 +34,7 @@ func createToken(user UserClaims) (string, error) {
 			"exp":   user.Exp,
 		})
 
-	tokenString, err := token.SignedString(secretKey)
+	tokenString, err := token.SignedString(secretKey())
 	if err != nil {
 		return "", err
 	}
@@ -39,7 +45,7 @@ func createToken(user UserClaims) (string, error) {
 // VerifyToken verify an access token
 func VerifyToken(tokenString string) error {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return secretKey, nil
+		return secretKey(), nil
 	})
 
 	if err != nil {
@@ -88,7 +94,7 @@ func GenerateTokens(id uint, email string, role string) (Tokens, error) {
 func ParseToken(jwtToken string) (UserClaims, error) {
 	var userClaim UserClaims
 	token, err := jwt.ParseWithClaims(jwtToken, &userClaim, func(token *jwt.Token) (interface{}, error) {
-		return []byte(secretKey), nil
+		return secretKey(), nil
 	})
 	if err != nil {
 		return userClaim, err
