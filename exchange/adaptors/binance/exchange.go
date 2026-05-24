@@ -24,6 +24,12 @@ type Binance struct {
 // The nil-error short-circuit matters because callers often assign the
 // result into a *common.APIError field and check it later; a naked wrap
 // of nil would produce a non-nil wrapper and break that check.
+//
+// The Response byte slice is preserved because common.APIError.Error()
+// falls back to `<APIError> rsp=...` whenever Code==0 and Message=="";
+// the prior wrapper dropped Response, producing the useless
+// `<APIError> rsp=` log line that hid Binance error bodies (e.g. the
+// HTML 451 page that signals geo-restricted listenKey endpoints).
 func ApiError(err error) *common.APIError {
 	if err == nil {
 		return nil
@@ -31,8 +37,9 @@ func ApiError(err error) *common.APIError {
 
 	if apiErr, ok := err.(*common.APIError); ok {
 		return &common.APIError{
-			Code:    apiErr.Code,
-			Message: apiErr.Message,
+			Code:     apiErr.Code,
+			Message:  apiErr.Message,
+			Response: apiErr.Response,
 		}
 	}
 

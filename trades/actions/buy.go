@@ -1,14 +1,17 @@
 package actions
 
 import (
+	"fmt"
+	"math"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/adshao/go-binance/v2/common"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"math"
-	"strconv"
-	"strings"
 )
 
 func Buy(event events.Events) (events.Events, error) {
@@ -112,6 +115,20 @@ func Buy(event events.Events) (events.Events, error) {
 	}
 
 	event.Trade.PendingOrder = response.OrderID
+
+	// Write the OrderID -> TradeID mapping directly to Redis (no broker
+	// dependency). If the downstream updateTrade action cannot publish
+	// (messagebus outage), agora's user-data-stream handler still has a way
+	// to reconcile the fill: it reads this mapping when its DB query
+	// `WHERE pending_order = ?` finds nothing. Closes Gap 1.
+	if response.OrderID != 0 && event.Storage != nil {
+		mapping := aggragates.BinanceOrderMapping{
+			TradeID: event.Trade.ID,
+			UserID:  event.Trade.UserID,
+			Symbol:  event.Trade.Symbol,
+		}
+		_ = event.Storage.Set(fmt.Sprintf("binance-order:%d", response.OrderID), mapping, 24*time.Hour)
+	}
 
 	if err != nil {
 		return SaveError(event, err)

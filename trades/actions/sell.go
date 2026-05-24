@@ -2,13 +2,15 @@ package actions
 
 import (
 	"fmt"
+	"strconv"
+	"time"
+
 	"github.com/adshao/go-binance/v2/common"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"strconv"
 )
 
 func Sell(event events.Events) (events.Events, error) {
@@ -88,6 +90,17 @@ func Sell(event events.Events) (events.Events, error) {
 
 	event.Trade.PendingOrder = response.OrderID
 	event.Trade.Dust = dust
+
+	// Write the OrderID -> TradeID mapping directly to Redis (no broker
+	// dependency). See buy.go for the full rationale. Same code path.
+	if response.OrderID != 0 && event.Storage != nil {
+		mapping := aggragates.BinanceOrderMapping{
+			TradeID: event.Trade.ID,
+			UserID:  event.Trade.UserID,
+			Symbol:  event.Trade.Symbol,
+		}
+		_ = event.Storage.Set(fmt.Sprintf("binance-order:%d", response.OrderID), mapping, 24*time.Hour)
+	}
 
 	if err != nil {
 		return SaveError(event, err)

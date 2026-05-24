@@ -2,10 +2,12 @@ package actions
 
 import (
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/adshao/go-binance/v2/futures"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"strings"
 )
 
 func CreateFuturesOrders(event events.Events) (events.Events, error) {
@@ -104,6 +106,17 @@ func CreateFuturesOrders(event events.Events) (events.Events, error) {
 	// Set stop loss order into pending order
 	event.Trade.PendingOrder = createOrder.OrderID
 	event.Trade.PositionType = strings.ToLower(orderSide)
+
+	// Write the OrderID -> TradeID mapping directly to Redis (no broker
+	// dependency). See buy.go for the full rationale. Same code path.
+	if createOrder.OrderID != 0 && event.Storage != nil {
+		mapping := aggragates.BinanceOrderMapping{
+			TradeID: event.Trade.ID,
+			UserID:  event.Trade.UserID,
+			Symbol:  event.Trade.Symbol,
+		}
+		_ = event.Storage.Set(fmt.Sprintf("binance-order:%d", createOrder.OrderID), mapping, 24*time.Hour)
+	}
 
 	if createStopLossErr != nil {
 		fmt.Println("create stop loss order error", oppositeSide, string(futures.OrderTypeStopMarket), event.Trade.Symbol, quantityStr, stopPriceStr, true)
