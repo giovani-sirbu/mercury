@@ -2,13 +2,14 @@ package actions
 
 import (
 	"fmt"
+	"strconv"
+
 	"github.com/adshao/go-binance/v2/common"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"strconv"
 )
 
 func Sell(event events.Events) (events.Events, error) {
@@ -24,16 +25,25 @@ func Sell(event events.Events) (events.Events, error) {
 	if clientError != nil {
 		return SaveError(event, clientError)
 	}
-	buyQuantity, sellQuantity := trades.GetQuantitiesOld(event.Trade.History)
-	feeInBase, feeInQuote := CalculateFeesOld(event)
-	quantity := buyQuantity - sellQuantity - feeInBase
+	buyQty, sellQty := GetGrossQuantities(event)
+	// Literal asset fees: only base-paid fees reduce the base wallet balance,
+	// only quote-paid fees reduce the quote wallet balance. BNB/third-asset
+	// fees come from a separate wallet and must NOT be subtracted from the
+	// trade's base or quote totals here. For profit accounting that needs the
+	// full cost-in-denomination, use GetFeesBaseQuote / GetFees instead.
+	feeInBase, feeInQuote := CalculateFees(event)
+	quantity := buyQty - sellQty - feeInBase
 
 	if event.Trade.Inverse {
-		sellQuantity = trades.GetQuantityInQuote(event.Trade.History, "BUY")
-		buyQuantity = trades.GetQuantityInQuote(event.Trade.History, "SELL")
-		quantity = sellQuantity - buyQuantity - feeInQuote
+		// Inverse trades need quote-denominated totals: each fill's quantity is
+		// re-aggregated multiplied by its own price. Then we subtract literal
+		// quote fees, convert to base by dividing by PositionPrice, and
+		// subtract any literal base-side fees (covers partial-fill dust).
+		sellInQuote := trades.GetQuantityInQuote(event.Trade.History, "BUY")
+		buyInQuote := trades.GetQuantityInQuote(event.Trade.History, "SELL")
+		quantity = sellInQuote - buyInQuote - feeInQuote
 		quantity = quantity / event.Trade.PositionPrice
-		quantity = quantity - feeInBase // subtract fee in base for the partial cases
+		quantity = quantity - feeInBase
 	}
 
 	quantityBeforeLotSize := quantity

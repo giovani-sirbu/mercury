@@ -12,8 +12,8 @@ import (
 // TestSpotDCA_FourBuysPriceDownThenSellAtProfit walks the full DCA happy path
 // on BTC/USDC: four bullish-bias buys at falling prices, then a final sell
 // once price recovers above the weighted-average entry. Every action chain
-// stop is exercised: history accumulation, GetQuantitiesOld, GetProfit,
-// CalculateFeesOld, GetFees, Sell.
+// stop is exercised: history accumulation, GetGrossQuantities, GetProfit,
+// GetFeesBaseQuote, GetFees, Sell.
 //
 // History (BUY):
 //
@@ -36,9 +36,9 @@ func TestSpotDCA_FourBuysPriceDownThenSellAtProfit(t *testing.T) {
 
 	// --- Step 1: profit calculation must report a positive net profit at
 	// sell price 101000. GetProfit = sellTotal - buyTotal in quote.
-	feeInBase, _ := actions.CalculateFeesOld(event)
+	feeInBase, _ := actions.GetFeesBaseQuote(event)
 	if math.Abs(feeInBase-0.000015) > 1e-9 {
-		t.Fatalf("CalculateFeesOld base = %v, want 0.000015", feeInBase)
+		t.Fatalf("GetFeesBaseQuote base = %v, want 0.000015", feeInBase)
 	}
 
 	// --- Step 2: Sell must consume the entire net long position and emit a

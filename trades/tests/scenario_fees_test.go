@@ -101,20 +101,31 @@ func TestFees_MixedAssetFeesAcrossHistory(t *testing.T) {
 	}
 }
 
-// TestFees_CalculateFeesOldSeparatesBaseAndQuote ensures the older helper
-// returns the two buckets independently — required by Sell + HasFunds.
-func TestFees_CalculateFeesOldSeparatesBaseAndQuote(t *testing.T) {
+// TestFees_GetFeesBaseQuoteSeparatesBaseAndQuote pins the dual-denomination
+// contract required by Sell + HasFunds: base-asset fees feed feeInBase (and
+// are converted into quote via fill price), quote-asset fees feed feeInQuote
+// (and are converted into base by dividing by fill price). Trade-execution
+// callers need both buckets so they can subtract fees in the correct
+// denomination before the final lot-size pass.
+func TestFees_GetFeesBaseQuoteSeparatesBaseAndQuote(t *testing.T) {
 	trade := scenarioBuildTrade("closed", 100000, false)
 	scenarioAppendHistory(&trade, "BUY", 0.001, 100000, "BTC", 0.000001)
 	scenarioAppendHistory(&trade, "BUY", 0.002, 98000, "USDC", 0.2)
 	scenarioAppendHistory(&trade, "sell", 0.001, 102000, "BTC", 0.000001)
 
-	feeInBase, feeInQuote := actions.CalculateFeesOld(events.Events{Trade: trade})
-	if math.Abs(feeInBase-0.000002) > 1e-12 {
-		t.Errorf("feeInBase = %v, want 0.000002", feeInBase)
+	feeInBase, feeInQuote := actions.GetFeesBaseQuote(events.Events{Trade: trade})
+
+	// base fees: 0.000001 BTC + 0.000001 BTC = 0.000002 BTC direct
+	//            + 0.2 USDC / 98000 = ~2.0408e-6 BTC from the quote-asset fee
+	const wantFeeInBase = 0.000002 + 0.2/98000.0
+	if math.Abs(feeInBase-wantFeeInBase) > 1e-12 {
+		t.Errorf("feeInBase = %v, want %v", feeInBase, wantFeeInBase)
 	}
-	if math.Abs(feeInQuote-0.2) > 1e-9 {
-		t.Errorf("feeInQuote = %v, want 0.2", feeInQuote)
+
+	// quote fees: 0.2 USDC direct + 0.000001*100000 + 0.000001*102000 = 0.402 USDC
+	const wantFeeInQuote = 0.2 + 0.000001*100000 + 0.000001*102000
+	if math.Abs(feeInQuote-wantFeeInQuote) > 1e-9 {
+		t.Errorf("feeInQuote = %v, want %v", feeInQuote, wantFeeInQuote)
 	}
 }
 
