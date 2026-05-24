@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/giovani-sirbu/mercury/log"
+	"github.com/giovani-sirbu/mercury/metrics"
 )
 
 // Produce persists a message to the outbox and fires pg_notify as a wakeup
@@ -27,6 +28,7 @@ func (m MessageBroker) ProduceWithCorrelation(topic string, value []byte, correl
 func (m MessageBroker) produceWithCorrelation(topic string, value []byte, correlationID string, producer *Producer, trackName string) error {
 	ctx := context.Background()
 	prefixedTopic := topicWithPrefix(topic)
+	registerTopic(prefixedTopic)
 
 	tx, err := producer.Pool.Begin(ctx)
 	if err != nil {
@@ -54,6 +56,17 @@ func (m MessageBroker) produceWithCorrelation(topic string, value []byte, correl
 		log.Error(fmt.Sprintf("Failed to commit: %s", err), trackName, "Producer", log.WithCorrelation(correlationID))
 		return err
 	}
+
+	// Count produced messages, partitioning by whether the correlation_id
+	// is set. Helps track adoption as more callers migrate from Produce to
+	// ProduceWithCorrelation.
+	cidLabel := "false"
+	if correlationID != "" {
+		cidLabel = "true"
+	}
+	metrics.BrokerMessagesProduced.
+		WithLabelValues(state.serviceName, prefixedTopic, cidLabel).
+		Inc()
 
 	log.Info(fmt.Sprintf("Produced on topic: %s", prefixedTopic), "", "Producer", log.WithCorrelation(correlationID))
 	return nil

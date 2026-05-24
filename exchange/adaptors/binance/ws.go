@@ -11,9 +11,16 @@ import (
 	"github.com/adshao/go-binance/v2"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/log"
+	"github.com/giovani-sirbu/mercury/metrics"
 	"github.com/gorilla/websocket"
 	"github.com/jinzhu/copier"
 )
+
+// wsStalenessSampleInterval is how often the staleness sampler refreshes
+// ws_last_message_age_seconds. 5s gives Prometheus (scrape every 15s) at
+// least 2 fresh samples per scrape window so a stalled stream is caught
+// within ~25s — fast enough that hermes doesn't trade on stale prices.
+const wsStalenessSampleInterval = 5 * time.Second
 
 // Backoff bounds for reconnect loops. On every consecutive failure the delay
 // doubles, capped at wsReconnectMaxBackoff. A clean disconnect via ctx.Done
@@ -100,16 +107,41 @@ func (e Binance) PriceWSHandler(ctx context.Context, pairs []string, handler fun
 		return fmt.Errorf("unsupported exchange: %s", e.Name)
 	}
 
+	// Shared staleness clock — runPriceStream stores the wall-clock time
+	// of the most recently received frame. The sampler goroutine below
+	// publishes (now - lastFrame) as ws_last_message_age_seconds so a
+	// connected-but-silent stream is detectable from outside.
+	var lastFrameNs atomic.Int64
+	lastFrameNs.Store(time.Now().UnixNano())
+
+	svc := serviceName()
+	go runWSStalenessSampler(ctx, svc, e.Name, "price", &lastFrameNs)
+
+	// Initial state = disconnected; runPriceStream flips to 1 on Dial success.
+	metrics.WSConnectionState.WithLabelValues(svc, e.Name, "price").Set(0)
+
 	backoff := wsReconnectInitialBackoff
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil
 		}
 
-		err := e.runPriceStream(ctx, socketURL, handler)
+		err := e.runPriceStream(ctx, socketURL, handler, &lastFrameNs)
 		if err == nil || ctx.Err() != nil {
 			return nil
 		}
+
+		// Connection ended with an error → classify + count the reconnect.
+		// "dial" vs "read" matters: dial failures usually mean upstream is
+		// down or network is broken; read failures usually mean Binance
+		// closed the socket (e.g. 24h limit, idle timeout).
+		reason := "read"
+		if strings.Contains(err.Error(), "dial") || strings.Contains(err.Error(), "connect") {
+			reason = "dial"
+		} else if strings.Contains(err.Error(), "panic") {
+			reason = "panic"
+		}
+		metrics.WSReconnects.WithLabelValues(svc, e.Name, "price", reason).Inc()
 
 		log.Info(fmt.Sprintf("Price WS error: %s (reconnecting in %s)", err.Error(), backoff), "", "PriceWSHandler")
 		select {
@@ -124,21 +156,48 @@ func (e Binance) PriceWSHandler(ctx context.Context, pairs []string, handler fun
 	}
 }
 
+// runWSStalenessSampler publishes ws_last_message_age_seconds every
+// wsStalenessSampleInterval. Exits when ctx is cancelled. Cheap: one
+// gauge Set per tick, no allocs.
+func runWSStalenessSampler(ctx context.Context, service, exchange, stream string, lastFrameNs *atomic.Int64) {
+	t := time.NewTicker(wsStalenessSampleInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			age := time.Since(time.Unix(0, lastFrameNs.Load())).Seconds()
+			metrics.WSLastMessageAge.WithLabelValues(service, exchange, stream).Set(age)
+		}
+	}
+}
+
 // runPriceStream opens a single websocket session and reads until the server
 // disconnects or ctx is cancelled. It returns nil on intentional shutdown and
 // a non-nil error otherwise so the caller can decide whether to reconnect.
-func (e Binance) runPriceStream(ctx context.Context, socketURL string, handler func(aggregates.PriceWSResponseData)) (err error) {
+//
+// lastFrameNs is updated on every successful frame read so the staleness
+// sampler in PriceWSHandler can publish ws_last_message_age_seconds.
+func (e Binance) runPriceStream(ctx context.Context, socketURL string, handler func(aggregates.PriceWSResponseData), lastFrameNs *atomic.Int64) (err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			err = fmt.Errorf("price stream panic: %v", rec)
 		}
 	}()
 
+	svc := serviceName()
+
 	conn, _, dialErr := websocket.DefaultDialer.DialContext(ctx, socketURL, nil)
 	if dialErr != nil {
 		return dialErr
 	}
 	defer conn.Close()
+
+	// Connection is up — flip the state gauge. Defer the reset so any
+	// exit path (clean, error, panic) brings it back to 0.
+	metrics.WSConnectionState.WithLabelValues(svc, e.Name, "price").Set(1)
+	defer metrics.WSConnectionState.WithLabelValues(svc, e.Name, "price").Set(0)
 
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -159,6 +218,11 @@ func (e Binance) runPriceStream(ctx context.Context, socketURL string, handler f
 			}
 			return readErr
 		}
+		// Frame received — update staleness clock + counter before
+		// dispatching so a slow handler doesn't make the stream look stale.
+		lastFrameNs.Store(time.Now().UnixNano())
+		metrics.WSMessagesReceived.WithLabelValues(svc, e.Name, "price").Inc()
+
 		if jsonErr := json.Unmarshal(msg, &response); jsonErr != nil {
 			// Malformed frame — log and continue; no point reconnecting for this.
 			log.Error(jsonErr.Error(), "json.Unmarshal", "PriceWSHandler")

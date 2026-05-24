@@ -2,12 +2,25 @@ package ginAdaptors
 
 import (
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/giovani-sirbu/mercury/auth"
+	"github.com/giovani-sirbu/mercury/metrics"
 )
+
+// authServiceName is the value used for the `service` label on the auth
+// metrics. Read from the same SERVICE_NAME env var the rest of mercury
+// uses for self-identification, falling back to "unknown" so a missing
+// env doesn't dump everything into an empty label.
+func authServiceName() string {
+	if v := os.Getenv("SERVICE_NAME"); v != "" {
+		return v
+	}
+	return "unknown"
+}
 
 func stringToUint(s string) uint {
 	i, _ := strconv.Atoi(s)
@@ -31,14 +44,17 @@ func extractBearerToken(c *gin.Context) (string, bool) {
 }
 
 func IsAuth(c *gin.Context) {
+	svc := authServiceName()
 	token, ok := extractBearerToken(c)
 	if !ok {
+		metrics.JWTValidationFailures.WithLabelValues(svc, "missing").Inc()
 		c.Abort()
 		Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
 		return
 	}
 
 	if err := auth.VerifyToken(token); err != nil {
+		metrics.JWTValidationFailures.WithLabelValues(svc, "invalid").Inc()
 		c.Abort()
 		Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
 		return
@@ -50,11 +66,16 @@ func IsAuth(c *gin.Context) {
 	if userId != 0 {
 		userInfo, err := auth.ParseToken(token)
 		if err != nil {
+			metrics.JWTValidationFailures.WithLabelValues(svc, "invalid").Inc()
 			c.Abort()
 			Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
 			return
 		}
 		if userInfo.Id != userId && userInfo.Role != "admin" {
+			// Token is valid but targets another user's resource — the
+			// strongest cross-tenant-attack signal we have. Tracking it
+			// separately from "invalid" so alerts can fire only on this.
+			metrics.JWTValidationFailures.WithLabelValues(svc, "forbidden").Inc()
 			c.Abort()
 			Response(c, http.StatusForbidden, "ACCESS_FORBIDDEN")
 			return
@@ -65,14 +86,17 @@ func IsAuth(c *gin.Context) {
 }
 
 func IsAdmin(c *gin.Context) {
+	svc := authServiceName()
 	token, ok := extractBearerToken(c)
 	if !ok {
+		metrics.JWTValidationFailures.WithLabelValues(svc, "missing").Inc()
 		c.Abort()
 		Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
 		return
 	}
 
 	if err := auth.VerifyToken(token); err != nil {
+		metrics.JWTValidationFailures.WithLabelValues(svc, "invalid").Inc()
 		c.Abort()
 		Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
 		return
@@ -80,11 +104,13 @@ func IsAdmin(c *gin.Context) {
 
 	userInfo, err := auth.ParseToken(token)
 	if err != nil {
+		metrics.JWTValidationFailures.WithLabelValues(svc, "invalid").Inc()
 		c.Abort()
 		Response(c, http.StatusUnauthorized, "UNAUTHORIZED")
 		return
 	}
 	if userInfo.Role != "admin" {
+		metrics.JWTValidationFailures.WithLabelValues(svc, "forbidden").Inc()
 		c.Abort()
 		Response(c, http.StatusForbidden, "ACCESS_FORBIDDEN")
 		return

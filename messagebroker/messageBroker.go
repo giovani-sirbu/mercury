@@ -71,6 +71,7 @@ func (broker MessageBroker) Init() BrokerMethods {
 		}
 		state = brokerState{pool: pool, serviceName: broker.ServiceName, dsn: broker.DSN}
 		go runCleanup(pool)
+		go runPendingSampler(pool, broker.ServiceName)
 	}
 
 	return BrokerMethods{

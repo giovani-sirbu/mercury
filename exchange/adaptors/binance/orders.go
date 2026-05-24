@@ -100,16 +100,23 @@ func (e Binance) GetTrades(orderId int64, symbol string) ([]aggregates.Trade, *c
 // binanceCreateOrder is the shared order-placement primitive. Internal-only;
 // the exported Buy/Sell/MarketBuy/MarketSell helpers above pick the right
 // side + type combination before calling it.
-func (e Binance) binanceCreateOrder(sideType binance.SideType, orderType binance.OrderType, symbol string, quantity float64, price string) (*binance.CreateOrderResponse, *common.APIError) {
+func (e Binance) binanceCreateOrder(sideType binance.SideType, orderType binance.OrderType, symbol string, quantity float64, price string) (order *binance.CreateOrderResponse, apiErr *common.APIError) {
+	// Single histogram observation per order placement, regardless of which
+	// shape (market vs limit) the SDK call takes. Deferred closure captures
+	// the final apiErr via the named return — see instrumentation.go for the
+	// reasoning behind the closure-returning-closure shape.
+	observe := observeBinanceCall("create-order", "spot")
+	defer func() { observe(apiErr) }()
+
 	formattedSymbol := strings.Replace(symbol, "/", "", 1)
 	client, initErr := InitExchange(e)
 	if initErr != nil {
-		return nil, initErr
+		apiErr = initErr
+		return
 	}
 
 	stringQuantity := fmt.Sprintf("%f", quantity)
 
-	var order *binance.CreateOrderResponse
 	var err error
 
 	if orderType == binance.OrderTypeMarket {
@@ -124,5 +131,6 @@ func (e Binance) binanceCreateOrder(sideType binance.SideType, orderType binance
 			Price(price).Do(context.Background())
 	}
 
-	return order, ApiError(err)
+	apiErr = ApiError(err)
+	return
 }

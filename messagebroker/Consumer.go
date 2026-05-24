@@ -55,6 +55,7 @@ func (m MessageBroker) ConsumerCtx(topic string, handler ContextHandler) {
 
 func (m MessageBroker) runConsumer(topic string, handler ContextHandler) {
 	prefixedTopic := topicWithPrefix(topic)
+	registerTopic(prefixedTopic)
 	commonLog.Info(fmt.Sprintf("Consumer started on topic: %s", prefixedTopic), "", "Consumer")
 
 	backoff := time.Second

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	commonLog "github.com/giovani-sirbu/mercury/log"
+	"github.com/giovani-sirbu/mercury/metrics"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -98,7 +99,7 @@ func claimBatch(ctx context.Context, topic, serviceName string, handler ContextH
 	defer tx.Rollback(ctx)
 
 	rows, err := tx.Query(ctx, `
-        SELECT id, payload, COALESCE(correlation_id, '') FROM message_queue
+        SELECT id, payload, COALESCE(correlation_id, ''), locked_at, created_at FROM message_queue
         WHERE topic = $1
           AND processed_at IS NULL
           AND (locked_at IS NULL OR locked_at < $3)
@@ -114,17 +115,35 @@ func claimBatch(ctx context.Context, topic, serviceName string, handler ContextH
 		id            int64
 		payload       []byte
 		correlationID string
+		// staleReclaim is true when this row had a non-NULL locked_at at
+		// claim time — meaning a previous worker locked it and never marked
+		// it processed within staleLockAfter. Used to emit the
+		// messagebroker_stale_lock_reclaimed_total counter so ops can see
+		// when handlers are crashing or hanging.
+		staleReclaim bool
+		// createdAt is the row's produce timestamp from message_queue. Used
+		// to observe BrokerE2ELag (produce → dispatch) per message so we
+		// can tell pipeline lag apart from handler latency.
+		createdAt time.Time
 	}
 	var claimed []claimedRow
 	for rows.Next() {
 		var id int64
 		var raw json.RawMessage
 		var cid string
-		if err := rows.Scan(&id, &raw, &cid); err != nil {
+		var lockedAt *time.Time
+		var createdAt time.Time
+		if err := rows.Scan(&id, &raw, &cid, &lockedAt, &createdAt); err != nil {
 			rows.Close()
 			return 0, err
 		}
-		claimed = append(claimed, claimedRow{id: id, payload: []byte(raw), correlationID: cid})
+		claimed = append(claimed, claimedRow{
+			id:            id,
+			payload:       []byte(raw),
+			correlationID: cid,
+			staleReclaim:  lockedAt != nil,
+			createdAt:     createdAt,
+		})
 	}
 	rows.Close()
 
@@ -146,6 +165,14 @@ func claimBatch(ctx context.Context, topic, serviceName string, handler ContextH
 	}
 
 	for _, r := range claimed {
+		if r.staleReclaim {
+			metrics.BrokerStaleLockReclaimed.WithLabelValues(serviceName, topic).Inc()
+		}
+		// Observe produce→dispatch lag before handing off to runHandler so
+		// the metric reflects pipeline delay specifically — not handler work.
+		metrics.BrokerE2ELag.
+			WithLabelValues(serviceName, topic).
+			Observe(time.Since(r.createdAt).Seconds())
 		runHandler(ctx, topic, r.id, r.correlationID, r.payload, handler)
 	}
 	return len(claimed), nil
@@ -156,8 +183,25 @@ func runHandler(ctx context.Context, topic string, id int64, correlationID strin
 	// anything it calls downstream (log, ProduceWithCorrelation, outbound HTTP)
 	// can fish it back out via log.CorrelationFromContext.
 	ctx = commonLog.ContextWithCorrelation(ctx, correlationID)
+
+	// Time the handler call. `outcome` is set after the fact below — either
+	// "ok" on the success path or "panic" inside the recover. We observe in
+	// a deferred closure so a panic doesn't bypass the metric (a panic that
+	// skipped observation would leave the histogram silent during the very
+	// incidents observability is supposed to catch).
+	start := time.Now()
+	outcome := "ok"
+
+	serviceName := state.serviceName
+	defer func() {
+		metrics.BrokerHandlerDuration.
+			WithLabelValues(serviceName, topic, outcome).
+			Observe(time.Since(start).Seconds())
+	}()
+
 	defer func() {
 		if rec := recover(); rec != nil {
+			outcome = "panic"
 			msg := fmt.Sprintf("handler panic on %s id=%d: %v\n%s", topic, id, rec, debug.Stack())
 			commonLog.Error(msg, "runHandler", "Consumer", commonLog.WithCorrelation(correlationID))
 			releaseLock(ctx, id, fmt.Sprintf("panic: %v", rec))
