@@ -37,24 +37,25 @@ func SimpleCaseHasEnoughFunds() events.Events {
 }
 
 func TestHasEnoughFunds(t *testing.T) {
-	var tests []buyTests
+	type hasEnoughCase struct {
+		Event events.Events
+		Name  string
+	}
 
-	tests = append(tests, buyTests{SimpleCaseHasEnoughFunds(), 1.36, false, "Next buy, no history"})
+	cases := []hasEnoughCase{
+		{SimpleCaseHasEnoughFunds(), "Next buy, no history"},
+	}
 
-	for _, test := range tests {
-		nextEvent, err := actions.HasEnoughFunds(test.Event)
-
-		remainedQuantity, neededQuantity, _, _ := actions.GetFundsQuantities(nextEvent)
-
+	for _, c := range cases {
+		nextEvent, err := actions.HasEnoughFunds(c.Event)
 		if err != nil {
 			t.Fatalf("Failed with error: %s", err)
 		}
 
+		remainedQuantity, neededQuantity, _, _ := actions.GetFundsQuantities(nextEvent)
 		if remainedQuantity < neededQuantity {
-			t.Errorf("Incorrect quantity %f, wanted %f, when testing %s", nextEvent.Params.Quantity, test.ExpectedQuantity, test.Name)
-		} else {
-			t.Logf("PASS: Correct quantity %f when testing %s", nextEvent.Params.Quantity, test.Name)
+			t.Errorf("Insufficient wallet after HasEnoughFunds for %s: remained %f, needed %f",
+				c.Name, remainedQuantity, neededQuantity)
 		}
 	}
-
 }

@@ -131,3 +131,56 @@ func TestGetFeesInverseReturnsBaseCurrencyFees(t *testing.T) {
 		t.Fatalf("fees mismatch: got %f, want %f", got, want)
 	}
 }
+
+// TestGetFeesBaseQuoteCrossConvertsBetweenDenominations pins the dual-output
+// contract used by Sell + HasFunds. A base-asset fee fills feeInBase directly
+// and feeInQuote via fill price; a quote-asset fee fills feeInQuote directly
+// and feeInBase via division by fill price. The trade-execution callers rely
+// on both buckets being populated regardless of which asset the fee was paid
+// in.
+func TestGetFeesBaseQuoteCrossConvertsBetweenDenominations(t *testing.T) {
+	trade := aggragates.Trades{
+		Symbol: "BTC/USDT",
+		History: []aggragates.TradesHistory{
+			{Price: 64000, Fees: []aggragates.TradesFees{{Asset: "BTC", Fee: 0.001}}},
+			{Price: 65000, Fees: []aggragates.TradesFees{{Asset: "USDT", Fee: 1.0}}},
+		},
+	}
+
+	feeInBase, feeInQuote := GetFeesBaseQuote(events.Events{Trade: trade})
+
+	// feeInBase = 0.001 BTC (direct) + 1.0 USDT / 65000 USDT/BTC = ~1.5385e-5 BTC
+	const wantFeeInBase = 0.001 + 1.0/65000.0
+	if feeInBase != wantFeeInBase {
+		t.Fatalf("feeInBase = %v, want %v", feeInBase, wantFeeInBase)
+	}
+
+	// feeInQuote = 1.0 USDT (direct) + 0.001 BTC * 64000 USDT/BTC = 65.0 USDT
+	const wantFeeInQuote = 1.0 + 0.001*64000
+	if feeInQuote != wantFeeInQuote {
+		t.Fatalf("feeInQuote = %v, want %v", feeInQuote, wantFeeInQuote)
+	}
+}
+
+// TestGetFeesBaseQuotePopulatesBothFromBNBFee confirms the BNB-fee fix
+// reaches the trade-execution callers (Sell, HasFunds). The legacy
+// CalculateFeesOld returned (0, 0) when the only fee was paid in BNB,
+// silently dropping it from quantity calculations. GetFeesBaseQuote uses
+// getSymbolPrice (via WsPrices) so a positive BNB fee now contributes to
+// both denominations.
+func TestGetFeesBaseQuotePopulatesBothFromBNBFee(t *testing.T) {
+	event := buildTradeWithBNBFee(0.1)
+	event.WsPrices = map[string]float64{
+		"BNB/USDC": 500,   // 0.1 BNB priced at 500 USDC each = 50 USDC fee in quote
+		"BTC/USDC": 65000, // needed to convert the BNB fee into base (BTC) via ProfitAsset
+	}
+
+	feeInBase, feeInQuote := GetFeesBaseQuote(event)
+
+	if feeInQuote <= 0 {
+		t.Errorf("feeInQuote = %v, want >0 (BNB fee must reach quote denomination)", feeInQuote)
+	}
+	if feeInBase <= 0 {
+		t.Errorf("feeInBase = %v, want >0 (BNB fee must reach base denomination via ProfitAsset)", feeInBase)
+	}
+}

@@ -26,14 +26,16 @@ func GetAssetBudget(assets []aggregates.UserAssetRecord, assetSymbol string) flo
 }
 
 func GetUsedQuantities(event events.Events) float64 {
-	buyQuantity, sellQuantity := trades.GetQuantitiesOld(event.Trade.History)
-	feeInBase, _ := CalculateFeesOld(event)
-	quantity := buyQuantity - sellQuantity - feeInBase
+	buyQty, sellQty := GetGrossQuantities(event)
+	// Literal asset fees only: see sell.go for the rationale (BNB and other
+	// third-asset fees do not reduce base or quote wallet balances).
+	feeInBase, _ := CalculateFees(event)
+	quantity := buyQty - sellQty - feeInBase
 
 	if event.Trade.Inverse {
-		sellQuantity = trades.GetQuantityInQuote(event.Trade.History, "BUY")
-		buyQuantity = trades.GetQuantityInQuote(event.Trade.History, "SELL")
-		quantity = sellQuantity - buyQuantity
+		sellInQuote := trades.GetQuantityInQuote(event.Trade.History, "BUY")
+		buyInQuote := trades.GetQuantityInQuote(event.Trade.History, "SELL")
+		quantity = sellInQuote - buyInQuote
 		quantity = quantity / event.Trade.PositionPrice
 		quantity = quantity - feeInBase
 	}
@@ -99,11 +101,12 @@ func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
 	}
 
 	if sellAction {
-		buyQty, sellQty := trades.GetQuantitiesOld(event.Trade.History)
+		buyQty, sellQty := GetGrossQuantities(event)
 		assetSymbol = pairSymbols[0]
 		neededQuantity = buyQty - sellQty
 
-		feeInBase, feeInQuote := CalculateFeesOld(event)
+		// Literal asset fees only — see sell.go for the rationale.
+		feeInBase, feeInQuote := CalculateFees(event)
 		neededQuantity -= feeInBase
 
 		if event.Trade.Inverse {

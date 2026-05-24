@@ -9,10 +9,17 @@ import (
 	"github.com/giovani-sirbu/mercury/log"
 )
 
-// GetFees processes trading history and calculates fees in base and quote assets.
-func GetFees(event events.Events) float64 {
-	var fees float64
-	var feesInBase, feesInQuote float64
+// GetFeesBaseQuote processes trading history and returns the aggregated fees
+// expressed in both the trade's base and quote denominations.
+//
+// Fees paid in the base asset are added to feeInBase directly and converted into
+// quote via the fill price. Fees paid in the quote asset are added to feeInQuote
+// directly and converted into base via the fill price. Fees paid in a third
+// asset (e.g. BNB) are priced via getSymbolPrice and contributed to both totals.
+//
+// This is the source of truth for fee aggregation. GetFees is a thin wrapper
+// that selects one of the two values based on event.Trade.Inverse.
+func GetFeesBaseQuote(event events.Events) (feeInBase, feeInQuote float64) {
 	baseSymbol, quoteSymbol := splitSymbol(event.Trade.Symbol)
 
 	for _, data := range event.Trade.History {
@@ -27,38 +34,45 @@ func GetFees(event events.Events) float64 {
 
 			switch fee.Asset {
 			case baseSymbol:
-				feesInBase += fee.Fee
-				feesInQuote += fee.Fee * data.Price
+				feeInBase += fee.Fee
+				feeInQuote += fee.Fee * data.Price
 				continue
 			case quoteSymbol:
-				feesInQuote += fee.Fee
-				feesInBase += fee.Fee / data.Price
+				feeInQuote += fee.Fee
+				feeInBase += fee.Fee / data.Price
 				continue
 			default:
 				// handle price for fees paid in a third asset (e.g. BNB)
 				if !slices.Contains([]string{baseSymbol, quoteSymbol}, fee.Asset) {
 					feeAssetPrice, err := getSymbolPrice(event, fee.Asset)
 					if err != nil {
-						log.Error(err.Error(), "getSymbolPrice", "GetFees")
+						log.Error(err.Error(), "getSymbolPrice", "GetFeesBaseQuote")
 					}
 					if feeAssetPrice > 0 {
-						feesInQuote += fee.Fee * feeAssetPrice
+						feeInQuote += fee.Fee * feeAssetPrice
 					}
 
 					profitAssetPrice, err := getSymbolPrice(event, event.Trade.ProfitAsset)
 					if err != nil {
-						log.Error(err.Error(), "getSymbolPrice", "GetFees")
+						log.Error(err.Error(), "getSymbolPrice", "GetFeesBaseQuote")
 					}
 					if profitAssetPrice > 0 {
-						feesInBase += fee.Fee * feeAssetPrice / profitAssetPrice
+						feeInBase += fee.Fee * feeAssetPrice / profitAssetPrice
 					}
 				}
 			}
 		}
 	}
 
-	fees = feesInQuote
+	return feeInBase, feeInQuote
+}
 
+// GetFees returns the aggregated fees in the denomination relevant to the trade
+// direction: quote for spot, base for inverse.
+func GetFees(event events.Events) float64 {
+	feesInBase, feesInQuote := GetFeesBaseQuote(event)
+
+	fees := feesInQuote
 	if event.Trade.Inverse {
 		fees = feesInBase
 	}
