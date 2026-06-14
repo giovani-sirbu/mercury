@@ -85,7 +85,7 @@ func claimAndRun(ctx context.Context, topic, serviceName string, handler Context
 }
 
 func claimBatch(ctx context.Context, topic, serviceName string, handler ContextHandler) (int, error) {
-	pool := state.pool
+	pool := currentPool()
 	if pool == nil {
 		return 0, fmt.Errorf("broker pool not initialized")
 	}
@@ -216,14 +216,21 @@ func runHandler(ctx context.Context, topic string, id int64, correlationID strin
 }
 
 func markProcessed(ctx context.Context, id int64) error {
-	_, err := state.pool.Exec(ctx,
+	pool := currentPool()
+	if pool == nil {
+		return fmt.Errorf("broker pool not initialized")
+	}
+	_, err := pool.Exec(ctx,
 		`UPDATE message_queue SET processed_at = NOW(), locked_at = NULL, locked_by = NULL WHERE id = $1`, id)
 	return err
 }
 
 func releaseLock(ctx context.Context, id int64, errMsg string) {
-	_, _ = state.pool.Exec(ctx,
+	pool := currentPool()
+	if pool == nil {
+		return
+	}
+	_, _ = pool.Exec(ctx,
 		`UPDATE message_queue SET locked_at = NULL, locked_by = NULL, last_error = $2 WHERE id = $1`,
 		id, errMsg)
 }
-

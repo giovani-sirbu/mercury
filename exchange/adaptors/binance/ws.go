@@ -249,7 +249,7 @@ func (e Binance) UserWs(ctx context.Context, listenKey string, handler func(orde
 		copier.Copy(&orderDetails, &message)
 		copier.Copy(&orderDetails.WsOrderUpdate, &message.OrderUpdate)
 		copier.Copy(&orderDetails.WsBalanceUpdate, &message.BalanceUpdate)
-		copier.Copy(&orderDetails.WsAccountUpdateList.WsAccountUpdates, &message.AccountUpdate)
+		copier.Copy(&orderDetails.WsAccountUpdateList, &message.AccountUpdate)
 		copier.Copy(&orderDetails.WsOCOUpdate, &message.OCOUpdate)
 		handler(orderDetails, expireEvent)
 	}

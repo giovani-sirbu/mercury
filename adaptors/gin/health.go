@@ -2,10 +2,12 @@ package ginAdaptors
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	commonLog "github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/messagebroker"
 	"github.com/giovani-sirbu/mercury/storage/memory"
 	"gorm.io/gorm"
@@ -53,10 +55,12 @@ func Readiness(checks ...NamedCheck) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		for _, nc := range checks {
 			if err := nc.Check(); err != nil {
+				// Log the raw dependency error server-side; do not leak internal
+				// error details (DSNs, host names, driver messages) to the caller.
+				commonLog.Error(err.Error(), "Readiness", nc.Name)
 				c.JSON(http.StatusServiceUnavailable, gin.H{
-					"status":   "not ready",
-					"failed":   nc.Name,
-					"error":    err.Error(),
+					"status": "not ready",
+					"failed": nc.Name,
 				})
 				return
 			}
@@ -111,7 +115,17 @@ func CacheCheck(cache *memory.Memory) NamedCheck {
 			if cache == nil {
 				return nil
 			}
-			return cache.Ping()
+			// memory.Memory.Ping has no context variant, so cap it with a
+			// timeout here for parity with DBCheck/BrokerCheck — a stuck Redis
+			// must not hang the readiness probe past readyCheckTimeout.
+			done := make(chan error, 1)
+			go func() { done <- cache.Ping() }()
+			select {
+			case err := <-done:
+				return err
+			case <-time.After(readyCheckTimeout):
+				return fmt.Errorf("redis ping timed out after %s", readyCheckTimeout)
+			}
 		},
 	}
 }

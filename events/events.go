@@ -43,17 +43,18 @@ type (
 // Next Function to run the next event if we have multiple events
 func (e Events) Next() error {
 	if len(e.EventsNames) <= 1 {
-		// Safely clean up backoffTries
-		_, exists := backoffTries[e.Trade.ID]
-		if exists {
+		// Safely clean up backoffTries. The existence check, len() and delete
+		// must all run under rwLocker: a periodic sweeper (lockTradeBackoff.go)
+		// and LockTradeWithBackOff write this package-global map from sibling
+		// trade goroutines, so an unlocked read here races a concurrent write
+		// and triggers a fatal "concurrent map read and map write".
+		rwLocker.Lock()
+		if _, exists := backoffTries[e.Trade.ID]; exists {
 			log.Debug("backoffTries[before]: ", len(backoffTries), e.Trade.ID)
-
-			rwLocker.Lock()
-			defer rwLocker.Unlock()
 			delete(backoffTries, e.Trade.ID)
-
 			log.Debug("backoffTries[after]: ", len(backoffTries), e.Trade.ID)
 		}
+		rwLocker.Unlock()
 
 		return nil
 	}

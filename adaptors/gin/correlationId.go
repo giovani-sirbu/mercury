@@ -23,12 +23,36 @@ const CorrelationIDKey = "correlation_id"
 // auth / business handlers all carry the id.
 func CorrelationID(c *gin.Context) {
 	id := c.GetHeader(CorrelationIDHeader)
-	if id == "" {
+	// Only honor a client-supplied id if it is a bounded, safe token; otherwise
+	// generate a fresh UUID. This keeps cross-service tracing intact while
+	// preventing arbitrary client-controlled values from landing in logs and
+	// response headers (log forging / header injection).
+	if !isValidCorrelationID(id) {
 		id = uuid.NewString()
 	}
 	c.Set(CorrelationIDKey, id)
 	c.Header(CorrelationIDHeader, id)
 	c.Next()
+}
+
+// isValidCorrelationID accepts only short alphanumeric/dash/underscore ids so a
+// forwarded correlation id cannot smuggle control characters or unbounded data
+// into logs or the response header.
+func isValidCorrelationID(id string) bool {
+	if len(id) == 0 || len(id) > 64 {
+		return false
+	}
+	for _, r := range id {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '-' || r == '_':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // GetCorrelationID returns the correlation id stored on the gin context, or
