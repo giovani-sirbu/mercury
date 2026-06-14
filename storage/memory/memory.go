@@ -63,11 +63,14 @@ const localCacheTTL = time.Minute
 func (m *Memory) init() {
 	m.once.Do(func() {
 		localCache := cache.NewTinyLFU(localCacheCapacity, localCacheTTL)
+		// Protocol: 2 pins RESP2 (master's fix) — go-redis v9 defaults to
+		// RESP3, which the deployed Redis/Dragonfly didn't speak cleanly.
 		m.client = redis.NewUniversalClient(&redis.UniversalOptions{
 			Addrs:    m.Address,
 			Password: m.Password,
 			Username: m.User,
 			PoolSize: m.PoolSize,
+			Protocol: 2,
 		})
 		m.localCache = localCache
 		m.handler = cache.New(&cache.Options{
