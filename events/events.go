@@ -13,7 +13,16 @@ import (
 
 type (
 	Events struct {
-		Storage        memory.Memory
+		// Storage is the shared cache client. Pointer semantics are required because
+		// *memory.Memory owns singleton state (sync.Once + reused Redis client).
+		Storage *memory.Memory
+
+		// WsPrices is an in-process snapshot of symbol prices, typically populated
+		// by hermes before running an event pipeline. Lookups here avoid a Redis
+		// round-trip on the trade decision hot path. Nil is valid — callers fall
+		// back to Storage and then to the exchange API.
+		WsPrices map[string]float64
+
 		Broker         messagebroker.BrokerMethods
 		Exchange       exchange.Exchange
 		Trade          aggragates.Trades
@@ -21,23 +30,31 @@ type (
 		EventsNames    []string
 		Params         aggragates.Params
 		Events         map[string]func(Events) (Events, error)
+
+		// CorrelationID is the per-action-chain correlation id. Hermes's
+		// ManageTrade / ManageFuturesTrade populate it before calling Run()
+		// so every action in the chain — including the update-trade and
+		// create-children-trades producers — tags the resulting message and
+		// log lines with the same id.
+		CorrelationID string
 	}
 )
 
 // Next Function to run the next event if we have multiple events
 func (e Events) Next() error {
 	if len(e.EventsNames) <= 1 {
-		// Safely clean up backoffTries
-		_, exists := backoffTries[e.Trade.ID]
-		if exists {
+		// Safely clean up backoffTries. The existence check, len() and delete
+		// must all run under rwLocker: a periodic sweeper (lockTradeBackoff.go)
+		// and LockTradeWithBackOff write this package-global map from sibling
+		// trade goroutines, so an unlocked read here races a concurrent write
+		// and triggers a fatal "concurrent map read and map write".
+		rwLocker.Lock()
+		if _, exists := backoffTries[e.Trade.ID]; exists {
 			log.Debug("backoffTries[before]: ", len(backoffTries), e.Trade.ID)
-
-			rwLocker.Lock()
-			defer rwLocker.Unlock()
 			delete(backoffTries, e.Trade.ID)
-
 			log.Debug("backoffTries[after]: ", len(backoffTries), e.Trade.ID)
 		}
+		rwLocker.Unlock()
 
 		return nil
 	}

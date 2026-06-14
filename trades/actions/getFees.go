@@ -2,18 +2,24 @@ package actions
 
 import (
 	"fmt"
-	"github.com/giovani-sirbu/mercury/events"
-	"github.com/giovani-sirbu/mercury/log"
 	"slices"
 	"strings"
+
+	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/log"
 )
 
-var wsPrices = make(map[string]float64)
-
-// GetFees processes trading history and calculates fees in base and quote assets.
-func GetFees(event events.Events) float64 {
-	var fees float64
-	var feesInBase, feesInQuote float64
+// GetFeesBaseQuote processes trading history and returns the aggregated fees
+// expressed in both the trade's base and quote denominations.
+//
+// Fees paid in the base asset are added to feeInBase directly and converted into
+// quote via the fill price. Fees paid in the quote asset are added to feeInQuote
+// directly and converted into base via the fill price. Fees paid in a third
+// asset (e.g. BNB) are priced via getSymbolPrice and contributed to both totals.
+//
+// This is the source of truth for fee aggregation. GetFees is a thin wrapper
+// that selects one of the two values based on event.Trade.Inverse.
+func GetFeesBaseQuote(event events.Events) (feeInBase, feeInQuote float64) {
 	baseSymbol, quoteSymbol := splitSymbol(event.Trade.Symbol)
 
 	for _, data := range event.Trade.History {
@@ -28,32 +34,45 @@ func GetFees(event events.Events) float64 {
 
 			switch fee.Asset {
 			case baseSymbol:
-				feesInBase += fee.Fee
-				feesInQuote += fee.Fee * data.Price
+				feeInBase += fee.Fee
+				feeInQuote += fee.Fee * data.Price
 				continue
 			case quoteSymbol:
-				feesInQuote += fee.Fee
-				feesInBase += fee.Fee / data.Price
+				feeInQuote += fee.Fee
+				feeInBase += fee.Fee / data.Price
 				continue
 			default:
-				// handle price for fees like BNB
+				// handle price for fees paid in a third asset (e.g. BNB)
 				if !slices.Contains([]string{baseSymbol, quoteSymbol}, fee.Asset) {
-					feeAssetPrice, _ := getSymbolPrice(event, fee.Asset)
+					feeAssetPrice, err := getSymbolPrice(event, fee.Asset)
+					if err != nil {
+						log.Error(err.Error(), "getSymbolPrice", "GetFeesBaseQuote")
+					}
 					if feeAssetPrice > 0 {
-						feesInQuote += fee.Fee * feeAssetPrice
+						feeInQuote += fee.Fee * feeAssetPrice
 					}
 
-					profitAssetPrice, _ := getSymbolPrice(event, event.Trade.ProfitAsset)
+					profitAssetPrice, err := getSymbolPrice(event, event.Trade.ProfitAsset)
+					if err != nil {
+						log.Error(err.Error(), "getSymbolPrice", "GetFeesBaseQuote")
+					}
 					if profitAssetPrice > 0 {
-						feesInBase += fee.Fee * feeAssetPrice / profitAssetPrice
+						feeInBase += fee.Fee * feeAssetPrice / profitAssetPrice
 					}
 				}
 			}
 		}
 	}
 
-	fees = feesInQuote
+	return feeInBase, feeInQuote
+}
 
+// GetFees returns the aggregated fees in the denomination relevant to the trade
+// direction: quote for spot, base for inverse.
+func GetFees(event events.Events) float64 {
+	feesInBase, feesInQuote := GetFeesBaseQuote(event)
+
+	fees := feesInQuote
 	if event.Trade.Inverse {
 		fees = feesInBase
 	}
@@ -63,44 +82,47 @@ func GetFees(event events.Events) float64 {
 	return fees
 }
 
-// getSymbolPrice return symbol real time price
+// getSymbolPrice returns the real-time price of `asset` quoted in USDC.
+//
+// Lookup order (cheapest first):
+//  1. event.WsPrices — in-process snapshot. Hermes populates it from its own WS
+//     map; agora populates it by calling hermes' GET /prices (TTL-cached in
+//     agora/helpers/getWsPrices.go). Callers that do not populate WsPrices (e.g.
+//     sisyphus backtesting on a virtual exchange) fall through to step 2.
+//  2. exchange API — last-resort network call via event.Exchange.Client().
+//
+// A prior version held a package-level `var wsPrices` map to memoise results across calls.
+// That variable was shared by every concurrent goroutine calling GetFees and was never
+// protected by a lock, producing a real race condition on a financial code path. It has
+// been removed; the stateful cache now lives where it belongs — on the event.
+//
+// A second prior version read from Dragonfly at key "ws-symbols-price" as an
+// intermediate fallback. That key has no producer since hermes stopped publishing
+// the snapshot to the shared cache (/prices HTTP handoff replaces it), so the
+// branch was always a miss and has been removed.
 func getSymbolPrice(event events.Events, asset string) (float64, error) {
 	if slices.Contains([]string{"USDT", "USDC"}, asset) {
 		return event.Trade.PositionPrice, nil
 	}
 
 	symbol := fmt.Sprintf("%s/USDC", asset)
+	precision := int(event.Trade.StrategyPair.TradeFilters.PriceFilter)
 
-	// get ws prices from cache
-	event.Storage.Get("ws-symbols-price", &wsPrices)
-
-	// default price fetched from cache
-	price := wsPrices[symbol]
-
-	// fallback: fetch price from exchange if cache price no available
-	if wsPrices[symbol] == 0 {
-		client, clientErr := event.Exchange.Client()
-		if clientErr != nil {
-			return 0, clientErr
-		}
-		clientPrice, priceErr := client.GetPrice(symbol)
-
-		if priceErr != nil {
-			return 0, priceErr
-		}
-
-		price = clientPrice
+	// 1. In-process snapshot.
+	if p, ok := event.WsPrices[symbol]; ok && p > 0 {
+		return ToFixed(p, precision), nil
 	}
 
-	// format price
-	price = ToFixed(price, int(event.Trade.StrategyPair.TradeFilters.PriceFilter))
-
-	// set price to cache
-	if wsPrices[symbol] == 0 {
-		wsPrices[symbol] = price
+	// 2. Exchange API fallback.
+	client, err := event.Exchange.Client()
+	if err != nil {
+		return 0, err
 	}
-
-	return price, nil
+	price, priceErr := client.GetPrice(symbol)
+	if priceErr != nil {
+		return 0, priceErr
+	}
+	return ToFixed(price, precision), nil
 }
 
 // splitSymbol splits a trading pair symbol into base and quote symbols.
