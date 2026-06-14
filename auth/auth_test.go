@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -75,6 +76,32 @@ func TestVerifyToken_RejectsExpired(t *testing.T) {
 
 	if err := VerifyToken(expired); err == nil {
 		t.Fatal("VerifyToken accepted an expired token")
+	}
+}
+
+// TestEmptyKey_FailsClosed verifies that an unset ENCRYPTION_TOKEN_KEY makes
+// signing error and verification reject — rather than authenticating with a
+// zero-byte (trivially forgeable) HMAC key.
+func TestEmptyKey_FailsClosed(t *testing.T) {
+	t.Setenv("ENCRYPTION_TOKEN_KEY", "real-key-for-this-test")
+	t.Setenv("ACCESS_TOKEN_DURATION", "1h")
+	t.Setenv("REFRESH_TOKEN_DURATION", "24h")
+	tokens, err := GenerateTokens(1, "a@b.c", "user")
+	if err != nil {
+		t.Fatalf("GenerateTokens: %v", err)
+	}
+
+	// Clear the key: sign + verify must both fail closed.
+	t.Setenv("ENCRYPTION_TOKEN_KEY", "")
+
+	if _, err := GenerateTokens(1, "a@b.c", "user"); !errors.Is(err, ErrMissingTokenKey) {
+		t.Fatalf("expected ErrMissingTokenKey when signing with empty key, got %v", err)
+	}
+	if err := VerifyToken(tokens.AccessToken); err == nil {
+		t.Fatal("VerifyToken accepted a token while ENCRYPTION_TOKEN_KEY was empty")
+	}
+	if _, err := ParseToken(tokens.AccessToken); err == nil {
+		t.Fatal("ParseToken accepted a token while ENCRYPTION_TOKEN_KEY was empty")
 	}
 }
 

@@ -1,12 +1,20 @@
 package auth
 
 import (
+	"errors"
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
 	"os"
 	"strings"
 	"time"
 )
+
+// ErrMissingTokenKey is returned when ENCRYPTION_TOKEN_KEY is unset/empty.
+// Signing with an empty HMAC key, and verifying against one, are both trivially
+// forgeable — so we fail closed (refuse to sign, reject on verify) rather than
+// authenticate with a zero-byte key. Services should also guard this at
+// startup via config.RequireEnv("ENCRYPTION_TOKEN_KEY").
+var ErrMissingTokenKey = errors.New("ENCRYPTION_TOKEN_KEY is not set")
 
 // secretKey reads ENCRYPTION_TOKEN_KEY at call time rather than at package
 // init. Services load .env via godotenv.Load() inside main(), which runs
@@ -26,6 +34,11 @@ type UserClaims struct {
 
 // createToken generate an access token
 func createToken(user UserClaims) (string, error) {
+	key := secretKey()
+	if len(key) == 0 {
+		return "", ErrMissingTokenKey
+	}
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
 		jwt.MapClaims{
 			"id":    user.Id,
@@ -34,7 +47,7 @@ func createToken(user UserClaims) (string, error) {
 			"exp":   user.Exp,
 		})
 
-	tokenString, err := token.SignedString(secretKey())
+	tokenString, err := token.SignedString(key)
 	if err != nil {
 		return "", err
 	}
@@ -45,7 +58,11 @@ func createToken(user UserClaims) (string, error) {
 // VerifyToken verify an access token
 func VerifyToken(tokenString string) error {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return secretKey(), nil
+		key := secretKey()
+		if len(key) == 0 {
+			return nil, ErrMissingTokenKey
+		}
+		return key, nil
 	})
 
 	if err != nil {
@@ -94,7 +111,11 @@ func GenerateTokens(id uint, email string, role string) (Tokens, error) {
 func ParseToken(jwtToken string) (UserClaims, error) {
 	var userClaim UserClaims
 	token, err := jwt.ParseWithClaims(jwtToken, &userClaim, func(token *jwt.Token) (interface{}, error) {
-		return secretKey(), nil
+		key := secretKey()
+		if len(key) == 0 {
+			return nil, ErrMissingTokenKey
+		}
+		return key, nil
 	})
 	if err != nil {
 		return userClaim, err
