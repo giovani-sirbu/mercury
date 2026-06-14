@@ -1,7 +1,8 @@
 package crypto
 
 import (
-	"strings"
+	"crypto/aes"
+	"crypto/cipher"
 	"testing"
 )
 
@@ -35,59 +36,114 @@ func TestDecodeRoundTripsEncodedBytes(t *testing.T) {
 // end. A DB row with a mangled ApiSecret used to crash the caller (panic
 // inside Decode); now it returns an error and the service stays up.
 func TestDecryptReturnsErrorOnCorruptCiphertext(t *testing.T) {
-	// 16-byte AES key (required for NewCipher) but clearly bogus ciphertext.
 	_, err := Decrypt("!!!not-valid-base64!!!", "0123456789abcdef")
 	if err == nil {
 		t.Fatal("expected error for corrupt ciphertext, got nil")
 	}
 }
 
-// TestEncryptDecryptRoundTrip pins the AES-CFB round trip so future IV /
-// mode / padding refactors must keep the same payload recoverable.
+// TestEncryptDecryptRoundTrip pins the AES-256-GCM round trip. The secret can
+// be any length (it is hashed to a 32-byte key), and the ciphertext must carry
+// the GCM version marker.
 func TestEncryptDecryptRoundTrip(t *testing.T) {
-	secret := "0123456789abcdef" // 16 bytes for AES-128
-	plain := "binance-api-key-goes-here"
+	for _, secret := range []string{
+		"0123456789abcdef", // 16 bytes
+		"a-much-longer-high-entropy-secret-value-2026!!", // arbitrary length
+	} {
+		plain := "binance-api-secret-goes-here"
 
-	encrypted, err := Encrypt(plain, secret)
-	if err != nil {
-		t.Fatalf("Encrypt failed: %v", err)
-	}
-	if encrypted == plain {
-		t.Fatal("Encrypt produced plaintext output")
-	}
+		encrypted, err := Encrypt(plain, secret)
+		if err != nil {
+			t.Fatalf("Encrypt failed: %v", err)
+		}
+		if encrypted == plain {
+			t.Fatal("Encrypt produced plaintext output")
+		}
 
-	decrypted, err := Decrypt(encrypted, secret)
-	if err != nil {
-		t.Fatalf("Decrypt failed: %v", err)
-	}
-	if decrypted != plain {
-		t.Fatalf("round-trip mismatch: got %q, want %q", decrypted, plain)
+		raw, err := Decode(encrypted)
+		if err != nil || len(raw) == 0 || raw[0] != versionGCM {
+			t.Fatalf("expected GCM version marker, got raw[0]=%v err=%v", raw, err)
+		}
+
+		decrypted, err := Decrypt(encrypted, secret)
+		if err != nil {
+			t.Fatalf("Decrypt failed: %v", err)
+		}
+		if decrypted != plain {
+			t.Fatalf("round-trip mismatch: got %q, want %q", decrypted, plain)
+		}
 	}
 }
 
-// TestDecryptWithWrongKeyReturnsGarbage documents the current behaviour: a
-// wrong key decodes into garbage bytes rather than returning an error. This
-// is an AES-CFB property, not a bug — but it's important context for any
-// future migration to AES-GCM, which WOULD authenticate and surface errors.
-func TestDecryptWithWrongKeyReturnsGarbage(t *testing.T) {
+// TestEncryptUsesFreshNonce ensures two encryptions of the same plaintext under
+// the same key differ — i.e. no fixed IV/nonce reuse (the legacy CFB flaw).
+func TestEncryptUsesFreshNonce(t *testing.T) {
 	secret := "0123456789abcdef"
-	wrong := "fedcba9876543210"
-	plain := "some-plaintext"
+	a, _ := Encrypt("same-plaintext", secret)
+	b, _ := Encrypt("same-plaintext", secret)
+	if a == b {
+		t.Fatal("two encryptions of the same plaintext produced identical ciphertext — nonce reuse")
+	}
+}
 
-	encrypted, err := Encrypt(plain, secret)
+// TestDecryptWithWrongKeyReturnsError is the security upgrade over the legacy
+// AES-CFB behaviour: GCM authenticates, so a wrong key fails the tag check and
+// surfaces an error instead of returning silent garbage.
+func TestDecryptWithWrongKeyReturnsError(t *testing.T) {
+	encrypted, err := Encrypt("some-plaintext", "0123456789abcdef")
 	if err != nil {
 		t.Fatalf("Encrypt: %v", err)
 	}
-	decrypted, err := Decrypt(encrypted, wrong)
+	if _, err := Decrypt(encrypted, "fedcba9876543210"); err == nil {
+		t.Fatal("expected error decrypting with wrong key, got nil")
+	}
+}
+
+// TestDecryptDetectsTampering flips a byte in the authenticated ciphertext and
+// asserts the GCM tag rejects it.
+func TestDecryptDetectsTampering(t *testing.T) {
+	secret := "0123456789abcdef"
+	encrypted, err := Encrypt("integrity-matters", secret)
 	if err != nil {
-		t.Fatalf("Decrypt with wrong key unexpectedly errored: %v", err)
+		t.Fatalf("Encrypt: %v", err)
 	}
-	// Not asserting specific garbage; just asserting it isn't the plaintext.
-	if decrypted == plain {
-		t.Fatal("wrong key recovered plaintext — AES-CFB invariant broken")
+	raw, err := Decode(encrypted)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
 	}
-	// And the garbage should not contain the plaintext as a substring.
-	if strings.Contains(decrypted, plain) {
-		t.Fatalf("wrong-key decryption leaked plaintext substring: %q", decrypted)
+	raw[len(raw)-1] ^= 0xFF // flip a byte inside the tag
+	if _, err := Decrypt(Encode(raw), secret); err == nil {
+		t.Fatal("expected error decrypting tampered ciphertext, got nil")
 	}
+}
+
+// TestDecryptLegacyReadsCFBData proves backward compatibility: secrets written
+// by the old AES-CFB Encrypt are still readable via DecryptLegacy (used by the
+// re-encryption migration to read pre-migration data with the old key).
+func TestDecryptLegacyReadsCFBData(t *testing.T) {
+	secret := "0123456789abcdef" // 16-byte legacy AES-128 key
+	plain := "legacy-binance-secret"
+
+	legacy := encryptLegacyCFB(t, plain, secret)
+	got, err := DecryptLegacy(legacy, secret)
+	if err != nil {
+		t.Fatalf("DecryptLegacy: %v", err)
+	}
+	if got != plain {
+		t.Fatalf("legacy round-trip mismatch: got %q, want %q", got, plain)
+	}
+}
+
+// encryptLegacyCFB reproduces the pre-migration AES-CFB Encrypt so tests can
+// generate legacy ciphertext to exercise the backward-compat read path.
+func encryptLegacyCFB(t *testing.T, text, secret string) string {
+	t.Helper()
+	block, err := aes.NewCipher([]byte(secret))
+	if err != nil {
+		t.Fatalf("aes.NewCipher: %v", err)
+	}
+	cfb := cipher.NewCFBEncrypter(block, legacyIV)
+	ct := make([]byte, len(text))
+	cfb.XORKeyStream(ct, []byte(text))
+	return Encode(ct)
 }
