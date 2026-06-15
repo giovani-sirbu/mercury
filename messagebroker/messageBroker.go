@@ -4,12 +4,19 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/giovani-sirbu/mercury/log"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// defaultPoolMaxConns bounds the messagebus pool per service. The managed
+// Postgres cluster has a small, shared max_connections; left at pgx's default
+// of max(4, NumCPU) every replica's pool tracks the host core count and the
+// fleet can exhaust the cluster. Override per service with MESSAGEBUS_MAX_CONNS.
+const defaultPoolMaxConns = 4
 
 // MessageBroker configures the Postgres-backed pub/sub broker.
 // Messages are persisted to the message_queue outbox table (durability) and
@@ -62,9 +69,22 @@ func (broker MessageBroker) Init() BrokerMethods {
 	defer stateMu.Unlock()
 
 	if state.pool == nil {
-		pool, err := pgxpool.New(context.Background(), broker.DSN)
+		poolCfg, err := pgxpool.ParseConfig(broker.DSN)
+		if err != nil {
+			// Malformed DSN is a fatal misconfiguration — do not proceed with a
+			// nil pool (the previous code fell through into ensureSchema and
+			// nil-derefed). Return an empty BrokerMethods so the failure surfaces
+			// at bootstrap rather than masquerading as a working broker.
+			log.Error(fmt.Sprintf("Failed to parse messagebus DSN: %s", err), "Init", "MessageBroker")
+			return BrokerMethods{}
+		}
+		poolCfg.MaxConns = int32(envInt("MESSAGEBUS_MAX_CONNS", defaultPoolMaxConns))
+		poolCfg.MinConns = 1
+
+		pool, err := pgxpool.NewWithConfig(context.Background(), poolCfg)
 		if err != nil {
 			log.Error(fmt.Sprintf("Failed to connect to messagebus: %s", err), "Init", "MessageBroker")
+			return BrokerMethods{}
 		}
 		if err := ensureSchema(context.Background(), pool); err != nil {
 			log.Error(fmt.Sprintf("Failed to bootstrap messagebus schema: %s", err), "Init", "MessageBroker")
@@ -85,6 +105,15 @@ func (broker MessageBroker) Init() BrokerMethods {
 
 func topicWithPrefix(topic string) string {
 	return fmt.Sprintf("%s%s", os.Getenv("TOPIC_PREFIX"), topic)
+}
+
+// envInt reads a positive integer from the environment, falling back to def
+// when the variable is unset or invalid.
+func envInt(key string, def int) int {
+	if v, err := strconv.Atoi(os.Getenv(key)); err == nil && v > 0 {
+		return v
+	}
+	return def
 }
 
 // currentPool returns the live messagebus pool under stateMu. Consumer-loop
