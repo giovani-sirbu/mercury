@@ -48,7 +48,31 @@ func (m MessageBroker) listen(prefixedTopic string, handler ContextHandler) erro
 			}
 		}()
 		for {
-			if _, err := conn.WaitForNotification(ctx); err != nil {
+			// Bound each wait so this goroutine wakes periodically to keep the
+			// connection warm (see listenKeepaliveInterval). A deadline-
+			// interrupted WaitForNotification leaves the connection usable —
+			// pgx aborts the read via SetDeadline and treats the timeout as
+			// non-fatal — so the SAME goroutine can ping. pgx.Conn is not safe
+			// for concurrent use, which is why the ping must run here and not
+			// from the select loop below.
+			waitCtx, waitCancel := context.WithTimeout(ctx, listenKeepaliveInterval)
+			_, err := conn.WaitForNotification(waitCtx)
+			timedOut := waitCtx.Err() == context.DeadlineExceeded
+			waitCancel()
+
+			if err != nil {
+				// Our keepalive deadline fired while the parent is still alive:
+				// ping to put bytes on the wire, then resume waiting.
+				if timedOut && ctx.Err() == nil {
+					pingCtx, pingCancel := context.WithTimeout(ctx, listenKeepalivePingTimeout)
+					pingErr := conn.Ping(pingCtx)
+					pingCancel()
+					if pingErr != nil {
+						errCh <- fmt.Errorf("keepalive ping: %w", pingErr)
+						return
+					}
+					continue
+				}
 				errCh <- err
 				return
 			}

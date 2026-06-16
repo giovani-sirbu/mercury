@@ -20,6 +20,19 @@ const (
 	// — too long for trade-related messages.
 	staleLockAfter      = 60 * time.Second
 	reconnectMaxBackoff = 30 * time.Second
+	// listenKeepaliveInterval bounds how long the dedicated LISTEN connection
+	// waits for a notification before sending a keepalive ping. That socket
+	// carries no application bytes between notifications, and the gateway's
+	// nginx stream proxy closes a connection idle past its proxy_timeout (12h)
+	// — surfacing here as "unexpected EOF" and forcing a reconnect on every
+	// low-traffic topic. Pinging well inside that window keeps bytes on the
+	// wire so an idle connection is never reaped. 5m is far below the 12h cap
+	// (and any plausible intermediate idle timeout) at a cost of one trivial
+	// query per idle connection per interval.
+	listenKeepaliveInterval = 5 * time.Minute
+	// listenKeepalivePingTimeout bounds the keepalive ping so a half-open
+	// connection fails fast (and reconnects) instead of blocking the listener.
+	listenKeepalivePingTimeout = 10 * time.Second
 )
 
 // ContextHandler is the context-aware consumer callback. The context carries
