@@ -32,7 +32,7 @@ func SaveError(event events.Events, err error) (events.Events, error) {
 
 	// Reset price and position to allow only the error update
 	price := event.Trade.PositionPrice
-	if event.Trade.PositionType != "impasse" {
+	if event.Trade.PositionType != "impasse" && event.Trade.PositionType != "takeLoss" {
 		event.Trade.PositionType = event.Params.OldPosition
 		event.Trade.PositionPrice = event.Params.OldPositionPrice
 	}

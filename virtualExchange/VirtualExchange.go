@@ -222,8 +222,9 @@ func setCustomActions(customActions aggregates.Actions, assets []aggregates.User
 	// the happy path without having to branch on IsCustom everywhere.
 	customActions.APIKeyPermission = func() (aggregates.APIKeyPermission, *common.APIError) {
 		return aggregates.APIKeyPermission{
-			EnableSpotAndMarginTrading: true,
 			EnableReading:              true,
+			EnableSpotAndMarginTrading: true,
+			EnableFutures:              true,
 		}, nil
 	}
 
