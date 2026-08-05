@@ -14,5 +14,6 @@ type (
 		UseAI            bool  `form:"useAI" bson:"useAI" json:"useAI"`
 		SkipHold         bool  `form:"skipHold" bson:"skipHold" json:"skipHold"`
 		UseForceTrailing bool  `form:"useForceTrailing" bson:"useForceTrailing" json:"useForceTrailing"`
+		TakeLoss         bool  `form:"takeLoss" bson:"takeLoss" json:"takeLoss"`
 	}
 )

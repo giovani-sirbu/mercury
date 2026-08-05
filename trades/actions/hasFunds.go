@@ -144,6 +144,14 @@ func HasFunds(event events.Events) (events.Events, error) {
 	}
 
 	if remainedQuantity < neededQuantity {
+		// enter take loss mode if this feature is activated for this strategy; takes precedence over impasse
+		if event.Trade.Strategy.Params.TakeLoss && event.Trade.ParentID == 0 {
+			// message must not contain "Insufficient funds" so SaveError keeps the trade active instead of blocking it
+			msg := fmt.Sprintf("Take loss mode activated: budget (%f %s) is below the required %f %s for the next %s.", remainedQuantity, assetSymbol, neededQuantity, assetSymbol, event.Trade.PositionType)
+			event.Trade.PositionType = "takeLoss"
+			return SaveError(event, fmt.Errorf(msg))
+		}
+
 		// set trade to impasse if this feature is activated for this strategy
 		if event.Trade.Strategy.Params.Impasse && event.Trade.ParentID == 0 {
 			usedAmount := GetUsedQuantities(event) * event.Trade.PositionPrice

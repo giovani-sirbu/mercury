@@ -34,6 +34,7 @@ func (S Strategy) GetPosition(percentage float64) string {
 	parameters["tradePercentage"] = S.Settings[S.Depth].Percentage
 	parameters["tolerance"] = S.Settings[S.Depth].Tolerance
 	parameters["trailingTakeProfit"] = S.Settings[S.Depth].TrailingTakeProfit
+	parameters["takeLossPercentage"] = S.Settings[S.Depth].TakeLossPercentage
 
 	result, _ := expression.Evaluate(parameters)
 	newPosition := fmt.Sprintf("%s", result)
