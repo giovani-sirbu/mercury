@@ -76,19 +76,11 @@ func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
 		}
 	}
 
-	historyCount := len(event.Trade.History)
 	strategySettings := event.Trade.StrategyPair.StrategySettings
-	var settingsIndex int
-
-	if historyCount > len(strategySettings) {
-		settingsIndex = len(strategySettings) - 1
-	} else {
-		settingsIndex = historyCount - 1
-	}
-
-	if historyCount == 0 {
-		settingsIndex = 0
-	}
+	filledEntries := trades.CountFilledEntries(event.Trade)
+	// Same row-selection contract as Buy: entry N reads row N-1, missing rows
+	// fall back to the base row 0.
+	settingsIndex := trades.SettingsIndexOrBase(strategySettings, filledEntries)
 
 	pairSymbols := strings.Split(event.Trade.Symbol, "/")
 	multiplier := strategySettings[settingsIndex].Multiplier
