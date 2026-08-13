@@ -77,6 +77,36 @@ func TestShouldHold(t *testing.T) {
 		AssertError(t, err)
 	})
 
+	t.Run("AI_ExplicitHold_TakeProfitPasses", func(t *testing.T) {
+		trade := MakeTrade("ATOM/USDT", 5, false, nil)
+		trade.PositionType = "takeProfit"
+		event := MakeEvent(trade, "USDT", "1000", []string{"shouldHold"})
+		event.Params.OldPosition = "active"
+		event.Params.AIIndicators = aggragates.AIIndicators{UseAI: true, AIAction: "HOLD"}
+		_, err := actions.ShouldHold(event)
+		AssertNoError(t, err)
+	})
+
+	t.Run("AI_ExplicitHold_TakeProfitPasses_Inverse", func(t *testing.T) {
+		trade := MakeTrade("ATOM/USDT", 5, true, nil)
+		trade.PositionType = "takeProfit"
+		event := MakeEvent(trade, "USDT", "1000", []string{"shouldHold"})
+		event.Params.OldPosition = "active"
+		event.Params.AIIndicators = aggragates.AIIndicators{UseAI: true, AIAction: "HOLD"}
+		_, err := actions.ShouldHold(event)
+		AssertNoError(t, err)
+	})
+
+	t.Run("AI_ExplicitHold_InverseStopLossHolds", func(t *testing.T) {
+		trade := MakeTrade("ATOM/USDT", 5, true, nil)
+		trade.PositionType = "stopLoss"
+		event := MakeEvent(trade, "USDT", "1000", []string{"shouldHold"})
+		event.Params.OldPosition = "active"
+		event.Params.AIIndicators = aggragates.AIIndicators{UseAI: true, AIAction: "HOLD"}
+		_, err := actions.ShouldHold(event)
+		AssertError(t, err)
+	})
+
 	t.Run("Classic_StopLoss_BearishHolds", func(t *testing.T) {
 		trade := MakeTrade("ATOM/USDT", 5, false, nil)
 		trade.PositionType = "stopLoss"

@@ -57,20 +57,42 @@ func TestHold_InverseStopLossHeldOnBullishSignal(t *testing.T) {
 	}
 }
 
-// TestHold_AIHoldActionBlocksAnyClose proves the explicit AIAction=HOLD
-// gate: regardless of position type or direction, an explicit HOLD signal
-// short-circuits the action chain.
-func TestHold_AIHoldActionBlocksAnyClose(t *testing.T) {
-	trade := scenarioBuildTrade("takeProfit", 102000, false)
-	scenarioAppendHistory(&trade, "BUY", 0.001, 100000, "", 0)
+// TestHold_AIHoldActionBlocksRebuyAllowsTakeProfit proves the explicit
+// AIAction=HOLD gate: HOLD means "no direction", so risk-adding positions
+// (stopLoss rebuys) are short-circuited while the profitable close
+// (takeProfit) is allowed to execute, for spot and inverse alike.
+func TestHold_AIHoldActionBlocksRebuyAllowsTakeProfit(t *testing.T) {
+	stopLoss := scenarioBuildTrade("stopLoss", 95000, false)
+	scenarioAppendHistory(&stopLoss, "BUY", 0.001, 100000, "", 0)
 
-	event := scenarioBuildEvent(trade, "BTC", "0.001")
+	event := scenarioBuildEvent(stopLoss, "BTC", "0.001")
 	event.Params.OldPosition = "active"
 	event.Params.AIIndicators = aggragates.AIIndicators{UseAI: true, AIAction: actions.ActionHold}
 
-	_, err := actions.ShouldHold(event)
-	if err == nil {
-		t.Fatal("expected hold error on explicit AI HOLD action")
+	if _, err := actions.ShouldHold(event); err == nil {
+		t.Fatal("expected hold error on explicit AI HOLD action for stopLoss rebuy")
+	}
+
+	takeProfit := scenarioBuildTrade("takeProfit", 102000, false)
+	scenarioAppendHistory(&takeProfit, "BUY", 0.001, 100000, "", 0)
+
+	tpEvent := scenarioBuildEvent(takeProfit, "BTC", "0.001")
+	tpEvent.Params.OldPosition = "active"
+	tpEvent.Params.AIIndicators = aggragates.AIIndicators{UseAI: true, AIAction: actions.ActionHold}
+
+	if _, err := actions.ShouldHold(tpEvent); err != nil {
+		t.Fatalf("expected explicit AI HOLD to allow takeProfit close, got %v", err)
+	}
+
+	inverseTP := scenarioBuildTrade("takeProfit", 95000, true)
+	scenarioAppendHistory(&inverseTP, "SELL", 0.001, 100000, "", 0)
+
+	invEvent := scenarioBuildEvent(inverseTP, "USDC", "100")
+	invEvent.Params.OldPosition = "active"
+	invEvent.Params.AIIndicators = aggragates.AIIndicators{UseAI: true, AIAction: actions.ActionHold}
+
+	if _, err := actions.ShouldHold(invEvent); err != nil {
+		t.Fatalf("expected explicit AI HOLD to allow inverse takeProfit close, got %v", err)
 	}
 }
 
