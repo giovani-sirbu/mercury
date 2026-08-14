@@ -32,7 +32,10 @@ func TestCalculateMinOrderQty(t *testing.T) {
 					TradeFilters: aggragates.TradeFilters{MinNotional: 5, LotSize: 2},
 				},
 			},
-			5.0, // MinNotional directly for inverse
+			// Inverse orders are SELLs with base-denominated quantity, so the
+			// exchange minimum is MinNotional/price; the lot-step pad applies
+			// only to spot buys.
+			0.5,
 		},
 		{
 			"ZeroMinNotional",

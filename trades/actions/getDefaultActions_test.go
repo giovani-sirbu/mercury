@@ -11,6 +11,7 @@ func TestGetDefaultActionsRegistersExpectedActions(t *testing.T) {
 		"sell",
 		"sellAll",
 		"hasProfit",
+		"acceptLoss",
 		"createChildrenTrades",
 		"parentTradeHasProfit",
 		"shouldHold",

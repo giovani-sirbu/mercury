@@ -25,19 +25,12 @@ func Buy(event events.Events) (events.Events, error) {
 	quantity := trades.GetLatestQuantityByHistory(event.Trade.History, quantityType)
 	buyQty, sellQty := GetGrossQuantities(event)
 
-	historyCount := len(event.Trade.History)
 	strategySettings := event.Trade.StrategyPair.StrategySettings
-	var settingsIndex int
-
-	if historyCount > len(strategySettings) {
-		settingsIndex = len(strategySettings) - 1
-	} else {
-		settingsIndex = historyCount - 1
-	}
-
-	if historyCount == 0 {
-		settingsIndex = 0
-	}
+	filledEntries := trades.CountFilledEntries(event.Trade)
+	// The row for the entry being placed now: entry N reads row N-1; a depth
+	// with no configured row falls back to the base row 0. A single-row
+	// configuration therefore applies to every depth.
+	settingsIndex := trades.SettingsIndexOrBase(strategySettings, filledEntries)
 
 	multiplier := strategySettings[settingsIndex].Multiplier
 	pairInitialBid := strategySettings[settingsIndex].InitialBid
@@ -97,7 +90,7 @@ func Buy(event events.Events) (events.Events, error) {
 	var response aggregates.CreateOrderResponse
 	var err *common.APIError
 
-	if historyCount > 0 {
+	if filledEntries > 0 {
 		if event.Trade.Inverse {
 			response, err = client.Sell(event.Trade.Symbol, quantity, priceInString)
 		} else {

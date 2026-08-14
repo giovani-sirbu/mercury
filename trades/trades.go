@@ -33,8 +33,13 @@ func GetQuantityInQuote(history []aggragates.TradesHistory, typeFilter string) f
 	return quantity
 }
 
+// InitialBidReservePercent is the wallet slice held out of the depth ladder's
+// budget. Fees, LotSize rounding and the minimum-quantity bump all charge the
+// wallet outside the ladder math; without a reserve they defund the last rung.
+const InitialBidReservePercent = 5.0
+
 func GetInitialBidByDepth(amount float64, depth float64, multiplier float64, percentage float64) float64 {
-	if multiplier <= 0 {
+	if multiplier <= 0 || depth <= 0 {
 		return 0
 	}
 	if percentage < 0 || percentage >= 100 {
@@ -48,6 +53,10 @@ func GetInitialBidByDepth(amount float64, depth float64, multiplier float64, per
 	// Compute the first term (initial bid)
 	numerator := amount * (1 - ratio)
 	denominator := 1 - math.Pow(ratio, depth)
+	if denominator == 0 {
+		// A ratio of exactly 1 is a flat ladder: every rung costs the same.
+		return amount / depth
+	}
 	initialBid := numerator / denominator
 
 	/*
@@ -69,6 +78,11 @@ func CalculateMinimumQuantity(trade aggragates.Trades) float64 {
 	depth := int(strategySettings.MinDepths)
 	initial := trade.StrategyPair.TradeFilters.MinNotional
 	percent := strategySettings.Percentage
+
+	// Base-asset rungs double undiscounted — see CalculateInitialBid.
+	if trade.Inverse {
+		percent = 0
+	}
 
 	latestSum := initial * (1 + (percent / 100))
 	var neededSum float64 = 0
@@ -100,6 +114,20 @@ func CalculateInitialBid(amount float64, trade aggragates.Trades, strategyIndex 
 	minDepths := strategySettings.MinDepths
 	decimalDecrease := 0.5
 
+	// Size the ladder against a haircut budget, never the full wallet, so the
+	// deepest rung stays fundable after fees and rounding.
+	budget := amount * (1 - InitialBidReservePercent/100)
+
+	// An inverse ladder spends the base asset, and every rung doubles the base
+	// quantity with the bare multiplier — the percentage discount only shapes
+	// the quote proceeds. Sizing inverse with the discounted ratio plans ~88%
+	// of the ladder's real cost and blocks every max-depth trade on its final
+	// rung.
+	percentage := strategySettings.Percentage
+	if trade.Inverse {
+		percentage = 0
+	}
+
 	for depthMultiplied := maxDepths * 100; depthMultiplied >= minDepths*100; depthMultiplied-- {
 		if math.Mod(depthMultiplied/10, decimalDecrease*10) != 0 {
 			continue
@@ -113,7 +141,7 @@ func CalculateInitialBid(amount float64, trade aggragates.Trades, strategyIndex 
 		if trade.ParentID != 0 {
 			depth = strategySettings.ImpasseDepth
 		}
-		initialBid = GetInitialBidByDepth(amount, depth, strategySettings.Multiplier, strategySettings.Percentage)
+		initialBid = GetInitialBidByDepth(budget, depth, strategySettings.Multiplier, percentage)
 		initialBidInQuote = initialBid
 
 		// update initialBid on inverse
