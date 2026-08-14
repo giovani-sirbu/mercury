@@ -56,19 +56,78 @@ func TestShouldHoldHoldsStopLossOnBearishClassicMarket(t *testing.T) {
 
 func TestShouldHoldHoldsOnExplicitAIHoldAction(t *testing.T) {
 	event := events.Events{
-		Trade: newHoldTrade("takeProfit", false),
+		Trade: newHoldTrade("stopLoss", false),
 		Events: map[string]func(events.Events) (events.Events, error){
 			"updateTrade": nopUpdateTradeForHold,
 		},
 		Params: aggragates.Params{
-			OldPosition: "active",
+			OldPosition:  "active",
 			AIIndicators: aggragates.AIIndicators{UseAI: true, AIAction: ActionHold},
 		},
 	}
 
 	_, err := ShouldHold(event)
 	if err == nil {
-		t.Fatal("expected hold error when AI explicitly recommends HOLD")
+		t.Fatal("expected hold error when AI explicitly recommends HOLD for a risk-adding position")
+	}
+}
+
+func TestShouldHoldAllowsTakeProfitOnExplicitAIHold(t *testing.T) {
+	for _, inverse := range []bool{false, true} {
+		event := events.Events{
+			Trade: newHoldTrade("takeProfit", inverse),
+			Params: aggragates.Params{
+				OldPosition:  "active",
+				AIIndicators: aggragates.AIIndicators{UseAI: true, AIAction: ActionHold},
+			},
+		}
+
+		if _, err := ShouldHold(event); err != nil {
+			t.Fatalf("expected explicit HOLD to allow takeProfit (inverse=%v), got %v", inverse, err)
+		}
+	}
+}
+
+func TestShouldHoldWritesInfoLogAndCollapsesRepeats(t *testing.T) {
+	event := events.Events{
+		Trade: newHoldTrade("stopLoss", false),
+		Events: map[string]func(events.Events) (events.Events, error){
+			"updateTrade": nopUpdateTradeForHold,
+		},
+		Params: aggragates.Params{
+			OldPosition:  "active",
+			AIIndicators: aggragates.AIIndicators{UseAI: true, AIMarketBearish: true},
+		},
+	}
+
+	held, err := ShouldHold(event)
+	if err == nil {
+		t.Fatal("expected hold error")
+	}
+	if len(held.Trade.Logs) != 1 {
+		t.Fatalf("expected one hold log, got %d", len(held.Trade.Logs))
+	}
+	logEntry := held.Trade.Logs[0]
+	if logEntry.Type != aggragates.LOG_INFO {
+		t.Errorf("hold log type = %q, want %q", logEntry.Type, aggragates.LOG_INFO)
+	}
+	if logEntry.Message != "Hold stopLoss: AI market is bearish" {
+		t.Errorf("unexpected hold message %q", logEntry.Message)
+	}
+	if held.Trade.PositionType != "active" {
+		t.Errorf("expected position restored to old position, got %q", held.Trade.PositionType)
+	}
+
+	// Next tick holds the same position for a different reason: the log is
+	// collapsed instead of appended again.
+	held.Trade.PositionType = "stopLoss"
+	held.Params.AIIndicators = aggragates.AIIndicators{UseAI: true, AIAction: ActionHold}
+	again, err := ShouldHold(held)
+	if err == nil {
+		t.Fatal("expected hold error on second tick")
+	}
+	if len(again.Trade.Logs) != 1 {
+		t.Fatalf("expected repeated hold to collapse, got %d logs", len(again.Trade.Logs))
 	}
 }
 

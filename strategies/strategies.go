@@ -29,12 +29,19 @@ func (S Strategy) GetPosition(percentage float64) string {
 
 	expression, _ := govaluate.NewEvaluableExpression(S.Logic[S.Position.Type])
 
+	// Row-per-depth contract: the held depth's own row when it exists, the
+	// base row 0 otherwise — so a single-row ladder applies to every depth.
+	settingsIndex := int(S.Depth)
+	if settingsIndex < 0 || settingsIndex >= len(S.Settings) {
+		settingsIndex = 0
+	}
+
 	parameters := make(map[string]interface{}, 8)
 	parameters["percentage"] = percentage
-	parameters["tradePercentage"] = S.Settings[S.Depth].Percentage
-	parameters["tolerance"] = S.Settings[S.Depth].Tolerance
-	parameters["trailingTakeProfit"] = S.Settings[S.Depth].TrailingTakeProfit
-	parameters["takeLossPercentage"] = S.Settings[S.Depth].TakeLossPercentage
+	parameters["tradePercentage"] = S.Settings[settingsIndex].Percentage
+	parameters["tolerance"] = S.Settings[settingsIndex].Tolerance
+	parameters["trailingTakeProfit"] = S.Settings[settingsIndex].TrailingTakeProfit
+	parameters["takeLossPercentage"] = S.Settings[settingsIndex].TakeLossPercentage
 
 	result, _ := expression.Evaluate(parameters)
 	newPosition := fmt.Sprintf("%s", result)
