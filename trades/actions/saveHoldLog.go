@@ -14,7 +14,9 @@ import (
 // reasons do not spam the trade history.
 func saveHoldLog(event events.Events, position string, reason string) (events.Events, error) {
 	message := fmt.Sprintf("Hold %s: %s", position, reason)
-	err := fmt.Errorf("%s", message)
+	// Wrapped so the chain still stops here while the runner keeps quiet about
+	// it: the INFO entry below is the record of this decision.
+	err := fmt.Errorf("%w: %s %s", events.ErrTradeHeld, position, reason)
 
 	if len(event.Trade.Logs) > 0 {
 		last := event.Trade.Logs[len(event.Trade.Logs)-1]

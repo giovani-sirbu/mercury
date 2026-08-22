@@ -1,6 +1,7 @@
 package events
 
 import (
+	"errors"
 	"fmt"
 	"github.com/adshao/go-binance/v2/common"
 	"github.com/giovani-sirbu/mercury/exchange"
@@ -79,6 +80,12 @@ func (e Events) Run() error {
 
 	if err != nil {
 		e.LockTradeWithBackOff()
+		// A hold is a decision, not a failure: it already wrote its own INFO
+		// entry on the trade, so logging it here only duplicates it once per
+		// tick for as long as the hold lasts.
+		if errors.Is(err, ErrTradeHeld) {
+			return err
+		}
 		return e.logEventError(err)
 	}
 

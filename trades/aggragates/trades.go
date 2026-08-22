@@ -52,6 +52,27 @@ type (
 		AISignalStrength float64
 		StayOutReasons   []string
 		UseAI            bool
+		// Multi-timeframe regime verdict, served by sophos when it has enough
+		// closed candles. HasRegimeVerdict is the compatibility switch: while
+		// false (older sophos, or a cache entry written before the field
+		// existed) every field below is ignored and ShouldHold runs the legacy
+		// bullish/bearish logic — without it, a stale cache entry would
+		// deserialize as EnterAllowed=false and silently block every entry.
+		HasRegimeVerdict bool
+		EnterAllowed     bool
+		AddAllowed       bool
+		ExitPreferred    bool
+		Regime           string
+		Regimes          map[string]string
+		RegimeConfidence float64
+		// Crash guard: a market-wide flush is in progress (10.10.2025-style).
+		// Arms the ladder widening and the deep-trade de-risk; distinct from
+		// ExitPreferred, which is a single-symbol volatility shock.
+		// CrashReasons names the components that carried the score, so the
+		// engines can say WHY the guard armed instead of just that it did.
+		CrashActive  bool
+		CrashScore   float64
+		CrashReasons []string
 	}
 
 	Params struct {
