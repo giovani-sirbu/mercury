@@ -25,39 +25,12 @@ func Sell(event events.Events) (events.Events, error) {
 	if clientError != nil {
 		return SaveError(event, clientError)
 	}
-	buyQty, sellQty := GetGrossQuantities(event)
-	// Literal asset fees: only base-paid fees reduce the base wallet balance,
-	// only quote-paid fees reduce the quote wallet balance. BNB/third-asset
-	// fees come from a separate wallet and must NOT be subtracted from the
-	// trade's base or quote totals here. For profit accounting that needs the
-	// full cost-in-denomination, use GetFeesBaseQuote / GetFees instead.
-	feeInBase, feeInQuote := CalculateFees(event)
-	quantity := buyQty - sellQty - feeInBase
-
-	if event.Trade.Inverse {
-		// Inverse trades need quote-denominated totals: each fill's quantity is
-		// re-aggregated multiplied by its own price. Then we subtract literal
-		// quote fees, convert to base by dividing by PositionPrice, and
-		// subtract any literal base-side fees (covers partial-fill dust).
-		sellInQuote := trades.GetQuantityInQuote(event.Trade.History, "BUY")
-		buyInQuote := trades.GetQuantityInQuote(event.Trade.History, "SELL")
-		quantity = sellInQuote - buyInQuote - feeInQuote
-		quantity = quantity / event.Trade.PositionPrice
-		quantity = quantity - feeInBase
-	}
-
-	quantityBeforeLotSize := quantity
-	var dust float64
-	quantity = ToFixed(quantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
+	quantity, dust := SellableQuantity(event)
 
 	// if no bought quantity, update event status and close it
 	if quantity <= 0 {
 		event.Trade.Status = aggragates.Closed
 		return event, nil
-	}
-
-	if quantityBeforeLotSize > quantity {
-		dust = quantityBeforeLotSize - quantity
 	}
 
 	var response aggregates.CreateOrderResponse
@@ -106,4 +79,40 @@ func Sell(event events.Events) (events.Events, error) {
 	log.Debug(fmt.Sprintf("Sell(TradeID:#%d): PositionPrice(%f), quantity(%f)", event.Trade.ID, event.Trade.PositionPrice, quantity))
 
 	return event, nil
+}
+
+// SellableQuantity returns the LotSize-floored base quantity a full close
+// must sell (inverse: buy back) plus the dust left below the lot step.
+// Computed from executed history and literal asset fees: only base-paid fees
+// reduce the base wallet balance, only quote-paid fees reduce the quote
+// wallet balance — BNB/third-asset fees come from a separate wallet and must
+// not be subtracted here (profit accounting uses GetFeesBaseQuote / GetFees).
+// Shared by Sell, the pending-order close rule and manual full-close sizing
+// so "how much can this trade sell" has exactly one definition.
+func SellableQuantity(event events.Events) (float64, float64) {
+	buyQty, sellQty := GetGrossQuantities(event)
+	feeInBase, feeInQuote := CalculateFees(event)
+	quantity := buyQty - sellQty - feeInBase
+
+	if event.Trade.Inverse {
+		// Inverse trades need quote-denominated totals: each fill's quantity is
+		// re-aggregated multiplied by its own price. Then we subtract literal
+		// quote fees, convert to base by dividing by PositionPrice, and
+		// subtract any literal base-side fees (covers partial-fill dust).
+		sellInQuote := trades.GetQuantityInQuote(event.Trade.History, "BUY")
+		buyInQuote := trades.GetQuantityInQuote(event.Trade.History, "SELL")
+		quantity = sellInQuote - buyInQuote - feeInQuote
+		quantity = quantity / event.Trade.PositionPrice
+		quantity = quantity - feeInBase
+	}
+
+	quantityBeforeLotSize := quantity
+	quantity = ToFixed(quantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
+
+	var dust float64
+	if quantityBeforeLotSize > quantity {
+		dust = quantityBeforeLotSize - quantity
+	}
+
+	return quantity, dust
 }

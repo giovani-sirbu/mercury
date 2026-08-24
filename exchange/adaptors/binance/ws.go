@@ -3,6 +3,7 @@ package binanceAdaptor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -240,10 +241,20 @@ func (e Binance) runPriceStream(ctx context.Context, socketURL string, handler f
 
 const expireEvent = "listenKeyExpired"
 
+// ErrTestnetUserStreamUnsupported: binance.WsUserDataServe resolves its wss
+// endpoint from the process-wide UseTestnet global (mainnet here, never
+// toggled), so a testnet listen key cannot be served per instance. Testnet
+// exchanges rely on the REST pending-order cron for settlement instead.
+var ErrTestnetUserStreamUnsupported = errors.New("TESTNET_USER_STREAM_UNSUPPORTED")
+
 // UserWs subscribes to user data updates for listenKey. It blocks until ctx
 // is cancelled or WsUserDataServe reports the listen key expired; in the
 // latter case the caller is expected to fetch a new key and re-subscribe.
+// Mainnet only (see ErrTestnetUserStreamUnsupported).
 func (e Binance) UserWs(ctx context.Context, listenKey string, handler func(order aggregates.WsUserDataEvent, expireEvent string)) error {
+	if e.TestNet {
+		return ErrTestnetUserStreamUnsupported
+	}
 	wsHandler := func(message *binance.WsUserDataEvent) {
 		var orderDetails aggregates.WsUserDataEvent
 		copier.Copy(&orderDetails, &message)

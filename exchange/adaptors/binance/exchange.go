@@ -1,6 +1,9 @@
 package binanceAdaptor
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/adshao/go-binance/v2"
 	"github.com/adshao/go-binance/v2/common"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
@@ -24,6 +27,10 @@ type Binance struct {
 // The nil-error short-circuit matters because callers often assign the
 // result into a *common.APIError field and check it later; a naked wrap
 // of nil would produce a non-nil wrapper and break that check.
+//
+// The message is never empty: go-binance yields APIError{Code:0, Message:""}
+// when a non-JSON body comes back (a /sapi/* redirect to HTML on testnet, a
+// proxy page), and that blank used to surface to the user verbatim.
 func ApiError(err error) *common.APIError {
 	if err == nil {
 		return nil
@@ -32,14 +39,25 @@ func ApiError(err error) *common.APIError {
 	if apiErr, ok := err.(*common.APIError); ok {
 		return &common.APIError{
 			Code:    apiErr.Code,
-			Message: apiErr.Message,
+			Message: describeExchangeError(apiErr.Code, apiErr.Message),
 		}
 	}
 
 	return &common.APIError{
 		Code:    0,
-		Message: err.Error(),
+		Message: describeExchangeError(0, err.Error()),
 	}
+}
+
+// describeExchangeError substitutes a meaningful message for blank ones.
+func describeExchangeError(code int64, message string) string {
+	if strings.TrimSpace(message) != "" {
+		return message
+	}
+	if code == 0 {
+		return "exchange returned an unreadable response (redirect or non-JSON body)"
+	}
+	return fmt.Sprintf("exchange error code %d (no message)", code)
 }
 
 // GetBinanceActions builds the Actions function-bag for a spot exchange. The
@@ -71,15 +89,29 @@ func GetBinanceActions(e aggregates.Exchange) aggregates.Actions {
 	}
 }
 
-// InitExchange constructs an authenticated binance client. TestNet toggles
-// the library-level global, so concurrent use across mainnet + testnet
-// exchanges within the same process is not safe — accepted trade-off given
-// that every deployment pins to one network.
-func InitExchange(exchange Binance) (*binance.Client, *common.APIError) {
-	if exchange.TestNet {
-		binance.UseTestnet = true
-	} else {
-		binance.UseTestnet = false
+// Spot REST base URLs. The network is selected PER CLIENT INSTANCE via
+// Client.BaseURL — never through the process-wide binance.UseTestnet global —
+// so mainnet and testnet accounts trade safely side by side in one process.
+// Public market-data helpers that build their own key-less client (sophos)
+// and the hermes price stream (ws.go getUrlByExchange) stay on mainnet by
+// design: testnet order books are too thin to drive strategy decisions.
+const (
+	SpotMainnetBaseURL = "https://api.binance.com"
+	SpotTestnetBaseURL = "https://testnet.binance.vision"
+)
+
+// SpotBaseURL returns the spot REST base URL for the requested network.
+func SpotBaseURL(testNet bool) string {
+	if testNet {
+		return SpotTestnetBaseURL
 	}
-	return binance.NewClient(exchange.ApiKey, exchange.ApiSecret), nil
+	return SpotMainnetBaseURL
+}
+
+// InitExchange constructs an authenticated spot client bound to the
+// exchange's network (mainnet default, testnet when exchange.TestNet).
+func InitExchange(exchange Binance) (*binance.Client, *common.APIError) {
+	client := binance.NewClient(exchange.ApiKey, exchange.ApiSecret)
+	client.BaseURL = SpotBaseURL(exchange.TestNet)
+	return client, nil
 }
