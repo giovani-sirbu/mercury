@@ -58,3 +58,57 @@ func SettingsIndexOrBase(settings []aggragates.StrategySettings, index int) int 
 	}
 	return index
 }
+
+// EffectiveStrategySettings returns the ladder hermes and agora must read for
+// this trade: the per-trade override when one carries at least one row,
+// otherwise the strategy pair ladder.
+func EffectiveStrategySettings(trade aggragates.Trades) []aggragates.StrategySettings {
+	if trade.SettingsOverride != nil && len(trade.SettingsOverride.StrategySettings) > 0 {
+		return trade.SettingsOverride.StrategySettings
+	}
+	return trade.StrategyPair.StrategySettings
+}
+
+// EffectiveParams returns the strategy params for this trade: the override
+// params when set (nil keeps the base strategy params), else the strategy's.
+func EffectiveParams(trade aggragates.Trades) aggragates.StrategyParams {
+	if trade.SettingsOverride != nil && trade.SettingsOverride.Params != nil {
+		return *trade.SettingsOverride.Params
+	}
+	return trade.Strategy.Params
+}
+
+// ApplySettingsOverride returns a copy of the trade whose StrategyPair ladder
+// and Strategy params are the effective ones, so every downstream reader of
+// trade.StrategyPair.StrategySettings / trade.Strategy.Params sees the
+// override without being changed. The ladder slice is cloned so callers can
+// never alias the override's backing array. Call it once at the boundary
+// (after the DB/cache load) and never persist the overlaid copy's
+// StrategyPair or Strategy back to their tables.
+func ApplySettingsOverride(trade aggragates.Trades) aggragates.Trades {
+	if trade.SettingsOverride == nil {
+		return trade
+	}
+
+	if len(trade.SettingsOverride.StrategySettings) > 0 {
+		ladder := make([]aggragates.StrategySettings, len(trade.SettingsOverride.StrategySettings))
+		copy(ladder, trade.SettingsOverride.StrategySettings)
+		trade.StrategyPair.StrategySettings = ladder
+	}
+
+	if trade.SettingsOverride.Params != nil {
+		trade.Strategy.Params = *trade.SettingsOverride.Params
+	}
+
+	return trade
+}
+
+// ApplySettingsOverrides overlays every trade of the slice; the input slice is
+// left untouched.
+func ApplySettingsOverrides(list []aggragates.Trades) []aggragates.Trades {
+	overlaid := make([]aggragates.Trades, len(list))
+	for index, trade := range list {
+		overlaid[index] = ApplySettingsOverride(trade)
+	}
+	return overlaid
+}

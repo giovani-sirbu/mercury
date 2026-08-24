@@ -30,14 +30,26 @@ func GetFuturesBinanceActions(e aggregates.Exchange) aggregates.FuturesActions {
 	}
 }
 
-// InitFuturesExchange constructs an authenticated futures client. TestNet
-// toggles the library-level global, so the same one-network-at-a-time
-// constraint as InitExchange applies here.
-func InitFuturesExchange(exchange Binance) (*futures.Client, *common.APIError) {
-	if exchange.TestNet {
-		futures.UseTestnet = true
-	} else {
-		futures.UseTestnet = false
+// USD-M futures REST base URLs, selected per client instance exactly like
+// the spot ones (see exchange.go): the futures.UseTestnet global is never
+// touched, so mixed mainnet/testnet accounts are safe in one process.
+const (
+	FuturesMainnetBaseURL = "https://fapi.binance.com"
+	FuturesTestnetBaseURL = "https://testnet.binancefuture.com"
+)
+
+// FuturesBaseURL returns the futures REST base URL for the requested network.
+func FuturesBaseURL(testNet bool) string {
+	if testNet {
+		return FuturesTestnetBaseURL
 	}
-	return futures.NewClient(exchange.ApiKey, exchange.ApiSecret), nil
+	return FuturesMainnetBaseURL
+}
+
+// InitFuturesExchange constructs an authenticated futures client bound to
+// the exchange's network (mainnet default, testnet when exchange.TestNet).
+func InitFuturesExchange(exchange Binance) (*futures.Client, *common.APIError) {
+	client := futures.NewClient(exchange.ApiKey, exchange.ApiSecret)
+	client.BaseURL = FuturesBaseURL(exchange.TestNet)
+	return client, nil
 }

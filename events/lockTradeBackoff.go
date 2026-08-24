@@ -50,6 +50,14 @@ func sweepBackoffTries() {
 	}
 }
 
+// TradeLockKey is the Redis key of the per-trade action lock shared by every
+// writer: hermes (TryLockTrade / IsTradeLock), mercury (LockTrade backoff) and
+// the agora update-trade consumer (release). One definition so the services
+// can never drift onto different keys.
+func TradeLockKey(tradeID uint) string {
+	return fmt.Sprintf("trade:%d:is_locked", tradeID)
+}
+
 // LockTrade locks the trade with a specified duration.
 //
 // Nil Storage is treated as a no-op because some callers (notably backtesting
@@ -65,8 +73,7 @@ func (e Events) LockTrade(lockDuration time.Duration) error {
 	if e.Storage == nil {
 		return nil
 	}
-	lockKey := fmt.Sprintf("trade:%d:is_locked", e.Trade.ID)
-	return e.Storage.Set(lockKey, true, lockDuration)
+	return e.Storage.Set(TradeLockKey(e.Trade.ID), true, lockDuration)
 }
 
 // LockTradeWithBackOff locks the trade with an exponential backoff strategy.

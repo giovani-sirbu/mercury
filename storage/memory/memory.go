@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -252,4 +253,74 @@ func (m *Memory) Close() error {
 		return nil
 	}
 	return m.client.Close()
+}
+
+// deleteIfValueScript is the compare-and-delete used for value-owned locks:
+// the key is removed only when it still holds the caller's token, so an
+// owner can never release a lock that expired and was re-acquired by
+// somebody else. A Lua script because a client-side GET+DEL would race
+// between the two commands.
+var deleteIfValueScript = redis.NewScript(`
+if redis.call("get", KEYS[1]) == ARGV[1] then
+	return redis.call("del", KEYS[1])
+end
+return 0
+`)
+
+// SetNXValue atomically claims key with the caller-supplied value (stored
+// raw, no msgpack — the value is an ownership token, not an object).
+// Returns (true, nil) when this caller acquired the key, (false, nil) when
+// another holder exists, (false, err) on transport error. Bypasses the
+// TinyLFU local cache and fails closed on remote outage, exactly like SetNX.
+func (m *Memory) SetNXValue(key string, value string, expiration time.Duration) (bool, error) {
+	m.init()
+	if err := m.remoteUnavailable(); err != nil {
+		return false, err
+	}
+	acquired, err := m.client.SetNX(context.Background(), prefixed(key), value, expiration).Result()
+	if err != nil {
+		m.recordRemoteError(err)
+		return false, err
+	}
+	m.recordRemoteSuccess()
+	return acquired, nil
+}
+
+// GetString returns the raw string stored at key ("" when the key does not
+// exist). Raw GET, no msgpack decoding: pairs with SetNXValue for reading
+// lock ownership tokens.
+func (m *Memory) GetString(key string) (string, error) {
+	m.init()
+	if err := m.remoteUnavailable(); err != nil {
+		return "", err
+	}
+	value, err := m.client.Get(context.Background(), prefixed(key)).Result()
+	if errors.Is(err, redis.Nil) {
+		m.recordRemoteSuccess()
+		return "", nil
+	}
+	if err != nil {
+		m.recordRemoteError(err)
+		return "", err
+	}
+	m.recordRemoteSuccess()
+	return value, nil
+}
+
+// DeleteIfValue removes key only when its current value equals value (Lua
+// compare-and-delete). Returns whether the key was deleted; false with a nil
+// error means the key was absent or owned by someone else — both are
+// non-errors for a lock release.
+func (m *Memory) DeleteIfValue(key string, value string) (bool, error) {
+	m.init()
+	if err := m.remoteUnavailable(); err != nil {
+		return false, err
+	}
+	deleted, err := deleteIfValueScript.Run(context.Background(), m.client, []string{prefixed(key)}, value).Int()
+	if err != nil {
+		m.recordRemoteError(err)
+		return false, err
+	}
+	m.recordRemoteSuccess()
+	return deleted > 0, nil
 }

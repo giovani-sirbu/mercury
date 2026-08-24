@@ -8,31 +8,44 @@ import (
 
 type (
 	Trades struct {
-		ID              uint            `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
-		UserID          uint            `gorm:"index:idx_dashboard_stats,priority:1;index:idx_user_status,priority:1;" form:"userId" json:"userId" xml:"userId"`
-		ParentID        uint            `gorm:"index" form:"parentId" json:"parentId" xml:"parentId"`
-		Symbol          string          `gorm:"type:varchar(10);uniqueIndex:idx_symbol_strategy_id,priority:1;" bson:"symbol" json:"symbol"`
-		PositionType    string          `gorm:"type:varchar(50); default:new" bson:"positionType" json:"positionType"`
-		PositionPrice   float64         `bson:"positionPrice" json:"positionPrice"`
-		ExchangeID      int             `gorm:"index:idx_dashboard_stats,priority:2;" form:"exchangeId" json:"exchangeId" xml:"exchangeId"`
-		Exchange        TradesExchanges `gorm:"foreignKey:ExchangeID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" form:"exchange" json:"exchange" xml:"exchange"`
-		ExchangeName    string          `gorm:"type:varchar(50);uniqueIndex:idx_symbol_strategy_id,priority:3;" bson:"exchangeName" json:"-"`
-		StrategyID      int             `gorm:"uniqueIndex:idx_symbol_strategy_id,priority:2;" form:"strategyId" json:"strategyId" xml:"strategyId"`
-		Strategy        Strategies      `gorm:"foreignKey:StrategyID;references:ID"  form:"strategyInfo" json:"strategyInfo" xml:"strategyInfo"`
-		StrategyPair    StrategiesPairs `gorm:"foreignKey:Symbol,StrategyID,ExchangeName;references:Symbol,StrategyID,Exchange" json:"strategyPair"`
-		USDProfit       float64         `gorm:"index" bson:"usdProfit" json:"usdProfit"`
-		Profit          float64         `bson:"profit" json:"profit"`
-		ProfitAsset     string          `bson:"profitAsset" json:"profitAsset"`
-		Dust            float64         `bson:"dust" json:"dust"`
-		PreventNewTrade bool            `gorm:"type:boolean;default:false" bson:"preventNewTrade" json:"preventNewTrade"`
-		Inverse         bool            `gorm:"type:boolean;default:false" bson:"inverse" json:"inverse"`
-		PendingOrder    int64           `gorm:"index" bson:"pendingOrder" json:"pendingOrder"`
-		History         []TradesHistory `gorm:"foreignKey:TradeID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" bson:"history" json:"history"`
-		Logs            []TradesLogs    `gorm:"foreignKey:TradeID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" bson:"logs" json:"logs"`
-		Status          Status          `gorm:"default:active;index;index:idx_dashboard_stats,priority:3;index:idx_user_status,priority:2;" bson:"status" json:"status"`
-		CreatedAt       time.Time       `form:"createdAt" json:"createdAt" xml:"createdAt"`
-		UpdatedAt       time.Time       `gorm:"index;index:idx_dashboard_stats,priority:4" form:"updatedAt" json:"updatedAt" xml:"updatedAt"`
-		DeletedAt       gorm.DeletedAt  `gorm:"index" form:"deletedAt" json:"-" xml:"deletedAt"`
+		ID               uint                   `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
+		UserID           uint                   `gorm:"index:idx_dashboard_stats,priority:1;index:idx_user_status,priority:1;" form:"userId" json:"userId" xml:"userId"`
+		ParentID         uint                   `gorm:"index" form:"parentId" json:"parentId" xml:"parentId"`
+		Symbol           string                 `gorm:"type:varchar(10);uniqueIndex:idx_symbol_strategy_id,priority:1;" bson:"symbol" json:"symbol"`
+		PositionType     string                 `gorm:"type:varchar(50); default:new" bson:"positionType" json:"positionType"`
+		PositionPrice    float64                `bson:"positionPrice" json:"positionPrice"`
+		ExchangeID       int                    `gorm:"index:idx_dashboard_stats,priority:2;" form:"exchangeId" json:"exchangeId" xml:"exchangeId"`
+		Exchange         TradesExchanges        `gorm:"foreignKey:ExchangeID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" form:"exchange" json:"exchange" xml:"exchange"`
+		ExchangeName     string                 `gorm:"type:varchar(50);uniqueIndex:idx_symbol_strategy_id,priority:3;" bson:"exchangeName" json:"-"`
+		StrategyID       int                    `gorm:"uniqueIndex:idx_symbol_strategy_id,priority:2;" form:"strategyId" json:"strategyId" xml:"strategyId"`
+		Strategy         Strategies             `gorm:"foreignKey:StrategyID;references:ID"  form:"strategyInfo" json:"strategyInfo" xml:"strategyInfo"`
+		StrategyPair     StrategiesPairs        `gorm:"foreignKey:Symbol,StrategyID,ExchangeName;references:Symbol,StrategyID,Exchange" json:"strategyPair"`
+		USDProfit        float64                `gorm:"index" bson:"usdProfit" json:"usdProfit"`
+		Profit           float64                `bson:"profit" json:"profit"`
+		ProfitAsset      string                 `bson:"profitAsset" json:"profitAsset"`
+		Dust             float64                `bson:"dust" json:"dust"`
+		PreventNewTrade  bool                   `gorm:"type:boolean;default:false" bson:"preventNewTrade" json:"preventNewTrade"`
+		Inverse          bool                   `gorm:"type:boolean;default:false" bson:"inverse" json:"inverse"`
+		PendingOrder     int64                  `gorm:"index" bson:"pendingOrder" json:"pendingOrder"`
+		SettingsOverride *TradeSettingsOverride `gorm:"type:jsonb;serializer:json" bson:"settingsOverride" json:"settingsOverride"`
+		History          []TradesHistory        `gorm:"foreignKey:TradeID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" bson:"history" json:"history"`
+		Logs             []TradesLogs           `gorm:"foreignKey:TradeID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" bson:"logs" json:"logs"`
+		Status           Status                 `gorm:"default:active;index;index:idx_dashboard_stats,priority:3;index:idx_user_status,priority:2;" bson:"status" json:"status"`
+		CreatedAt        time.Time              `form:"createdAt" json:"createdAt" xml:"createdAt"`
+		UpdatedAt        time.Time              `gorm:"index;index:idx_dashboard_stats,priority:4" form:"updatedAt" json:"updatedAt" xml:"updatedAt"`
+		DeletedAt        gorm.DeletedAt         `gorm:"index" form:"deletedAt" json:"-" xml:"deletedAt"`
+	}
+	// TradeSettingsOverride is Trades.SettingsOverride: the per-trade ladder
+	// (and optionally params) override. nil (SQL NULL) means "use the strategy
+	// pair defaults"; Params nil keeps the strategy params. It dies with the
+	// trade because CreateTrade always builds a fresh Trades{} without it.
+	// Apply it with trades.ApplySettingsOverride at the read boundaries
+	// (hermes tick, agora stop/unblock/balance checks); never persist the
+	// overlaid StrategyPair/Strategy back to their tables.
+	TradeSettingsOverride struct {
+		StrategySettings []StrategySettings `bson:"strategySettings" json:"strategySettings"`
+		Params           *StrategyParams    `bson:"params" json:"params"`
+		UpdatedAt        time.Time          `bson:"updatedAt" json:"updatedAt"`
 	}
 	UsedAmountResult struct {
 		UsedAmount    float64 `json:"usedAmount"`
