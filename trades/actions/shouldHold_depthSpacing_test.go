@@ -87,7 +87,7 @@ func TestDepthSpacingNeverHoldsALadderTwoBaseHoldsApart(t *testing.T) {
 	}
 }
 
-// Unknown clocks fail open, the posture cooldown.Expired keeps: a tick with
+// Unknown clocks fail open, the posture every cooldown gate keeps: a tick with
 // no time, or a depth whose placement stamp was never persisted, parks
 // nothing. Live-testing memory trades arrive exactly like this.
 func TestDepthSpacingNeverHoldsOnUnknownClocks(t *testing.T) {
@@ -143,6 +143,10 @@ func TestDepthSpacingOnlyGatesStopLoss(t *testing.T) {
 // one entry instead of one per tick.
 func TestDepthSpacingWritesOneStableCooldownRow(t *testing.T) {
 	trade := testutil.DepthTrade(trade25858[0], trade25858[1])
+	// The clock half of the row alone: without a ladder row there is no
+	// release price to print, and the price half is pinned by the release
+	// tests in the cooldown package.
+	trade.StrategyPair.StrategySettings = nil
 
 	held, err := ShouldHold(depthEvent(trade, trade25858[1].Add(time.Minute)))
 	if err == nil {

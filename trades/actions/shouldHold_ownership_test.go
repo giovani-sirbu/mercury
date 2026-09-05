@@ -112,7 +112,7 @@ func TestShouldHoldOwnershipMatrixStopLoss(t *testing.T) {
 		{"crashGuard", aggragates.StrategyParams{CrashGuard: true}, "crash-guard: deep trade, no new capital during a flush"},
 		{"smartTakeLoss", aggragates.StrategyParams{SmartTakeLoss: true}, "smart-take-loss: HTF continuation, no add"},
 		{"useAI", aggragates.StrategyParams{UseAI: true}, "AI market is bearish"},
-		{"usePatterns", aggragates.StrategyParams{UsePatterns: true}, "pattern: ascending triangle found (resistance 96000), preventing stopLoss"},
+		{"usePatterns", aggragates.StrategyParams{UsePatterns: true}, "pattern: ascending triangle found (resistance 96000.0000), preventing stopLoss"},
 		{"useForceTrailing", aggragates.StrategyParams{UseForceTrailing: true}, ""},
 		{"powerLawQuantiles", aggragates.StrategyParams{PowerLawQuantiles: true}, ""},
 	}
@@ -145,7 +145,7 @@ func TestShouldHoldOwnershipMatrixTakeProfit(t *testing.T) {
 		{"crashGuard never holds an exit", aggragates.StrategyParams{CrashGuard: true}, ""},
 		{"smartTakeLoss never holds an exit", aggragates.StrategyParams{SmartTakeLoss: true}, ""},
 		{"useAI", aggragates.StrategyParams{UseAI: true}, "AI market is bullish"},
-		{"usePatterns", aggragates.StrategyParams{UsePatterns: true}, "pattern: ascending triangle in play, riding to target 104500"},
+		{"usePatterns", aggragates.StrategyParams{UsePatterns: true}, "pattern: ascending triangle in play, riding to target 104500.0000"},
 	}
 	for _, c := range cases {
 		trade := ownershipTrade("takeProfit", 4)
@@ -192,9 +192,9 @@ func TestShouldHoldRegimeHoldNeverFiresOnEntry(t *testing.T) {
 			event.Params.OldPosition = "new"
 			held, err = ShouldHold(event)
 			if err == nil {
-				t.Fatalf("inverse=%v %s: the cooldown must hold the expensive first fill", inverse, label)
+				t.Fatalf("inverse=%v %s: the cooldown must hold the refused first fill", inverse, label)
 			}
-			assertOnlyFamily(t, held.Trade.Logs, "cooldown: first fill expensive")
+			assertOnlyFamily(t, held.Trade.Logs, "cooldown: trying to get a better entry price")
 		}
 	}
 }

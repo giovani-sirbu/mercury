@@ -121,9 +121,9 @@ func TestShouldHoldStrategy3RegimeGatesAreLive(t *testing.T) {
 	}
 }
 
-// The first fill answers to the cooldown lens only: a 4h downtrend with no
-// cooldown verdict passes, and an expensive first fill holds without a word
-// of regime in the row.
+// The first fill answers to the cooldown gate only: a 4h downtrend with no
+// cooldown verdict passes, and a refused first fill holds at the tick price
+// without a word of regime in the row.
 func TestShouldHoldStrategy3EntryIsCooldownOnly(t *testing.T) {
 	entry := strategy3Event("buy", 0, regimeVerdict(regime.DownPersist, regime.DownPersist, regime.ShockDown, false))
 	if msg, held := lastHold(t, entry); held {
@@ -133,7 +133,7 @@ func TestShouldHoldStrategy3EntryIsCooldownOnly(t *testing.T) {
 	expensive := strategy3Event("buy", 0, regimeVerdict(regime.DownPersist, "mixed", "mixed", false))
 	expensive.Params.CoolDownIndicators = aggragates.CoolDownIndicators{HasFirstFillVerdict: true, AllowLongEntry: false}
 	msg, held := lastHold(t, expensive)
-	if !held || msg != "Hold entry: cooldown: first fill expensive" {
+	if !held || msg != "Hold entry: cooldown: trying to get a better entry price: reference 100.0000, enters above 102.0408 or below 97.7995 after a bounce" {
 		t.Fatalf("expected the cooldown hold alone, got held=%v msg=%q", held, msg)
 	}
 	if strings.Contains(msg, "regime") {

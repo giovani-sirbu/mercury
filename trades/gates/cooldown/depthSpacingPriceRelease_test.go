@@ -103,6 +103,7 @@ func TestPriceReleaseFollowsTheInverseLadderUpwards(t *testing.T) {
 // threshold releasing every depth.
 func TestPriceReleaseNeedsAReadableLadderRow(t *testing.T) {
 	noSettings := testutil.DepthTrade(trade25858[0])
+	noSettings.StrategyPair.StrategySettings = nil
 	if _, ok := depthSpacingReleasePrice(noSettings, 0.5652, 1); ok {
 		t.Error("a trade with no strategy settings has no release price")
 	}

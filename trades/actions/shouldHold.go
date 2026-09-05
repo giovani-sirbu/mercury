@@ -20,7 +20,7 @@ import (
 // degrade-open check, never a switch-on — a verdict fetched for one flag's
 // sake gains no gate for another (see StrategyParams.NeedsSophos).
 //
-//	first fill (OldPosition "new")   Cooldown  → first-fill gate (1h + 15m)
+//	first fill (OldPosition "new")   Cooldown  → first-fill gate (higher-highs hold, released by price)
 //	                                 UseAI     → legacy bullish/bearish veto
 //	open position                    RegimeHold    → 15m shock hold, add veto, profit hold
 //	                                 UsePatterns   → chart-pattern and fibonacci holds
@@ -35,7 +35,9 @@ import (
 // spacing that keeps the ladder from cascading through every depth in one
 // drop. They share a flag because they are the same idea — do not spend
 // capital faster than the move deserves — but nothing else: the first-fill
-// gate reads sophos /markers, the gate reads only the trade's own fill stamps.
+// gate takes one higher-highs verdict from sophos /markers to activate and
+// from then on reads only the tick price and its own log rows, with no time
+// cap; depth spacing reads only the trade's own fill stamps.
 //
 // With every flag off nothing holds: the ladder runs exactly as the legacy
 // engine ran it, stopped only by funds (matrix H, run R0).
@@ -62,7 +64,12 @@ func shouldHoldEntry(event events.Events) (events.Events, error) {
 	side := aggragates.EntrySide(event.Trade, event.Params.AIIndicators)
 
 	if params.Cooldown {
-		if reason := cooldown.FirstFillHold(side, event.Params.CoolDownIndicators); reason != "" {
+		// The gate hands the event back: on the tick it releases an entry
+		// above its reference it has written the row NextDepthDoubled reads,
+		// and only the event that continues down the chain reaches updateTrade.
+		var reason string
+		event, reason = cooldown.FirstFillHold(event, side)
+		if reason != "" {
 			return gates.SaveHoldLog(event, "entry", reason)
 		}
 	}

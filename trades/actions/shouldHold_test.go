@@ -51,9 +51,13 @@ func TestShouldHoldIgnoresCooldownAfterFirstFill(t *testing.T) {
 	}
 }
 
-func TestShouldHoldFirstFillExpensiveLong(t *testing.T) {
+// A refused verdict holds the first fill at the tick price: the tick is the
+// reference the price rule works from, so an unpriced tick fails open.
+func TestShouldHoldFirstFillRefusedLongIsHeld(t *testing.T) {
+	trade := withCooldown(testutil.NewHoldTrade("buy", false))
+	trade.PositionPrice = 100
 	event := events.Events{
-		Trade: withCooldown(testutil.NewHoldTrade("buy", false)),
+		Trade: trade,
 		Events: map[string]func(events.Events) (events.Events, error){
 			"updateTrade": testutil.NopUpdateTrade,
 		},
@@ -67,7 +71,7 @@ func TestShouldHoldFirstFillExpensiveLong(t *testing.T) {
 	}
 
 	if _, err := ShouldHold(event); err == nil {
-		t.Fatal("expected hold when the first long fill is expensive")
+		t.Fatal("expected hold when the verdict refuses the first long fill")
 	}
 }
 
@@ -88,9 +92,11 @@ func TestShouldHoldFirstFillCheapLongPasses(t *testing.T) {
 	}
 }
 
-func TestShouldHoldFirstFillExpensiveInverse(t *testing.T) {
+func TestShouldHoldFirstFillRefusedInverseIsHeld(t *testing.T) {
+	trade := withCooldown(testutil.NewHoldTrade("buy", true))
+	trade.PositionPrice = 100
 	event := events.Events{
-		Trade: withCooldown(testutil.NewHoldTrade("buy", true)),
+		Trade: trade,
 		Events: map[string]func(events.Events) (events.Events, error){
 			"updateTrade": testutil.NopUpdateTrade,
 		},
@@ -104,7 +110,7 @@ func TestShouldHoldFirstFillExpensiveInverse(t *testing.T) {
 	}
 
 	if _, err := ShouldHold(event); err == nil {
-		t.Fatal("expected hold when the first inverse fill is expensive")
+		t.Fatal("expected hold when the verdict refuses the first inverse fill")
 	}
 }
 

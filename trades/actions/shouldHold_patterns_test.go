@@ -50,7 +50,7 @@ func TestPatternHoldPreventsStopLossOnBullishPattern(t *testing.T) {
 	if err == nil {
 		t.Fatal("a bullish pattern must prevent the long add")
 	}
-	want := "Hold stopLoss: pattern: ascending triangle found (resistance 96000), preventing stopLoss"
+	want := "Hold stopLoss: pattern: ascending triangle found (resistance 96000.0000), preventing stopLoss"
 	if held.Trade.Logs[0].Message != want {
 		t.Errorf("got %q, want %q", held.Trade.Logs[0].Message, want)
 	}
@@ -82,7 +82,7 @@ func TestPatternHoldInverseMirror(t *testing.T) {
 	if err == nil {
 		t.Fatal("a bearish pattern must prevent the inverse add")
 	}
-	if held.Trade.Logs[0].Message != "Hold stopLoss: pattern: head and shoulders found (neckline 96000), preventing stopLoss" {
+	if held.Trade.Logs[0].Message != "Hold stopLoss: pattern: head and shoulders found (neckline 96000.0000), preventing stopLoss" {
 		t.Errorf("unexpected message %q", held.Trade.Logs[0].Message)
 	}
 
@@ -90,7 +90,7 @@ func TestPatternHoldInverseMirror(t *testing.T) {
 	if err == nil {
 		t.Fatal("an inverse exit above the pattern target must ride")
 	}
-	if riding.Trade.Logs[0].Message != "Hold takeProfit: pattern: head and shoulders in play, riding to target 90000" {
+	if riding.Trade.Logs[0].Message != "Hold takeProfit: pattern: head and shoulders in play, riding to target 90000.0000" {
 		t.Errorf("unexpected message %q", riding.Trade.Logs[0].Message)
 	}
 }
@@ -111,7 +111,7 @@ func TestPatternHoldTakeProfitRidesToTarget(t *testing.T) {
 	if err == nil {
 		t.Fatal("a long exit below the pattern target must ride")
 	}
-	if held.Trade.Logs[0].Message != "Hold takeProfit: pattern: ascending triangle in play, riding to target 104500" {
+	if held.Trade.Logs[0].Message != "Hold takeProfit: pattern: ascending triangle in play, riding to target 104500.0000" {
 		t.Errorf("unexpected message %q", held.Trade.Logs[0].Message)
 	}
 

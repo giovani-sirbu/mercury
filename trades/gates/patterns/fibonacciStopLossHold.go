@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/gates"
 )
 
 // FibLevelTolerancePct: a rung this close ABOVE the next fibonacci level
@@ -40,7 +41,7 @@ func fibonacciStopLossHold(trade aggragates.Trades, ai aggragates.AIIndicators) 
 	// The level, not the price, goes in the message: the price moves every
 	// tick and would defeat the dedup; the level moves only when a new swing
 	// forms, which is a new fact worth a row.
-	return fmt.Sprintf("fibonacci: waiting for a better price (next level %s)", formatPriceLevel(trade, level))
+	return fmt.Sprintf("fibonacci: waiting for a better price (next level %s)", gates.FormatPriceLevel(trade, level))
 }
 
 // nextLowerFibLevel is the highest level strictly below price.

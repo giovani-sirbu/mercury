@@ -9,6 +9,7 @@ import (
 
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/gates"
 )
 
 // HoldMinScore is the detector score a chart pattern needs before it
@@ -64,7 +65,7 @@ func patternStopLossHold(trade aggragates.Trades, ai aggragates.AIIndicators) st
 	// its level, so "detected" means the breakout is live on this bar.
 	if ai.PatternLevel > 0 && ai.PatternLevelKind != "" {
 		return fmt.Sprintf("pattern: %s found (%s %s), preventing stopLoss",
-			patternLabel(ai), ai.PatternLevelKind, formatPriceLevel(trade, ai.PatternLevel))
+			patternLabel(ai), ai.PatternLevelKind, gates.FormatPriceLevel(trade, ai.PatternLevel))
 	}
 	return fmt.Sprintf("pattern: %s found, preventing stopLoss", patternLabel(ai))
 }
@@ -84,7 +85,7 @@ func patternTakeProfitHold(trade aggragates.Trades, ai aggragates.AIIndicators) 
 		return ""
 	}
 	return fmt.Sprintf("pattern: %s in play, riding to target %s",
-		patternLabel(ai), formatPriceLevel(trade, ai.PatternTakeProfit))
+		patternLabel(ai), gates.FormatPriceLevel(trade, ai.PatternTakeProfit))
 }
 
 // patternLabel is the human name sophos serves, falling back to the
