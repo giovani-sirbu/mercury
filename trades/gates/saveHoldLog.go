@@ -36,7 +36,10 @@ func SaveHoldLog(event events.Events, position string, reason string) (events.Ev
 
 	now := event.TickTime()
 	if holdLoggedWithin(event.Trade.Logs, message, now) {
-		return event, err
+		// Nothing is written and updateTrade never runs, so this return is the
+		// end of the chain. Say so: a caller holding a lock that only the
+		// persist path releases has to release it itself here.
+		return event, fmt.Errorf("%w (%w)", err, events.ErrHoldNotPersisted)
 	}
 
 	// Reset price and position so only the hold entry is persisted.
