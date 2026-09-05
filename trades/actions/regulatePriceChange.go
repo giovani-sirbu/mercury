@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
-	"github.com/giovani-sirbu/mercury/trades"
+	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
 // RegulatePriceChange ensures the price of a new buy position does not exceed the last buy position price adjusted by a percentage threshold.
@@ -24,12 +24,12 @@ func RegulatePriceChange(event events.Events) (events.Events, error) {
 	pricePositionError := false
 
 	if event.Trade.Inverse {
-		lastPositionPrice = trades.GetLatestTradePrice(event.Trade.History, "SELL")
+		lastPositionPrice = ladder.GetLatestTradePrice(event.Trade.History, "SELL")
 		lastPositionPrice += lastPositionPrice * (event.Trade.StrategyPair.StrategySettings[0].Percentage / 100)
 
 		pricePositionError = event.Trade.PositionPrice < lastPositionPrice
 	} else {
-		lastPositionPrice = trades.GetLatestTradePrice(event.Trade.History, "BUY")
+		lastPositionPrice = ladder.GetLatestTradePrice(event.Trade.History, "BUY")
 		lastPositionPrice -= lastPositionPrice * (event.Trade.StrategyPair.StrategySettings[0].Percentage / 100)
 
 		pricePositionError = event.Trade.PositionPrice > lastPositionPrice

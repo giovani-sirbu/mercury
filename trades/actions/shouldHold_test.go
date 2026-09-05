@@ -1,27 +1,26 @@
 package actions
 
 import (
+	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 	"testing"
 
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
-func nopUpdateTradeForHold(event events.Events) (events.Events, error) {
-	return event, nil
+func withAI(trade aggragates.Trades) aggragates.Trades {
+	trade.Strategy.Params.UseAI = true
+	return trade
 }
 
-func newHoldTrade(positionType string, inverse bool) aggragates.Trades {
-	return aggragates.Trades{
-		Symbol:       "BTC/USDT",
-		PositionType: positionType,
-		Inverse:      inverse,
-	}
+func withCooldown(trade aggragates.Trades) aggragates.Trades {
+	trade.Strategy.Params.Cooldown = true
+	return trade
 }
 
 func TestShouldHoldReturnsEventUnchangedWhenNoSignals(t *testing.T) {
 	event := events.Events{
-		Trade:  newHoldTrade("stopLoss", false),
+		Trade:  testutil.NewHoldTrade("stopLoss", false),
 		Params: aggragates.Params{OldPosition: "active"},
 	}
 
@@ -34,35 +33,104 @@ func TestShouldHoldReturnsEventUnchangedWhenNoSignals(t *testing.T) {
 	}
 }
 
-func TestShouldHoldHoldsStopLossOnBearishClassicMarket(t *testing.T) {
+func TestShouldHoldIgnoresCooldownAfterFirstFill(t *testing.T) {
 	event := events.Events{
-		Trade: newHoldTrade("stopLoss", false),
-		Events: map[string]func(events.Events) (events.Events, error){
-			"updateTrade": nopUpdateTradeForHold,
-		},
+		Trade: withCooldown(testutil.NewHoldTrade("stopLoss", false)),
 		Params: aggragates.Params{
 			OldPosition: "active",
 			CoolDownIndicators: aggragates.CoolDownIndicators{
-				MarketBearish: true,
+				HasFirstFillVerdict: true,
+				AllowLongEntry:      false,
+				MarketBearish:       true,
 			},
 		},
 	}
 
-	_, err := ShouldHold(event)
-	if err == nil {
-		t.Fatal("expected hold error when classic indicator is bearish for stopLoss spot position")
+	if _, err := ShouldHold(event); err != nil {
+		t.Fatalf("cooldown must not hold a rebuy, got %v", err)
+	}
+}
+
+func TestShouldHoldFirstFillExpensiveLong(t *testing.T) {
+	event := events.Events{
+		Trade: withCooldown(testutil.NewHoldTrade("buy", false)),
+		Events: map[string]func(events.Events) (events.Events, error){
+			"updateTrade": testutil.NopUpdateTrade,
+		},
+		Params: aggragates.Params{
+			OldPosition: "new",
+			CoolDownIndicators: aggragates.CoolDownIndicators{
+				HasFirstFillVerdict: true,
+				AllowLongEntry:      false,
+			},
+		},
+	}
+
+	if _, err := ShouldHold(event); err == nil {
+		t.Fatal("expected hold when the first long fill is expensive")
+	}
+}
+
+func TestShouldHoldFirstFillCheapLongPasses(t *testing.T) {
+	event := events.Events{
+		Trade: withCooldown(testutil.NewHoldTrade("buy", false)),
+		Params: aggragates.Params{
+			OldPosition: "new",
+			CoolDownIndicators: aggragates.CoolDownIndicators{
+				HasFirstFillVerdict: true,
+				AllowLongEntry:      true,
+			},
+		},
+	}
+
+	if _, err := ShouldHold(event); err != nil {
+		t.Fatalf("cheap first long fill must pass, got %v", err)
+	}
+}
+
+func TestShouldHoldFirstFillExpensiveInverse(t *testing.T) {
+	event := events.Events{
+		Trade: withCooldown(testutil.NewHoldTrade("buy", true)),
+		Events: map[string]func(events.Events) (events.Events, error){
+			"updateTrade": testutil.NopUpdateTrade,
+		},
+		Params: aggragates.Params{
+			OldPosition: "new",
+			CoolDownIndicators: aggragates.CoolDownIndicators{
+				HasFirstFillVerdict: true,
+				AllowShortEntry:     false,
+			},
+		},
+	}
+
+	if _, err := ShouldHold(event); err == nil {
+		t.Fatal("expected hold when the first inverse fill is expensive")
+	}
+}
+
+func TestShouldHoldFirstFillWithoutVerdictFailsOpen(t *testing.T) {
+	event := events.Events{
+		Trade: withCooldown(testutil.NewHoldTrade("buy", false)),
+		Params: aggragates.Params{
+			OldPosition:        "new",
+			CoolDownIndicators: aggragates.CoolDownIndicators{},
+		},
+	}
+
+	if _, err := ShouldHold(event); err != nil {
+		t.Fatalf("missing first-fill verdict must fail open, got %v", err)
 	}
 }
 
 func TestShouldHoldHoldsOnExplicitAIHoldAction(t *testing.T) {
 	event := events.Events{
-		Trade: newHoldTrade("stopLoss", false),
+		Trade: withAI(testutil.NewHoldTrade("stopLoss", false)),
 		Events: map[string]func(events.Events) (events.Events, error){
-			"updateTrade": nopUpdateTradeForHold,
+			"updateTrade": testutil.NopUpdateTrade,
 		},
 		Params: aggragates.Params{
 			OldPosition:  "active",
-			AIIndicators: aggragates.AIIndicators{UseAI: true, AIAction: ActionHold},
+			AIIndicators: aggragates.AIIndicators{AIAction: aggragates.ActionHold},
 		},
 	}
 
@@ -75,10 +143,10 @@ func TestShouldHoldHoldsOnExplicitAIHoldAction(t *testing.T) {
 func TestShouldHoldAllowsTakeProfitOnExplicitAIHold(t *testing.T) {
 	for _, inverse := range []bool{false, true} {
 		event := events.Events{
-			Trade: newHoldTrade("takeProfit", inverse),
+			Trade: withAI(testutil.NewHoldTrade("takeProfit", inverse)),
 			Params: aggragates.Params{
 				OldPosition:  "active",
-				AIIndicators: aggragates.AIIndicators{UseAI: true, AIAction: ActionHold},
+				AIIndicators: aggragates.AIIndicators{AIAction: aggragates.ActionHold},
 			},
 		}
 
@@ -90,13 +158,13 @@ func TestShouldHoldAllowsTakeProfitOnExplicitAIHold(t *testing.T) {
 
 func TestShouldHoldWritesInfoLogAndCollapsesRepeats(t *testing.T) {
 	event := events.Events{
-		Trade: newHoldTrade("stopLoss", false),
+		Trade: withAI(testutil.NewHoldTrade("stopLoss", false)),
 		Events: map[string]func(events.Events) (events.Events, error){
-			"updateTrade": nopUpdateTradeForHold,
+			"updateTrade": testutil.NopUpdateTrade,
 		},
 		Params: aggragates.Params{
 			OldPosition:  "active",
-			AIIndicators: aggragates.AIIndicators{UseAI: true, AIMarketBearish: true},
+			AIIndicators: aggragates.AIIndicators{AIMarketBearish: true},
 		},
 	}
 
@@ -118,28 +186,43 @@ func TestShouldHoldWritesInfoLogAndCollapsesRepeats(t *testing.T) {
 		t.Errorf("expected position restored to old position, got %q", held.Trade.PositionType)
 	}
 
-	// Next tick holds the same position for a different reason: the log is
-	// collapsed instead of appended again.
+	// Next tick holds the same position for a DIFFERENT reason: that is a new
+	// row. The old prefix dedup collapsed it and hid every reason change
+	// behind the first hold (run 97: capitulation freezes invisible behind a
+	// regime veto, the regime entry veto invisible behind cooldown).
 	held.Trade.PositionType = "stopLoss"
-	held.Params.AIIndicators = aggragates.AIIndicators{UseAI: true, AIAction: ActionHold}
+	held.Params.AIIndicators = aggragates.AIIndicators{AIAction: aggragates.ActionHold}
 	again, err := ShouldHold(held)
 	if err == nil {
 		t.Fatal("expected hold error on second tick")
 	}
-	if len(again.Trade.Logs) != 1 {
-		t.Fatalf("expected repeated hold to collapse, got %d logs", len(again.Trade.Logs))
+	if len(again.Trade.Logs) != 2 {
+		t.Fatalf("expected a reason change to add a row, got %d logs", len(again.Trade.Logs))
+	}
+	if again.Trade.Logs[1].Message != "Hold stopLoss: AI recommends HOLD" {
+		t.Errorf("unexpected second hold message %q", again.Trade.Logs[1].Message)
+	}
+
+	// The same reason again on the next tick still collapses.
+	again.Trade.PositionType = "stopLoss"
+	third, err := ShouldHold(again)
+	if err == nil {
+		t.Fatal("expected hold error on third tick")
+	}
+	if len(third.Trade.Logs) != 2 {
+		t.Fatalf("expected a repeated reason to collapse, got %d logs", len(third.Trade.Logs))
 	}
 }
 
 func TestShouldHoldNewStatusBlocksOpposingAISignal(t *testing.T) {
 	event := events.Events{
-		Trade: newHoldTrade("buy", false),
+		Trade: withAI(testutil.NewHoldTrade("buy", false)),
 		Events: map[string]func(events.Events) (events.Events, error){
-			"updateTrade": nopUpdateTradeForHold,
+			"updateTrade": testutil.NopUpdateTrade,
 		},
 		Params: aggragates.Params{
 			OldPosition:  "new",
-			AIIndicators: aggragates.AIIndicators{UseAI: true, AIAction: ActionShort},
+			AIIndicators: aggragates.AIIndicators{AIAction: aggragates.ActionShort},
 		},
 	}
 
@@ -151,10 +234,10 @@ func TestShouldHoldNewStatusBlocksOpposingAISignal(t *testing.T) {
 
 func TestShouldHoldNewStatusAllowsAlignedAISignal(t *testing.T) {
 	event := events.Events{
-		Trade: newHoldTrade("buy", false),
+		Trade: withAI(testutil.NewHoldTrade("buy", false)),
 		Params: aggragates.Params{
 			OldPosition:  "new",
-			AIIndicators: aggragates.AIIndicators{UseAI: true, AIAction: ActionLong},
+			AIIndicators: aggragates.AIIndicators{AIAction: aggragates.ActionLong},
 		},
 	}
 
@@ -164,5 +247,24 @@ func TestShouldHoldNewStatusAllowsAlignedAISignal(t *testing.T) {
 	}
 	if got.Trade.Symbol != event.Trade.Symbol {
 		t.Errorf("expected trade returned unchanged on aligned entry")
+	}
+}
+
+func TestShouldHoldUseAIAloneDoesNotParkCrashDeepRebuy(t *testing.T) {
+	crash := aggragates.AIIndicators{
+		HasRegimeVerdict: true,
+		AddAllowed:       true,
+		CrashActive:      true,
+		CrashScore:       85,
+	}
+	event := events.Events{
+		Trade: withAI(testutil.DeepTrade(false)),
+		Events: map[string]func(events.Events) (events.Events, error){
+			"updateTrade": testutil.NopUpdateTrade,
+		},
+		Params: aggragates.Params{OldPosition: "active", AIIndicators: crash},
+	}
+	if _, err := ShouldHold(event); err != nil {
+		t.Fatalf("UseAI without CrashGuard must not park a deep rebuy, got %v", err)
 	}
 }

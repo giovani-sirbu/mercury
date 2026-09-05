@@ -2,9 +2,10 @@ package actions
 
 import (
 	"fmt"
-	"github.com/adshao/go-binance/v2/futures"
+	binanceFutures "github.com/adshao/go-binance/v2/futures"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/futures"
 	"strconv"
 )
 
@@ -46,7 +47,7 @@ func UpdateStopLossOrder(event events.Events) (events.Events, error) {
 		stopPrice = price * (1 - stopLoss/float64(leverage))
 	}
 
-	_, priceFilter, _ := GetPrecision(event)
+	_, priceFilter, _ := futures.GetPrecision(event)
 
 	stopPriceStr := fmt.Sprintf("%.*f", priceFilter, stopPrice)
 
@@ -61,7 +62,7 @@ func UpdateStopLossOrder(event events.Events) (events.Events, error) {
 		if healthError != nil {
 			fmt.Println("update stop loss check health error", healthError)
 		}
-		fmt.Println("update stop loss order error", string(futures.OrderTypeStopMarket), event.Trade.Symbol, stopPriceStr, true)
+		fmt.Println("update stop loss order error", string(binanceFutures.OrderTypeStopMarket), event.Trade.Symbol, stopPriceStr, true)
 		return events.Events{}, createStopLossErr
 	}
 

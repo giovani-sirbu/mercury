@@ -26,7 +26,6 @@ type (
 		Depths              float64    `bson:"depths" json:"depths"`
 		ImpasseDepth        float64    `bson:"impasseDepths" json:"impasseDepths"`
 		TrailingTakeProfit  float64    `bson:"trailingTakeProfit" json:"trailingTakeProfit"`
-		TakeLossPercentage  float64    `bson:"takeLossPercentage" json:"takeLossPercentage"`
 		InitialBid          float64    `bson:"initialBid" json:"initialBid"`
 		Percentage          float64    `bson:"percentage" json:"percentage"`
 		Multiplier          float64    `bson:"multiplier" json:"multiplier"`
@@ -40,6 +39,7 @@ type (
 		MarginPercentage    float64    `bson:"marginPercentage" json:"marginPercentage"`
 		IncrementCoolOff    int        `bson:"incrementCoolOff" json:"incrementCoolOff"`
 		Timeframes          Timeframes `bson:"timeframes" json:"timeframes"`
+		persistKind         byte       `json:"-"`
 	}
 	ImpassePairs struct {
 		Symbol  string `bson:"symbol" json:"symbol"`

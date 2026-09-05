@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/adshao/go-binance/v2/common"
 	"github.com/giovani-sirbu/mercury/exchange"
+	"github.com/giovani-sirbu/mercury/helpers"
 	"github.com/giovani-sirbu/mercury/log"
 	"github.com/giovani-sirbu/mercury/messagebroker"
 	"github.com/giovani-sirbu/mercury/storage/memory"
@@ -38,6 +39,26 @@ type (
 		// create-children-trades producers — tags the resulting message and
 		// log lines with the same id.
 		CorrelationID string
+
+		// Timestamp is the tick time as a Unix value (seconds or millis).
+		// Zero is inert: mercury does not advance the in-process 5m print
+		// bucket from this field. Engines that already stamp Trade.UpdatedAt
+		// (sisyphus backtests) do not need to set it.
+		Timestamp int64
+
+		// FiveMinOHLC is an optional injected 5m print bucket for this tick.
+		// Zero Last is inert; ShouldHold then synthesizes from Timestamp /
+		// Trade.UpdatedAt and the current print when those are present.
+		FiveMinOHLC FiveMinOHLC
+	}
+
+	// FiveMinOHLC is a 5-minute print bar synthesized from ticks the engine
+	// already has. Last==0 means unset.
+	FiveMinOHLC struct {
+		Open float64
+		High float64
+		Low  float64
+		Last float64
 	}
 )
 
@@ -133,7 +154,7 @@ func (e Events) logEventError(err error) error {
 		e.Params.Quantity,
 		e.Trade.Dust,
 		len(e.Trade.History),
-		aggragates.FindUsedAmount(e.Params.InverseUsedAmount, assetSymbol),
+		helpers.FindUsedAmount(e.Params.InverseUsedAmount, assetSymbol),
 	)
 
 	log.Error(msg, "Run events", "")

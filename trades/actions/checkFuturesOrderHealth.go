@@ -2,45 +2,16 @@ package actions
 
 import (
 	"fmt"
-	"github.com/adshao/go-binance/v2/futures"
+	binanceFutures "github.com/adshao/go-binance/v2/futures"
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/helpers"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/futures"
 	"math"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 )
-
-// IntervalToMinutes converts a Binance interval string (e.g. "15m", "1h") into minutes.
-// Returns -1 if the format is invalid.
-func IntervalToMinutes(interval string) int {
-	if len(interval) < 2 {
-		return -1
-	}
-
-	// Split numeric part and unit part
-	numPart := interval[:len(interval)-1]
-	unit := interval[len(interval)-1:]
-
-	value, err := strconv.Atoi(numPart)
-	if err != nil || value <= 0 {
-		return -1
-	}
-
-	switch strings.ToLower(unit) {
-	case "m": // minutes
-		return value
-	case "h": // hours → minutes
-		return value * 60
-	case "d": // days → minutes
-		return value * 60 * 24
-	case "w": // weeks → minutes
-		return value * 60 * 24 * 7
-	default:
-		return -1
-	}
-}
 
 func CheckFuturesOrderHealth(event events.Events) (events.Events, error) {
 	// Init futures client
@@ -73,7 +44,7 @@ func CheckFuturesOrderHealth(event events.Events) (events.Events, error) {
 			}
 			timeSinceUpdated := time.Since(event.Trade.UpdatedAt)
 			minutes := int(timeSinceUpdated.Minutes())
-			klineInterval := IntervalToMinutes(event.Trade.StrategyPair.StrategySettings[0].KeepAliveInterval)
+			klineInterval := helpers.IntervalToMinutes(event.Trade.StrategyPair.StrategySettings[0].KeepAliveInterval)
 
 			if len(orders) == 0 {
 				event.Trade.Status = aggragates.Closed
@@ -93,15 +64,15 @@ func CheckFuturesOrderHealth(event events.Events) (events.Events, error) {
 
 		// Decide market direction by AI action
 		if event.Trade.PositionType == "buy" {
-			oppositeSide = string(futures.SideTypeSell)
+			oppositeSide = string(binanceFutures.SideTypeSell)
 			stopPrice = price * (1 - stopLoss/float64(leverage))
 
 		} else if event.Trade.PositionType == "sell" {
-			oppositeSide = string(futures.SideTypeBuy)
+			oppositeSide = string(binanceFutures.SideTypeBuy)
 			stopPrice = price * (1 + stopLoss/float64(leverage))
 		}
 
-		lotSize, priceFilter, precisionErr := GetPrecision(event)
+		lotSize, priceFilter, precisionErr := futures.GetPrecision(event)
 		if precisionErr != nil {
 			return events.Events{}, precisionErr
 		}
@@ -109,8 +80,8 @@ func CheckFuturesOrderHealth(event events.Events) (events.Events, error) {
 		quantityStr := fmt.Sprintf("%.*f", lotSize, absQty)
 
 		if event.Trade.PendingOrder == 0 {
-			createOrder, createOrderErr := client.CreateFuturesOrder(oppositeSide, string(futures.OrderTypeStopMarket), event.Trade.Symbol, quantityStr, stopPriceStr, true)
-			fmt.Println("CheckFuturesOrderHealth, pending order 0", oppositeSide, string(futures.OrderTypeStopMarket), event.Trade.Symbol, quantityStr, stopPriceStr)
+			createOrder, createOrderErr := client.CreateFuturesOrder(oppositeSide, string(binanceFutures.OrderTypeStopMarket), event.Trade.Symbol, quantityStr, stopPriceStr, true)
+			fmt.Println("CheckFuturesOrderHealth, pending order 0", oppositeSide, string(binanceFutures.OrderTypeStopMarket), event.Trade.Symbol, quantityStr, stopPriceStr)
 			if createOrderErr != nil {
 				return events.Events{}, createOrderErr
 			}
@@ -119,10 +90,10 @@ func CheckFuturesOrderHealth(event events.Events) (events.Events, error) {
 			return newEvent, newError
 		} else {
 			stopLossOrder, _ := client.GetOrderById(event.Trade.Symbol, event.Trade.PendingOrder)
-			orderClosedStatuses := []string{string(futures.OrderStatusTypeExpired), string(futures.OrderStatusTypeCanceled)}
+			orderClosedStatuses := []string{string(binanceFutures.OrderStatusTypeExpired), string(binanceFutures.OrderStatusTypeCanceled)}
 			if slices.Contains(orderClosedStatuses, stopLossOrder.Status) {
-				createOrder, createOrderErr := client.CreateFuturesOrder(oppositeSide, string(futures.OrderTypeStopMarket), event.Trade.Symbol, quantityStr, stopPriceStr, true)
-				fmt.Println("CheckFuturesOrderHealth", oppositeSide, string(futures.OrderTypeStopMarket), event.Trade.Symbol, quantityStr, stopPriceStr)
+				createOrder, createOrderErr := client.CreateFuturesOrder(oppositeSide, string(binanceFutures.OrderTypeStopMarket), event.Trade.Symbol, quantityStr, stopPriceStr, true)
+				fmt.Println("CheckFuturesOrderHealth", oppositeSide, string(binanceFutures.OrderTypeStopMarket), event.Trade.Symbol, quantityStr, stopPriceStr)
 				if createOrderErr != nil {
 					return events.Events{}, createOrderErr
 				}

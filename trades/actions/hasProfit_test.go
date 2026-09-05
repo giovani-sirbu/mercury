@@ -1,34 +1,11 @@
 package actions
 
 import (
-	"math"
 	"testing"
 
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
-
-func TestSubtractToleranceFromPriceSpotReducesPriceByPercentage(t *testing.T) {
-	trade := aggragates.Trades{PositionPrice: 100}
-	trade.StrategyPair.StrategySettings = []aggragates.StrategySettings{{Tolerance: 5}}
-	trade.StrategyPair.TradeFilters = aggragates.TradeFilters{PriceFilter: 2}
-
-	got := subtractToleranceFromPrice(trade)
-	if math.Abs(got-95) > 1e-9 {
-		t.Errorf("spot tolerance price = %v, want 95", got)
-	}
-}
-
-func TestSubtractToleranceFromPriceInverseRaisesPriceByPercentage(t *testing.T) {
-	trade := aggragates.Trades{PositionPrice: 100, Inverse: true}
-	trade.StrategyPair.StrategySettings = []aggragates.StrategySettings{{Tolerance: 5}}
-	trade.StrategyPair.TradeFilters = aggragates.TradeFilters{PriceFilter: 2}
-
-	got := subtractToleranceFromPrice(trade)
-	if math.Abs(got-105) > 1e-9 {
-		t.Errorf("inverse tolerance price = %v, want 105", got)
-	}
-}
 
 func TestHasProfitSucceedsWhenProfitMeetsThreshold(t *testing.T) {
 	trade := aggragates.Trades{Symbol: "BTC/USDT", PositionPrice: 200}

@@ -27,7 +27,7 @@ func testStrategy(positionType string) Strategy {
 		Position: Position{Type: positionType, Price: 100},
 		Logic:    spotLogic(),
 		Settings: []aggragates.StrategySettings{
-			{Percentage: 2, Tolerance: 0.25, TrailingTakeProfit: 1, TakeLossPercentage: 10},
+			{Percentage: 2, Tolerance: 0.25, TrailingTakeProfit: 1},
 		},
 	}
 }
@@ -44,7 +44,6 @@ func uncachedPosition(S Strategy, percentage float64) string {
 		"tradePercentage":    S.Settings[0].Percentage,
 		"tolerance":          S.Settings[0].Tolerance,
 		"trailingTakeProfit": S.Settings[0].TrailingTakeProfit,
-		"takeLossPercentage": S.Settings[0].TakeLossPercentage,
 	}
 	result, _ := expression.Evaluate(parameters)
 	return fmt.Sprintf("%s", result)

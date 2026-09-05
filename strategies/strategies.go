@@ -53,7 +53,15 @@ func (S Strategy) GetPosition(percentage float64) string {
 		return ""
 	}
 
-	expression := logicExpression(S.Logic[S.Position.Type])
+	logic, ok := S.Logic[S.Position.Type]
+	if !ok {
+		// A position type this engine's logic map does not know (a state
+		// migrated from another engine, a hand-edited row) fails closed:
+		// evaluating the nil expression of "" panics, and in hermes that
+		// panic ran in an unrecovered goroutine.
+		return ""
+	}
+	expression := logicExpression(logic)
 
 	// Row-per-depth contract: the held depth's own row when it exists, the
 	// base row 0 otherwise — so a single-row ladder applies to every depth.
@@ -62,12 +70,11 @@ func (S Strategy) GetPosition(percentage float64) string {
 		settingsIndex = 0
 	}
 
-	parameters := make(map[string]interface{}, 8)
+	parameters := make(map[string]interface{}, 4)
 	parameters["percentage"] = percentage
 	parameters["tradePercentage"] = S.Settings[settingsIndex].Percentage
 	parameters["tolerance"] = S.Settings[settingsIndex].Tolerance
 	parameters["trailingTakeProfit"] = S.Settings[settingsIndex].TrailingTakeProfit
-	parameters["takeLossPercentage"] = S.Settings[settingsIndex].TakeLossPercentage
 
 	result, _ := expression.Evaluate(parameters)
 	newPosition := fmt.Sprintf("%s", result)

@@ -2,14 +2,18 @@ package actions
 
 import (
 	"fmt"
+	"github.com/giovani-sirbu/mercury/helpers"
+	"github.com/giovani-sirbu/mercury/trades/fees"
+	"github.com/giovani-sirbu/mercury/trades/quantities"
+	"github.com/giovani-sirbu/mercury/trades/tradelog"
 	"strconv"
 
 	"github.com/adshao/go-binance/v2/common"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 	"github.com/giovani-sirbu/mercury/log"
-	"github.com/giovani-sirbu/mercury/trades"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
 func Sell(event events.Events) (events.Events, error) {
@@ -23,15 +27,15 @@ func Sell(event events.Events) (events.Events, error) {
 	}
 	client, clientError := event.Exchange.Client()
 	if clientError != nil {
-		return SaveError(event, clientError)
+		return tradelog.SaveError(event, clientError)
 	}
-	buyQty, sellQty := GetGrossQuantities(event)
+	buyQty, sellQty := quantities.GetGrossQuantities(event)
 	// Literal asset fees: only base-paid fees reduce the base wallet balance,
 	// only quote-paid fees reduce the quote wallet balance. BNB/third-asset
 	// fees come from a separate wallet and must NOT be subtracted from the
 	// trade's base or quote totals here. For profit accounting that needs the
 	// full cost-in-denomination, use GetFeesBaseQuote / GetFees instead.
-	feeInBase, feeInQuote := CalculateFees(event)
+	feeInBase, feeInQuote := fees.CalculateFees(event)
 	quantity := buyQty - sellQty - feeInBase
 
 	if event.Trade.Inverse {
@@ -39,8 +43,8 @@ func Sell(event events.Events) (events.Events, error) {
 		// re-aggregated multiplied by its own price. Then we subtract literal
 		// quote fees, convert to base by dividing by PositionPrice, and
 		// subtract any literal base-side fees (covers partial-fill dust).
-		sellInQuote := trades.GetQuantityInQuote(event.Trade.History, "BUY")
-		buyInQuote := trades.GetQuantityInQuote(event.Trade.History, "SELL")
+		sellInQuote := ladder.GetQuantityInQuote(event.Trade.History, "BUY")
+		buyInQuote := ladder.GetQuantityInQuote(event.Trade.History, "SELL")
 		quantity = sellInQuote - buyInQuote - feeInQuote
 		quantity = quantity / event.Trade.PositionPrice
 		quantity = quantity - feeInBase
@@ -48,7 +52,7 @@ func Sell(event events.Events) (events.Events, error) {
 
 	quantityBeforeLotSize := quantity
 	var dust float64
-	quantity = ToFixed(quantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
+	quantity = helpers.ToFixed(quantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
 
 	// if no bought quantity, update event status and close it
 	if quantity <= 0 {
@@ -100,7 +104,7 @@ func Sell(event events.Events) (events.Events, error) {
 	event.Trade.Dust = dust
 
 	if err != nil {
-		return SaveError(event, err)
+		return tradelog.SaveError(event, err)
 	}
 
 	log.Debug(fmt.Sprintf("Sell(TradeID:#%d): PositionPrice(%f), quantity(%f)", event.Trade.ID, event.Trade.PositionPrice, quantity))

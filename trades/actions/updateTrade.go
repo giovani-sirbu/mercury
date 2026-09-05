@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/helpers"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"strings"
 )
@@ -14,7 +15,7 @@ func UpdateTrade(event events.Events) (events.Events, error) {
 	// prevent duplicate logs
 	if len(event.Trade.Logs) > 0 {
 		lastError := event.Trade.Logs[len(event.Trade.Logs)-1].Message
-		if RemoveNumbersFromString(lastError) == RemoveNumbersFromString(message) {
+		if helpers.RemoveNumbersFromString(lastError) == helpers.RemoveNumbersFromString(message) {
 			return event, nil
 		}
 	}

@@ -40,9 +40,12 @@ type (
 	}
 
 	CoolDownIndicators struct {
-		VolatilityScore float64 `json:"volatilityScore"`
-		MarketBullish   bool    `json:"marketBullish"`
-		MarketBearish   bool    `json:"marketBearish"`
+		VolatilityScore     float64 `json:"volatilityScore"`
+		MarketBullish       bool    `json:"marketBullish"`
+		MarketBearish       bool    `json:"marketBearish"`
+		HasFirstFillVerdict bool    `json:"hasFirstFillVerdict"`
+		AllowLongEntry      bool    `json:"allowLongEntry"`
+		AllowShortEntry     bool    `json:"allowShortEntry"`
 	}
 
 	AIIndicators struct {
@@ -51,28 +54,72 @@ type (
 		AIAction         string
 		AISignalStrength float64
 		StayOutReasons   []string
-		UseAI            bool
+		// PatternAction is the GET /:symbol/patterns side. Kept separate from
+		// AIAction so UseAI (ML) and UsePatterns can both be on.
+		PatternAction string
+		// The 15m chart-pattern verdict from GET /:symbol/patterns. Zero
+		// values mean "no pattern" (older sophos, no detection). Direction is
+		// the detector set that fired ("long" | "short"), independent of the
+		// regime veto applied to Action; Level/LevelKind is the structure the
+		// pattern is built on (resistance, support, neckline, breakout).
+		PatternName        string
+		PatternDisplayName string
+		PatternDirection   string
+		PatternScore       float64
+		PatternLevel       float64
+		PatternLevelKind   string
+		PatternStopLoss    float64
+		PatternTakeProfit  float64
+		PatternLens        string
+		// Fibonacci retracement of the last 15m up-swing; Levels descend
+		// (0.382, 0.5, 0.618, 0.786 of the swing). Empty means no swing.
+		FibSwingLow  float64
+		FibSwingHigh float64
+		FibLevels    []float64
 		// Multi-timeframe regime verdict, served by sophos when it has enough
-		// closed candles. HasRegimeVerdict is the compatibility switch: while
+		// closed candles. HasRegimeVerdict is the degrade-open switch: while
 		// false (older sophos, or a cache entry written before the field
-		// existed) every field below is ignored and ShouldHold runs the legacy
-		// bullish/bearish logic — without it, a stale cache entry would
-		// deserialize as EnterAllowed=false and silently block every entry.
+		// existed) the RegimeHold gates read nothing below. It is never a
+		// switch-on: the gates answer to StrategyParams.RegimeHold first.
 		HasRegimeVerdict bool
-		EnterAllowed     bool
-		AddAllowed       bool
-		ExitPreferred    bool
-		Regime           string
-		Regimes          map[string]string
-		RegimeConfidence float64
+		// EnterAllowed is served by sophos and deliberately UNREAD by the
+		// engine: the regime lens has no seat on the first fill (Cooldown
+		// owns it), so sophos' long-only enterAllowed and the
+		// regimeEntryRequires1h / regimeEntryShockAnyVeto knobs folded into
+		// it have no effect here. Kept on the wire for older readers.
+		EnterAllowed bool
+		// AddAllowed IS read, for long adds only: false when 4h or 1h reads
+		// downtrend-persist (sophos regime/set.go). Inverse adds mirror the
+		// rule locally from Regimes.
+		AddAllowed bool
+		Regime     string
+		Regimes    map[string]string
 		// Crash guard: a market-wide flush is in progress (10.10.2025-style).
-		// Arms the ladder widening and the deep-trade de-risk; distinct from
-		// ExitPreferred, which is a single-symbol volatility shock.
+		// Arms the ladder widening and the deep-trade rebuy hold; distinct from
+		// a single-symbol volatility shock, which travels as the "shock-*"
+		// labels in Regimes.
 		// CrashReasons names the components that carried the score, so the
 		// engines can say WHY the guard armed instead of just that it did.
 		CrashActive  bool
 		CrashScore   float64
 		CrashReasons []string
+		// CrashSticky is engine-local: this trade already saw an ARM (redis
+		// on live, trade logs in backtest). Sophos does not serve it.
+		CrashSticky bool
+		// Smart take loss: per-symbol continuation-risk verdict. Every field is
+		// inert at its zero value — a risk of 0 never crosses the threshold and
+		// DailyNatrPct=0 is an explicit bail — so unlike the regime verdict no
+		// HasRegimeVerdict-style compatibility switch is needed; the flag below
+		// only says the verdict was actually computed (observability + early
+		// bail). Down risk endangers long trades, up risk endangers inverse
+		// ones; reversal evidence in the trade's favor vetoes a forced exit.
+		HasContinuationVerdict bool
+		DownContinuationRisk   float64
+		UpContinuationRisk     float64
+		ReversalUpEvidence     float64
+		ReversalDownEvidence   float64
+		DailyNatrPct           float64
+		ContinuationReasons    []string
 	}
 
 	Params struct {
@@ -86,5 +133,10 @@ type (
 		InverseUsedAmount  []UsedAmountResult
 		CoolDownIndicators CoolDownIndicators
 		AIIndicators       AIIndicators
+		// PortfolioBlocked: another trade of this wallet is funds-blocked.
+		// A profitable close is then the capital the ladder waits for, so
+		// the regime profit hold stands down. Set by the engines on a
+		// takeProfit tick; zero elsewhere.
+		PortfolioBlocked bool
 	}
 )
