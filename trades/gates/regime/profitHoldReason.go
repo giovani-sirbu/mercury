@@ -5,6 +5,7 @@ import (
 
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/gates"
 	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
@@ -15,6 +16,27 @@ import (
 // funds-blocked (the close IS the capital the ladder waits for), and 4h
 // against (C.4) still releases.
 func profitHoldReason(event events.Events, ai aggragates.AIIndicators) string {
+	// THE RATCHET IS NOT THE ARMING, and the engines cannot tell them apart
+	// for us: both rewrite Trade.PositionType to "takeProfit" before the chain
+	// runs, so this gate sees the same value on the tick that ARMS the exit and
+	// on every trailing re-anchor after it.
+	//
+	// Holding the arming is the whole point: the exit is not placed, so the
+	// trade stays in position and rides the trend. Holding the re-anchor is the
+	// opposite: it freezes the exit anchor while the trend runs, so the
+	// eventual sell lands lower than the trail would have given. The `sell`
+	// chain carries no shouldHold, so the hold cannot even defer the close —
+	// it only breaks the ratchet. The engine already trails on its own
+	// (`percentage > trailingTakeProfit ? 'update_takeProfit'`), which is
+	// exactly what this would block.
+	//
+	// Params.OldPosition is the position the trade held before the logic ran,
+	// and every engine sets it. Normalised, "takeProfit" there means the exit
+	// is already armed and this tick is only moving its anchor.
+	if gates.PositionType(event.Params.OldPosition) == "takeProfit" {
+		return ""
+	}
+
 	if ladder.CountFilledEntries(event.Trade) < ProfitHoldMinDepth {
 		return ""
 	}

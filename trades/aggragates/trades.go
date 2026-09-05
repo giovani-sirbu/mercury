@@ -70,7 +70,7 @@ type (
 		PatternLevelKind   string
 		PatternStopLoss    float64
 		PatternTakeProfit  float64
-		PatternLens        string
+		PatternInterval    string
 		// Fibonacci retracement of the last 15m up-swing; Levels descend
 		// (0.382, 0.5, 0.618, 0.786 of the swing). Empty means no swing.
 		FibSwingLow  float64

@@ -36,7 +36,7 @@ func ascendingTriangle() aggragates.AIIndicators {
 		PatternLevel:       96000,
 		PatternLevelKind:   "resistance",
 		PatternTakeProfit:  104500,
-		PatternLens:        "15m",
+		PatternInterval:    "15m",
 	}
 }
 

@@ -29,7 +29,7 @@ func TestSophosPredictionIndicatorsMapsVerdict(t *testing.T) {
 		"reversalDownEvidence":40,
 		"dailyNatrPct":1.2,
 		"continuationReasons":["structure"],
-		"patternVerdict":{"name":"asc_triangle","displayName":"ascending triangle","direction":"long","score":71,"level":96000,"levelKind":"resistance","stopLoss":94000,"takeProfit":104500,"lens":"15m"},
+		"patternVerdict":{"name":"asc_triangle","displayName":"ascending triangle","direction":"long","score":71,"level":96000,"levelKind":"resistance","stopLoss":94000,"takeProfit":104500,"interval":"15m"},
 		"fib":{"swingLow":100,"swingHigh":110,"levels":[106.18,105,103.82,102.14]}
 	}`)
 
@@ -48,7 +48,7 @@ func TestSophosPredictionIndicatorsMapsVerdict(t *testing.T) {
 	if mapped.PatternName != "asc_triangle" || mapped.PatternDisplayName != "ascending triangle" ||
 		mapped.PatternDirection != "long" || mapped.PatternScore != 71 ||
 		mapped.PatternLevel != 96000 || mapped.PatternLevelKind != "resistance" ||
-		mapped.PatternStopLoss != 94000 || mapped.PatternTakeProfit != 104500 || mapped.PatternLens != "15m" {
+		mapped.PatternStopLoss != 94000 || mapped.PatternTakeProfit != 104500 || mapped.PatternInterval != "15m" {
 		t.Fatalf("pattern verdict must map field for field, got %+v", mapped)
 	}
 	if mapped.FibSwingLow != 100 || mapped.FibSwingHigh != 110 || len(mapped.FibLevels) != 4 || mapped.FibLevels[0] != 106.18 {

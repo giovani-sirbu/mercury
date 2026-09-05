@@ -117,18 +117,33 @@ func TestDepthSpacingNeverHoldsALadderTwoBaseHoldsApart(t *testing.T) {
 // Doubling from the base hold reaches four hours at the third consecutive fast
 // depth (60m, 2h, 4h). The hold clamps there and stays clamped: past four
 // hours the gate would make the trade sit out the bottom of the move.
+// The schedule is asserted as a rule, not as a list of durations: the base
+// hold and the window are calibration knobs that move, and a table of literals
+// turns every calibration change into a red suite that says nothing.
 func TestDepthSpacingClampsTheHoldAtFourHours(t *testing.T) {
-	for _, c := range []struct {
-		step int
-		want time.Duration
-	}{
-		{1, time.Hour}, {2, 2 * time.Hour}, {3, 4 * time.Hour},
-		{4, depthSpacingMaxHold}, {5, depthSpacingMaxHold},
-		{6, depthSpacingMaxHold}, {9, depthSpacingMaxHold}, {40, depthSpacingMaxHold},
-	} {
-		if got := depthSpacingHoldFor(c.step); got != c.want {
-			t.Errorf("depthSpacingHoldFor(%d) = %s, want %s", c.step, got, c.want)
+	if got := depthSpacingHoldFor(1); got != DepthSpacingBaseHold {
+		t.Errorf("the first fast depth costs %s, want the base %s", got, DepthSpacingBaseHold)
+	}
+
+	previous := DepthSpacingBaseHold
+	for step := 2; step <= 40; step++ {
+		want := previous * depthSpacingFactor
+		if want > depthSpacingMaxHold {
+			want = depthSpacingMaxHold
 		}
+
+		got := depthSpacingHoldFor(step)
+		if got != want {
+			t.Fatalf("depthSpacingHoldFor(%d) = %s, want %s", step, got, want)
+		}
+		if got > depthSpacingMaxHold {
+			t.Fatalf("depthSpacingHoldFor(%d) = %s, past the %s ceiling", step, got, depthSpacingMaxHold)
+		}
+		previous = got
+	}
+
+	if depthSpacingHoldFor(40) != depthSpacingMaxHold {
+		t.Error("a long cascade must sit at the ceiling, not overflow past it")
 	}
 	if depthSpacingHoldFor(0) != 0 {
 		t.Error("no ladder at all earns no hold")

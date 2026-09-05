@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -154,7 +155,12 @@ func TestDepthSpacingWritesOneStableCooldownRow(t *testing.T) {
 	if row.Type != aggragates.LOG_INFO {
 		t.Errorf("row type = %q, want %q", row.Type, aggragates.LOG_INFO)
 	}
-	want := "Hold stopLoss: cooldown: depths too close (depth 2, step 2), next add parked for 2h0m0s"
+	// Step 2 is the base doubled; the durations are calibration knobs, so the
+	// expectation is derived rather than written out.
+	want := fmt.Sprintf(
+		"Hold stopLoss: cooldown: depths too close (depth 2, step 2), next add parked for %s",
+		2*cooldown.DepthSpacingBaseHold,
+	)
 	if row.Message != want {
 		t.Fatalf("row = %q, want %q", row.Message, want)
 	}

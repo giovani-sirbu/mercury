@@ -23,7 +23,7 @@ func patternAI(direction string, score float64) aggragates.AIIndicators {
 		PatternLevelKind:   "resistance",
 		PatternStopLoss:    94000,
 		PatternTakeProfit:  104500,
-		PatternLens:        "15m",
+		PatternInterval:    "15m",
 	}
 }
 

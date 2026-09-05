@@ -2,6 +2,7 @@ package actions
 
 import (
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"github.com/giovani-sirbu/mercury/trades/gates"
 	"github.com/giovani-sirbu/mercury/trades/gates/ai"
 	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
@@ -51,17 +52,22 @@ func ShouldHold(event events.Events) (events.Events, error) {
 }
 
 // shouldHoldEntry is the first fill: cooldown owns it. No regime gate here.
+//
+// Both gates judge the direction the entry would take, resolved once by
+// aggragates.EntrySide. They used to take event.Trade.Inverse, which is the
+// direction on spot and never the direction on futures — where Inverse is
+// always false and the ML verdict decides the side.
 func shouldHoldEntry(event events.Events) (events.Events, error) {
 	params := event.Trade.Strategy.Params
-	inverse := event.Trade.Inverse
+	side := aggragates.EntrySide(event.Trade, event.Params.AIIndicators)
 
 	if params.Cooldown {
-		if reason := cooldown.FirstFillHold(inverse, event.Params.CoolDownIndicators); reason != "" {
+		if reason := cooldown.FirstFillHold(side, event.Params.CoolDownIndicators); reason != "" {
 			return gates.SaveHoldLog(event, "entry", reason)
 		}
 	}
 	if params.UseAI {
-		if reason := ai.EntryHold(inverse, event.Params.AIIndicators); reason != "" {
+		if reason := ai.EntryHold(side, event.Params.AIIndicators); reason != "" {
 			return gates.SaveHoldLog(event, "entry", reason)
 		}
 	}

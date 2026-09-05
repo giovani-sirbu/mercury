@@ -68,14 +68,14 @@ const (
 	// the same drop, and a depth that lands later resets the count. It is
 	// therefore not by itself the line between a ladder and a cascade —
 	// that line is the standing hold plus this window.
-	DepthSpacingWindow = 30 * time.Minute
+	DepthSpacingWindow = 60 * time.Minute
 	// DepthSpacingBaseHold is what the first fast depth costs the ladder.
 	// It is LARGER than the window, so the two thresholds are not the same
 	// number and must not be read as one: the escalation compares a fill
 	// against the previous hold's expiry, so what counts as "the same drop"
 	// is base + window at step 1 (90m), then hold + window at every step
 	// after it (150m, 270m). The window alone is only the tail of that.
-	DepthSpacingBaseHold = 60 * time.Minute
+	DepthSpacingBaseHold = 90 * time.Minute
 	// depthSpacingFactor is the escalation. A drop that keeps filling depths
 	// the instant the previous hold lifts is falling faster than the grid
 	// was built for, so the gate has to grow faster than the drop consumes

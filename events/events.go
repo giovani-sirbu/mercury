@@ -10,7 +10,6 @@ import (
 	"github.com/giovani-sirbu/mercury/messagebroker"
 	"github.com/giovani-sirbu/mercury/storage/memory"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"strings"
 )
 
 type (
@@ -100,13 +99,18 @@ func (e Events) Run() error {
 	newEvent, err := eventFunc(e)
 
 	if err != nil {
-		e.LockTradeWithBackOff()
-		// A hold is a decision, not a failure: it already wrote its own INFO
+		// A hold is a decision, not a failure. It already wrote its own INFO
 		// entry on the trade, so logging it here only duplicates it once per
-		// tick for as long as the hold lasts.
+		// tick — and, more importantly, the backoff below must not run for it.
+		// LockTradeWithBackOff exists to stop a trade whose chain keeps
+		// erroring from being retried every tick; extending the lock for a
+		// hold instead throttled a held trade to one evaluation per minute
+		// (lockTradeBackoff.go: 1s doubling to a 60s ceiling), so the gate
+		// that held it could not re-examine it until the lock expired.
 		if errors.Is(err, ErrTradeHeld) {
 			return err
 		}
+		e.LockTradeWithBackOff()
 		return e.logEventError(err)
 	}
 
@@ -126,8 +130,11 @@ func (e Events) Add(event string, action func(Events) (Events, error)) Events {
 
 // logEventError formats and logs event execution errors
 func (e Events) logEventError(err error) error {
-	pairSymbols := strings.Split(e.Trade.Symbol, "/")
-	assetSymbol := pairSymbols[1]
+	// helpers.SplitSymbol, not strings.Split(...)[1]: a symbol without exactly
+	// one slash indexed out of range and panicked the whole trade goroutine —
+	// on the ERROR path, so a malformed pair turned any action error into a
+	// process-level panic instead of a logged failure.
+	_, assetSymbol := helpers.SplitSymbol(e.Trade.Symbol)
 
 	var errorMessage string
 

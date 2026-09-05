@@ -21,7 +21,7 @@ type SophosPatternVerdict struct {
 	LevelKind   string  `json:"levelKind"`
 	StopLoss    float64 `json:"stopLoss"`
 	TakeProfit  float64 `json:"takeProfit"`
-	Lens        string  `json:"lens"`
+	Interval    string  `json:"interval"`
 }
 
 // SophosFib is the fibonacci retracement of the last up-swing; Levels
@@ -98,7 +98,7 @@ func (p SophosPrediction) Indicators() AIIndicators {
 		PatternLevelKind:       p.PatternVerdict.LevelKind,
 		PatternStopLoss:        p.PatternVerdict.StopLoss,
 		PatternTakeProfit:      p.PatternVerdict.TakeProfit,
-		PatternLens:            p.PatternVerdict.Lens,
+		PatternInterval:        p.PatternVerdict.Interval,
 		FibSwingLow:            p.Fib.SwingLow,
 		FibSwingHigh:           p.Fib.SwingHigh,
 		FibLevels:              p.Fib.Levels,
