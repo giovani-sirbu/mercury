@@ -17,11 +17,11 @@ func TestGetPositionUnknownLogicKeyFailsClosed(t *testing.T) {
 			"buy": "percentage <= -tradePercentage-tolerance ? 'stopLoss' : ''",
 		},
 	}
-	if got := strategy.GetPosition(-5); got != "" {
+	if got := strategy.GetPosition(-5, -5); got != "" {
 		t.Fatalf("unknown logic key must yield no position, got %q", got)
 	}
 	strategy.Position.Type = "buy"
-	if got := strategy.GetPosition(-5); got != "stopLoss" {
+	if got := strategy.GetPosition(-5, -5); got != "stopLoss" {
 		t.Fatalf("known logic key must still evaluate, got %q", got)
 	}
 }

@@ -36,6 +36,16 @@ type (
 	Position struct {
 		Type  string
 		Price float64
+		// AverageEntryPrice is the ladder's break even: what the position cost
+		// per unit of base across every entry fill (ladder.AverageEntryPrice).
+		// The upside branches of the `buy` rows read `profitPercentage`, the
+		// move measured against it, so a take profit is proposed at break even
+		// + percentage + tolerance at every depth. Price — the last fill or the
+		// last re-anchor — keeps anchoring `percentage`: the downside (stopLoss
+		// spacing) and every armed state. At depth 1 the two coincide, so the
+		// first depth behaves exactly as before. Zero (no fills yet) makes
+		// profitPercentage fall back to percentage.
+		AverageEntryPrice float64
 	}
 	Strategy struct {
 		Type     string
@@ -47,8 +57,11 @@ type (
 	}
 )
 
-// GetPosition get the new position based on a strategy logic
-func (S Strategy) GetPosition(percentage float64) string {
+// GetPosition get the new position based on a strategy logic. percentage is
+// the move against Position.Price, profitPercentage the move against
+// Position.AverageEntryPrice (GetPercentage / GetProfitPercentage, both
+// negated by the engines for an inverse trade).
+func (S Strategy) GetPosition(percentage float64, profitPercentage float64) string {
 	if len(S.Settings) < 1 {
 		return ""
 	}
@@ -70,8 +83,9 @@ func (S Strategy) GetPosition(percentage float64) string {
 		settingsIndex = 0
 	}
 
-	parameters := make(map[string]interface{}, 4)
+	parameters := make(map[string]interface{}, 5)
 	parameters["percentage"] = percentage
+	parameters["profitPercentage"] = profitPercentage
 	parameters["tradePercentage"] = S.Settings[settingsIndex].Percentage
 	parameters["tolerance"] = S.Settings[settingsIndex].Tolerance
 	parameters["trailingTakeProfit"] = S.Settings[settingsIndex].TrailingTakeProfit
@@ -85,4 +99,16 @@ func (S Strategy) GetPosition(percentage float64) string {
 // GetPercentage get percentage between old and new price
 func (S Strategy) GetPercentage(price float64) float64 {
 	return ((price - S.Position.Price) / price) * 100
+}
+
+// GetProfitPercentage is the same metric measured against the average entry
+// price — how far the whole position is from its break even. Without entries
+// there is no break even yet and the last fill stands in, so the value equals
+// GetPercentage.
+func (S Strategy) GetProfitPercentage(price float64) float64 {
+	if S.Position.AverageEntryPrice <= 0 {
+		return S.GetPercentage(price)
+	}
+
+	return ((price - S.Position.AverageEntryPrice) / price) * 100
 }

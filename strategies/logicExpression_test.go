@@ -34,13 +34,14 @@ func testStrategy(positionType string) Strategy {
 
 // uncachedPosition is GetPosition as it was before the cache: parse per call.
 // The cached path must answer identically for every state and percentage.
-func uncachedPosition(S Strategy, percentage float64) string {
+func uncachedPosition(S Strategy, percentage float64, profitPercentage float64) string {
 	if len(S.Settings) < 1 {
 		return ""
 	}
 	expression, _ := govaluate.NewEvaluableExpression(S.Logic[S.Position.Type])
 	parameters := map[string]interface{}{
 		"percentage":         percentage,
+		"profitPercentage":   profitPercentage,
 		"tradePercentage":    S.Settings[0].Percentage,
 		"tolerance":          S.Settings[0].Tolerance,
 		"trailingTakeProfit": S.Settings[0].TrailingTakeProfit,
@@ -55,8 +56,8 @@ func TestLogicExpressionCacheMatchesUncachedParse(t *testing.T) {
 	for state := range spotLogic() {
 		strategy := testStrategy(state)
 		for _, percentage := range percentages {
-			got := strategy.GetPosition(percentage)
-			want := uncachedPosition(strategy, percentage)
+			got := strategy.GetPosition(percentage, percentage)
+			want := uncachedPosition(strategy, percentage, percentage)
 			if got != want {
 				t.Fatalf("state %q at %v: cached gave %q, per-call parse gives %q",
 					state, percentage, got, want)
@@ -77,7 +78,7 @@ func TestLogicExpressionCacheIsRaceFree(t *testing.T) {
 		wg.Add(1)
 		go func(slot int) {
 			defer wg.Done()
-			results[slot] = strategy.GetPosition(-5)
+			results[slot] = strategy.GetPosition(-5, -5)
 		}(i)
 	}
 	wg.Wait()
@@ -102,5 +103,5 @@ func TestLogicExpressionCachePreservesMalformedContract(t *testing.T) {
 		}
 	}()
 
-	strategy.GetPosition(1)
+	strategy.GetPosition(1, 1)
 }
