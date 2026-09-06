@@ -25,6 +25,7 @@ type Actions struct {
 	GetExchangeInfo  func(symbol string) (ExchangeInfo, *common.APIError)
 	GetFees          func(symbol string) (TradeFeeDetails, *common.APIError)
 	GetPrice         func(symbol string) (float64, *common.APIError)
+	GetPrices        func() (map[string]float64, *common.APIError)
 	GetProfile       func() (Account, *common.APIError)
 	GetUserAssets    func() ([]UserAssetRecord, *common.APIError)
 	PriceWSHandler   func(ctx context.Context, pairs []string, handler func(PriceWSResponseData)) error

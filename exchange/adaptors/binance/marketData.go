@@ -63,6 +63,31 @@ func (e Binance) GetPrice(symbol string) (float64, *common.APIError) {
 	return price, nil
 }
 
+// GetPrices returns the last price of every symbol the exchange lists, keyed by
+// the raw binance symbol ("ETHBTC"). One request covers the whole book, which is
+// what makes it usable for valuing a wallet whose assets are not known up front
+// — the per-symbol GetPrice would need one round trip per asset held.
+func (e Binance) GetPrices() (map[string]float64, *common.APIError) {
+	client, initErr := InitExchange(e)
+	if initErr != nil {
+		return nil, initErr
+	}
+	tickers, err := client.NewListPricesService().Do(context.Background())
+	if err != nil {
+		return nil, ApiError(err)
+	}
+
+	prices := make(map[string]float64, len(tickers))
+	for _, ticker := range tickers {
+		price, parseErr := strconv.ParseFloat(ticker.Price, 64)
+		if parseErr != nil {
+			continue
+		}
+		prices[ticker.Symbol] = price
+	}
+	return prices, nil
+}
+
 // Klines returns candlestick bars for a symbol. Klines are uniquely
 // identified by their open time.
 func (e Binance) Klines(payload aggregates.KlinePayload) ([]aggregates.KlineResponse, *common.APIError) {

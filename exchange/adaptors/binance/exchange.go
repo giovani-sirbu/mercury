@@ -30,9 +30,16 @@ func ApiError(err error) *common.APIError {
 	}
 
 	if apiErr, ok := err.(*common.APIError); ok {
+		// Response holds the raw body and is the only field binance fills when
+		// the answer is not a {code,msg} document — a gateway or proxy error
+		// page, say. Dropping it printed those as a bare "<APIError> rsp="
+		// and threw away the only description of what went wrong. It stays
+		// empty when the upstream itself sent no body, so this preserves what
+		// there is rather than guaranteeing there is something.
 		return &common.APIError{
-			Code:    apiErr.Code,
-			Message: apiErr.Message,
+			Code:     apiErr.Code,
+			Message:  apiErr.Message,
+			Response: apiErr.Response,
 		}
 	}
 
@@ -60,6 +67,7 @@ func GetBinanceActions(e aggregates.Exchange) aggregates.Actions {
 		GetFees:          b.GetFees,
 		GetProfile:       b.GetProfile,
 		GetPrice:         b.GetPrice,
+		GetPrices:        b.GetPrices,
 		GetUserAssets:    b.GetUserAssets,
 		PriceWSHandler:   b.PriceWSHandler,
 		UserWSHandler:    b.UserWs,
