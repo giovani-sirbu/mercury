@@ -111,6 +111,14 @@ func (e Events) Run() error {
 			return err
 		}
 		e.LockTradeWithBackOff()
+		// A failure the trade already carries (SaveError wrote it, this is a
+		// repeat) or the same failure this backoff episode already logged is
+		// not logged again: the tick that runs into it only has to keep the
+		// backoff. At tick rate the same refusal otherwise repeats word for
+		// word, thousands of lines a minute, in the backtest and live alike.
+		if errors.Is(err, ErrRepeatedFailure) || e.repeatsLastFailure(err) {
+			return err
+		}
 		return e.logEventError(err)
 	}
 

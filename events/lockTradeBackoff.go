@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/giovani-sirbu/mercury/helpers"
 )
 
 // backoffEntry tracks both the current backoff duration and when it was last
@@ -14,6 +16,12 @@ import (
 type backoffEntry struct {
 	duration    time.Duration
 	lastTouched time.Time
+	// lastFailure is the failure this backoff episode already logged, with its
+	// numbers stripped the way tradelog.SaveError collapses repeats. A gate that
+	// refuses the same thing on every print — regulatePriceChange on an add the
+	// state machine keeps proposing too close to the last fill, a funds check
+	// on a ladder out of money — otherwise writes the same line per tick.
+	lastFailure string
 }
 
 var (
@@ -90,8 +98,32 @@ func (e Events) LockTradeWithBackOff() error {
 			lockDuration = maxBackOff
 		}
 	}
-	backoffTries[e.Trade.ID] = backoffEntry{duration: lockDuration, lastTouched: time.Now()}
+	backoffTries[e.Trade.ID] = backoffEntry{duration: lockDuration, lastTouched: time.Now(), lastFailure: current.lastFailure}
 	rwLocker.Unlock()
 
 	return e.LockTrade(lockDuration)
+}
+
+// repeatsLastFailure reports whether err is the failure this trade's current
+// backoff episode already logged — the same text once the numbers are
+// stripped — and records it otherwise. The episode is the backoff entry
+// itself: Next() deletes it on the first chain that gets through, and the
+// sweeper evicts it after backoffEntryTTL of silence, so a failure that
+// returns after a success is logged again, once. A different failure on the
+// same trade is always logged.
+func (e Events) repeatsLastFailure(err error) bool {
+	failure := helpers.RemoveNumbersFromString(err.Error())
+
+	rwLocker.Lock()
+	defer rwLocker.Unlock()
+
+	entry := backoffTries[e.Trade.ID]
+	if entry.lastFailure == failure {
+		return true
+	}
+
+	entry.lastFailure = failure
+	backoffTries[e.Trade.ID] = entry
+
+	return false
 }

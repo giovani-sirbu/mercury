@@ -15,16 +15,18 @@ func SaveError(event events.Events, err error) (events.Events, error) {
 	message := err.Error()
 	errorType := aggragates.LOG_WARNING
 
-	// prevent duplicate logs
+	// prevent duplicate logs: the same failure is already the trade's newest
+	// row, so nothing is written and the caller learns it is a repeat —
+	// events.Run keeps the backoff for it but does not log it again.
 	if len(event.Trade.Logs) > 0 {
 		lastError := event.Trade.Logs[len(event.Trade.Logs)-1].Message
 		if helpers.RemoveNumbersFromString(lastError) == helpers.RemoveNumbersFromString(message) {
 			if event.Trade.PositionType == "impasse" && event.Params.OldPosition != "impasse" {
 				newEvent, _ := event.Events["updateTrade"](event)
 
-				return newEvent, err
+				return newEvent, events.Repeated(err)
 			}
-			return event, err
+			return event, events.Repeated(err)
 		}
 	}
 
