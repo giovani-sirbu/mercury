@@ -55,7 +55,7 @@ func HasProfit(event events.Events) (events.Events, error) {
 		return event, fmt.Errorf(msg)
 	}
 
-	fmt.Println("")
+	log.Debug("")
 
 	return event, nil
 }
