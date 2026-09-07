@@ -8,20 +8,15 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"github.com/giovani-sirbu/mercury/trades/gates/crashguard"
 	"github.com/giovani-sirbu/mercury/trades/gates/regime"
-	"github.com/giovani-sirbu/mercury/trades/gates/smarttakeloss"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 )
 
 // The capitulation override recognises the holds of other families by their
 // text (crashguard.keepCapitulationHold / capitulationEligibleHold). Those
-// families live in their own packages now, and crashguard cannot import
-// smarttakeloss, so this test — in the one package that imports all of them
-// — pins the texts together: a rename on either side fails here instead of
-// silently un-coupling capitulation.
+// families live in their own packages now, so this test — in the one package
+// that imports all of them — pins the texts together: a rename on either
+// side fails here instead of silently un-coupling capitulation.
 func TestHoldReasonContractAcrossFamilies(t *testing.T) {
-	if !strings.HasPrefix(smarttakeloss.HTFFreezeReason, "smart-take-loss: HTF") {
-		t.Fatalf("smarttakeloss.HTFFreezeReason = %q, capitulation keeps holds by the prefix \"smart-take-loss: HTF\"", smarttakeloss.HTFFreezeReason)
-	}
 	if !strings.HasPrefix(crashguard.DeepHoldReason, "crash-guard: deep") {
 		t.Fatalf("crashguard.DeepHoldReason = %q, capitulation keeps holds by the prefix \"crash-guard: deep\"", crashguard.DeepHoldReason)
 	}

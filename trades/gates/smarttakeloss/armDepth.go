@@ -7,12 +7,11 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
-// tradeInZone is the depth/block arming rule Evaluate uses:
-// filled >= max(2, Floor(Depths)−offset), or already fund-blocked.
-func tradeInZone(trade aggragates.Trades) bool {
-	if trade.Status == aggragates.Blocked {
-		return true
-	}
+// armed is the depth arming rule: filled >= max(2, Floor(Depths) − offset),
+// Depths read from the row the next fill would use. A fund block does not
+// arm by itself any more: hermes ticks no blocked trade and backtesting
+// skips them before the overlay, so the rule reads only what the fills say.
+func armed(trade aggragates.Trades) bool {
 	settings := trade.StrategyPair.StrategySettings
 	if len(settings) == 0 {
 		return false

@@ -3,7 +3,6 @@ package actions
 import (
 	"github.com/giovani-sirbu/mercury/trades/gates/crashguard"
 	"github.com/giovani-sirbu/mercury/trades/gates/regime"
-	"github.com/giovani-sirbu/mercury/trades/gates/smarttakeloss"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 	"strings"
 	"testing"
@@ -107,20 +106,6 @@ func TestShouldHoldCapitulationNoOverrideWhenCrashDeep(t *testing.T) {
 	}
 	if !strings.Contains(held.Trade.Logs[len(held.Trade.Logs)-1].Message, "crash-guard: deep") {
 		t.Errorf("expected crash-deep hold, got %q", held.Trade.Logs[len(held.Trade.Logs)-1].Message)
-	}
-}
-
-func TestShouldHoldCapitulationNoOverrideOnSTLFreeze(t *testing.T) {
-	event := stlFreezeEvent(false, stlFreezeAI(smarttakeloss.RiskThreshold, 0, regime.DownPersist))
-	event.FiveMinOHLC = capReclaimBucket(false)
-	last := event.Trade.History[len(event.Trade.History)-1].Price
-	event.Trade.PositionPrice = last * 0.75
-	held, err := ShouldHold(event)
-	if err == nil {
-		t.Fatal("STL HTF freeze must not be overridden")
-	}
-	if !strings.Contains(held.Trade.Logs[0].Message, "smart-take-loss: HTF continuation, no add") {
-		t.Errorf("unexpected hold message %q", held.Trade.Logs[0].Message)
 	}
 }
 

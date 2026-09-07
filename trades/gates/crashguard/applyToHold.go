@@ -1,9 +1,7 @@
 // Package crashguard is the CrashGuard flag's overlay on the ladder: the
 // flush park and sticky reclaim on deep trades (ApplyToHold) and the
 // capitulation override that lets a shallow dump take one extra fill
-// (ApplyCapitulationOverride). It matches hold reasons from regime and from
-// smart take loss by their text; it never imports smarttakeloss (which
-// imports this package for DeRiskMinDepth).
+// (ApplyCapitulationOverride). It matches regime hold reasons by their text.
 package crashguard
 
 import (

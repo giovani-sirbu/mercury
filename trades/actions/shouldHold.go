@@ -9,7 +9,6 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/gates/crashguard"
 	"github.com/giovani-sirbu/mercury/trades/gates/patterns"
 	"github.com/giovani-sirbu/mercury/trades/gates/regime"
-	"github.com/giovani-sirbu/mercury/trades/gates/smarttakeloss"
 )
 
 // ShouldHold blocks the action chain when a strategy flag advises against
@@ -26,8 +25,10 @@ import (
 //	                                 UsePatterns   → chart-pattern and fibonacci holds
 //	                                 UseAI         → legacy AI hold
 //	                                 CrashGuard    → flush park, sticky reclaim, capitulation
-//	                                 SmartTakeLoss → HTF add freeze
 //	                                 Cooldown      → depth spacing (stopLoss only)
+//
+// SmartTakeLoss owns no hold gate: it forces exits after the ladder decides
+// (gates/smarttakeloss.Apply, called by the engines).
 //
 // Each family lives in its own package under trades/gates; this function
 // only orders them. Cooldown owns TWO gates, one on each side of the first
@@ -125,9 +126,6 @@ func shouldHoldPosition(event events.Events) (events.Events, error) {
 		reason = aiReason
 	}
 
-	if reason == "" && params.SmartTakeLoss {
-		reason = smarttakeloss.AddFreeze(event, position, indicators)
-	}
 	if reason == "" && params.Cooldown {
 		// Last, and only when nothing else spoke: depth spacing has no view of
 		// the market at all, so every gate above names the reason for a hold

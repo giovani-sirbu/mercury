@@ -22,13 +22,7 @@ func TestSophosPredictionIndicatorsMapsVerdict(t *testing.T) {
 		"crashActive":true,
 		"crashScore":91,
 		"crashReasons":["breadth"],
-		"hasContinuationVerdict":true,
-		"downContinuationRisk":77,
-		"upContinuationRisk":12,
-		"reversalUpEvidence":5,
-		"reversalDownEvidence":40,
-		"dailyNatrPct":1.2,
-		"continuationReasons":["structure"],
+		"smartTakeLoss":{"hasVerdict":true,"lowestLow":179.75,"lowWithBarsLeft":181.2,"highestHigh":195.1,"highWithBarsLeft":193.4,"upperBB":193.83,"lowerBB":176.4,"resistanceFromTime":1640673000000,"resistanceFromPrice":193.25,"resistanceToTime":1640691900000,"resistanceToPrice":192.97,"supportFromTime":0,"supportFromPrice":0,"supportToTime":0,"supportToPrice":0},
 		"patternVerdict":{"name":"asc_triangle","displayName":"ascending triangle","direction":"long","score":71,"level":96000,"levelKind":"resistance","stopLoss":94000,"takeProfit":104500,"interval":"15m"},
 		"fib":{"swingLow":100,"swingHigh":110,"levels":[106.18,105,103.82,102.14]}
 	}`)
@@ -39,8 +33,20 @@ func TestSophosPredictionIndicatorsMapsVerdict(t *testing.T) {
 	}
 
 	mapped := prediction.Indicators()
-	if !mapped.CrashActive || mapped.DownContinuationRisk != 77 {
-		t.Fatalf("crash and continuation must map, got %+v", mapped)
+	if !mapped.CrashActive || mapped.CrashScore != 91 {
+		t.Fatalf("crash must map, got %+v", mapped)
+	}
+	stl := mapped.SmartTakeLoss
+	if !stl.HasVerdict || stl.LowestLow != 179.75 || stl.LowWithBarsLeft != 181.2 ||
+		stl.HighestHigh != 195.1 || stl.HighWithBarsLeft != 193.4 || stl.UpperBB != 193.83 || stl.LowerBB != 176.4 {
+		t.Fatalf("the smart take loss levels must map field for field, got %+v", stl)
+	}
+	if stl.Resistance.From.At != 1640673000000 || stl.Resistance.From.Price != 193.25 ||
+		stl.Resistance.To.At != 1640691900000 || stl.Resistance.To.Price != 192.97 {
+		t.Fatalf("the resistance line must map onto its anchors, got %+v", stl.Resistance)
+	}
+	if stl.Support != (TrendLine{}) {
+		t.Fatalf("zero support keys must map to no line, got %+v", stl.Support)
 	}
 	if mapped.AIAction != "HOLD" || mapped.AISignalStrength != 42 {
 		t.Fatalf("model action must map, got %+v", mapped)
@@ -69,6 +75,28 @@ func TestSophosPredictionWithoutPatternVerdictIsInert(t *testing.T) {
 	}
 	if len(mapped.FibLevels) != 0 || mapped.FibSwingHigh != 0 {
 		t.Fatalf("missing fib keys must map to zero, got %+v", mapped)
+	}
+}
+
+// An older sophos without the smartTakeLoss object — or a block served
+// without a verdict — decodes to the zero block, which gates/smarttakeloss
+// treats as "nothing to read": no activation, no line, no band.
+func TestSophosPredictionWithoutSmartTakeLossIsInert(t *testing.T) {
+	var missing SophosPrediction
+	if err := json.Unmarshal([]byte(`{"action":"LONG","hasRegimeVerdict":true,"crashActive":true}`), &missing); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got := missing.Indicators().SmartTakeLoss; got != (SmartTakeLossIndicators{}) {
+		t.Fatalf("a missing smartTakeLoss object must map to the zero block, got %+v", got)
+	}
+
+	var noVerdict SophosPrediction
+	raw := `{"smartTakeLoss":{"hasVerdict":false,"lowestLow":0,"lowWithBarsLeft":0,"highestHigh":0,"highWithBarsLeft":0,"upperBB":0,"lowerBB":0,"resistanceFromTime":0,"resistanceFromPrice":0,"resistanceToTime":0,"resistanceToPrice":0,"supportFromTime":0,"supportFromPrice":0,"supportToTime":0,"supportToPrice":0}}`
+	if err := json.Unmarshal([]byte(raw), &noVerdict); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got := noVerdict.Indicators().SmartTakeLoss; got != (SmartTakeLossIndicators{}) {
+		t.Fatalf("a block without a verdict must be the zero block, got %+v", got)
 	}
 }
 
@@ -104,19 +132,24 @@ func TestMergeSophosVerdictsPatternsThenML(t *testing.T) {
 func TestMergeSophosVerdictsMLOnlyCopiesRegime(t *testing.T) {
 	params := StrategyParams{UseAI: true}
 	ml := AIIndicators{
-		AIAction:             "HOLD",
-		HasRegimeVerdict:     true,
-		CrashActive:          true,
-		DownContinuationRisk: 70,
+		AIAction:         "HOLD",
+		HasRegimeVerdict: true,
+		CrashActive:      true,
+		CrashScore:       70,
+		// The ML route does not serve the block; a stray one is not carried.
+		SmartTakeLoss: SmartTakeLossIndicators{HasVerdict: true, UpperBB: 1},
 	}
 	got := MergeSophosVerdicts(params, AIIndicators{}, ml, false, true)
-	if got.AIAction != "HOLD" || !got.CrashActive || got.DownContinuationRisk != 70 {
-		t.Fatalf("ML-only must keep attached crash/continuation, got %+v", got)
+	if got.AIAction != "HOLD" || !got.HasRegimeVerdict || !got.CrashActive || got.CrashScore != 70 {
+		t.Fatalf("ML-only must keep attached regime/crash, got %+v", got)
+	}
+	if got.SmartTakeLoss != (SmartTakeLossIndicators{}) {
+		t.Fatalf("ML-only must not carry a smart take loss block, got %+v", got.SmartTakeLoss)
 	}
 }
 
 // Data flows, the flag owns the gate: the pattern fields are carried even
-// when UsePatterns is off, exactly like crash and continuation.
+// when UsePatterns is off, exactly like crash and the smart take loss block.
 func TestMergeSophosVerdictsKeepsPatternFieldsWhenUsePatternsOff(t *testing.T) {
 	pattern := AIIndicators{AIAction: "LONG", HasRegimeVerdict: true, PatternName: "bull_flag", PatternDirection: "long", PatternScore: 80}
 	got := MergeSophosVerdicts(StrategyParams{CrashGuard: true}, pattern, AIIndicators{}, true, false)

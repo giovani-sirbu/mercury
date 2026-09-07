@@ -44,7 +44,7 @@ func MergeSophosVerdicts(
 		out.AISignalStrength = mlVerdict.AISignalStrength
 		out.StayOutReasons = mlVerdict.StayOutReasons
 		if !hasPattern {
-			copyRegimeCrashContinuation(&out, mlVerdict)
+			copyRegimeCrash(&out, mlVerdict)
 		}
 	}
 	// The strategy flags are NOT stamped on the verdict: every gate reads
@@ -53,7 +53,10 @@ func MergeSophosVerdicts(
 	return out
 }
 
-func copyRegimeCrashContinuation(dst *AIIndicators, src AIIndicators) {
+// copyRegimeCrash carries the regime and crash blocks the ML route attaches
+// when no pattern leg succeeded. The smart take loss block is served by the
+// pattern route only, so an ML-only merge leaves it zero (inert).
+func copyRegimeCrash(dst *AIIndicators, src AIIndicators) {
 	dst.HasRegimeVerdict = src.HasRegimeVerdict
 	dst.EnterAllowed = src.EnterAllowed
 	dst.AddAllowed = src.AddAllowed
@@ -62,11 +65,4 @@ func copyRegimeCrashContinuation(dst *AIIndicators, src AIIndicators) {
 	dst.CrashActive = src.CrashActive
 	dst.CrashScore = src.CrashScore
 	dst.CrashReasons = src.CrashReasons
-	dst.HasContinuationVerdict = src.HasContinuationVerdict
-	dst.DownContinuationRisk = src.DownContinuationRisk
-	dst.UpContinuationRisk = src.UpContinuationRisk
-	dst.ReversalUpEvidence = src.ReversalUpEvidence
-	dst.ReversalDownEvidence = src.ReversalDownEvidence
-	dst.DailyNatrPct = src.DailyNatrPct
-	dst.ContinuationReasons = src.ContinuationReasons
 }

@@ -41,8 +41,8 @@ func (p StrategyParams) NeedsSophos() bool {
 }
 
 // NeedsPatternRoute is the GET /:symbol/patterns fetch: the pattern verdict,
-// plus the regime block (RegimeHold), crash and continuation, which all live
-// on that payload.
+// plus the regime block (RegimeHold), crash and the smart take loss block,
+// which all live on that payload.
 func (p StrategyParams) NeedsPatternRoute() bool {
 	return p.UsePatterns || p.CrashGuard || p.SmartTakeLoss || p.RegimeHold
 }

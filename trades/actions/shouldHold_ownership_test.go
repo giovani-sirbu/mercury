@@ -46,27 +46,23 @@ func ownershipEvent(trade aggragates.Trades, ai aggragates.AIIndicators, cool ag
 // fullHoldPayload carries every signal that could hold a long stopLoss.
 func fullHoldPayload() aggragates.AIIndicators {
 	return aggragates.AIIndicators{
-		HasRegimeVerdict:       true,
-		EnterAllowed:           false,
-		AddAllowed:             false,
-		Regime:                 regime.ShockDown,
-		Regimes:                map[string]string{"4h": regime.DownPersist, "1h": regime.DownPersist, "15m": regime.ShockDown},
-		CrashActive:            true,
-		CrashScore:             90,
-		HasContinuationVerdict: true,
-		DownContinuationRisk:   95,
-		ReversalUpEvidence:     0,
-		DailyNatrPct:           2,
-		AIAction:               aggragates.ActionHold,
-		AIMarketBearish:        true,
-		PatternAction:          aggragates.ActionShort,
-		PatternName:            "asc_triangle",
-		PatternDisplayName:     "ascending triangle",
-		PatternDirection:       "long",
-		PatternScore:           71,
-		PatternLevel:           96000,
-		PatternLevelKind:       "resistance",
-		PatternTakeProfit:      104500,
+		HasRegimeVerdict:   true,
+		EnterAllowed:       false,
+		AddAllowed:         false,
+		Regime:             regime.ShockDown,
+		Regimes:            map[string]string{"4h": regime.DownPersist, "1h": regime.DownPersist, "15m": regime.ShockDown},
+		CrashActive:        true,
+		CrashScore:         90,
+		AIAction:           aggragates.ActionHold,
+		AIMarketBearish:    true,
+		PatternAction:      aggragates.ActionShort,
+		PatternName:        "asc_triangle",
+		PatternDisplayName: "ascending triangle",
+		PatternDirection:   "long",
+		PatternScore:       71,
+		PatternLevel:       96000,
+		PatternLevelKind:   "resistance",
+		PatternTakeProfit:  104500,
 	}
 }
 
@@ -74,7 +70,7 @@ func expensiveCooldown() aggragates.CoolDownIndicators {
 	return aggragates.CoolDownIndicators{HasFirstFillVerdict: true, AllowLongEntry: false, AllowShortEntry: false}
 }
 
-var holdFamilyPrefixes = []string{"cooldown:", "regime:", "pattern:", "fibonacci:", "crash-guard:", "smart-take-loss:", "AI ", "Capitulation"}
+var holdFamilyPrefixes = []string{"cooldown:", "regime:", "pattern:", "fibonacci:", "crash-guard:", "smartTakeLoss:", "AI ", "Capitulation"}
 
 func assertOnlyFamily(t *testing.T, logs []aggragates.TradesLogs, want string) {
 	t.Helper()
@@ -110,7 +106,7 @@ func TestShouldHoldOwnershipMatrixStopLoss(t *testing.T) {
 		{"cooldown is inert after the first fill", aggragates.StrategyParams{Cooldown: true}, ""},
 		{"regimeHold", aggragates.StrategyParams{RegimeHold: true}, "regime: market in shock (15m shock-down, depth 4)"},
 		{"crashGuard", aggragates.StrategyParams{CrashGuard: true}, "crash-guard: deep trade, no new capital during a flush"},
-		{"smartTakeLoss", aggragates.StrategyParams{SmartTakeLoss: true}, "smart-take-loss: HTF continuation, no add"},
+		{"smartTakeLoss never holds: it forces exits outside ShouldHold", aggragates.StrategyParams{SmartTakeLoss: true}, ""},
 		{"useAI", aggragates.StrategyParams{UseAI: true}, "AI market is bearish"},
 		{"usePatterns", aggragates.StrategyParams{UsePatterns: true}, "pattern: ascending triangle found (resistance 96000.0000), preventing stopLoss"},
 		{"useForceTrailing", aggragates.StrategyParams{UseForceTrailing: true}, ""},

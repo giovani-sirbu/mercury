@@ -180,7 +180,7 @@ func TestDepthSpacingWritesOneStableCooldownRow(t *testing.T) {
 	if len(again.Trade.Logs) != 1 {
 		t.Fatalf("a standing hold must not write a row per tick, got %v", messages(again.Trade.Logs))
 	}
-	for _, prefix := range []string{"regime:", "pattern:", "crash-guard:", "smart-take-loss:"} {
+	for _, prefix := range []string{"regime:", "pattern:", "crash-guard:", "smartTakeLoss:"} {
 		if strings.Contains(row.Message, prefix) {
 			t.Fatalf("row %q leaks the %q family", row.Message, prefix)
 		}
@@ -206,8 +206,8 @@ func TestDepthSpacingReadsTheInverseEntrySide(t *testing.T) {
 // one real pause separates them: five filled entries, a lower escalation step.
 //
 // It matters because the row is the only operator-visible output of this gate,
-// and regime, crash-guard and smart-take-loss all print
-// ladder.CountFilledEntries for the same trade on the same tick.
+// and regime and crash-guard both print ladder.CountFilledEntries for the
+// same trade on the same tick.
 func TestDepthSpacingRowReportsTheLadderDepthNotTheEscalationStep(t *testing.T) {
 	// One real pause — a full window past the first hold's expiry, which is
 	// what resets the escalation — then three fast depths behind it.

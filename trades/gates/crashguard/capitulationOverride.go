@@ -29,8 +29,8 @@ const (
 
 // ApplyCapitulationOverride is the stopLoss-only exception: a shallow
 // 8-step dump that has printed a 5m reclaim may bypass a 15m shock or
-// add-veto hold so the grid can take one extra fill. Crash-deep, STL
-// freeze, and an already-taken shot in this episode are never bypassed.
+// add-veto hold so the grid can take one extra fill. Crash-deep and an
+// already-taken shot in this episode are never bypassed.
 // Owned by the CrashGuard flag: the caller runs it only under
 // params.CrashGuard, so ai.CrashActive is read here on a crash-guard
 // strategy only. `position` is the gate-normalised position (a force-trailing
@@ -80,7 +80,7 @@ func capitulationApplies(event events.Events, position string) bool {
 		return false
 	}
 	switch position {
-	case "smartTakeLoss", "smartTakeLossTrail", "sellLoss":
+	case "sellLoss":
 		return false
 	}
 	return position == "stopLoss"
@@ -129,14 +129,10 @@ func maybeCapitulationAdd(event events.Events, ai aggragates.AIIndicators, holdR
 	return event, ""
 }
 
-// keepCapitulationHold: the deep flush park (DeepHoldReason) and the smart
-// take loss HTF freeze are never bypassed. The smart-take-loss text is a
-// literal on purpose: smarttakeloss imports this package, so this package
-// cannot import its constant. actions.TestHoldReasonContractAcrossFamilies
-// pins both sides.
+// keepCapitulationHold: the deep flush park (DeepHoldReason) is never
+// bypassed. actions.TestHoldReasonContractAcrossFamilies pins the text.
 func keepCapitulationHold(reason string) bool {
-	return strings.Contains(reason, "crash-guard: deep") ||
-		strings.Contains(reason, "smart-take-loss: HTF")
+	return strings.Contains(reason, "crash-guard: deep")
 }
 
 func capitulationEligibleHold(reason string) bool {

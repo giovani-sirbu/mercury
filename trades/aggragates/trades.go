@@ -106,20 +106,12 @@ type (
 		// CrashSticky is engine-local: this trade already saw an ARM (redis
 		// on live, trade logs in backtest). Sophos does not serve it.
 		CrashSticky bool
-		// Smart take loss: per-symbol continuation-risk verdict. Every field is
-		// inert at its zero value — a risk of 0 never crosses the threshold and
-		// DailyNatrPct=0 is an explicit bail — so unlike the regime verdict no
-		// HasRegimeVerdict-style compatibility switch is needed; the flag below
-		// only says the verdict was actually computed (observability + early
-		// bail). Down risk endangers long trades, up risk endangers inverse
-		// ones; reversal evidence in the trade's favor vetoes a forced exit.
-		HasContinuationVerdict bool
-		DownContinuationRisk   float64
-		UpContinuationRisk     float64
-		ReversalUpEvidence     float64
-		ReversalDownEvidence   float64
-		DailyNatrPct           float64
-		ContinuationReasons    []string
+		// Smart take loss: the daily chart block from GET /:symbol/patterns
+		// (the two levels counting how many bars of the window printed under
+		// the price, resistance and support lines, Bollinger bands). Every
+		// zero field is inert; the engines hand it to
+		// gates/smarttakeloss.Apply after the ladder has decided.
+		SmartTakeLoss SmartTakeLossIndicators
 	}
 
 	Params struct {

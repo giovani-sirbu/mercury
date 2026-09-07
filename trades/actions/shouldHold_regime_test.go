@@ -2,7 +2,6 @@ package actions
 
 import (
 	"github.com/giovani-sirbu/mercury/trades/gates/regime"
-	"github.com/giovani-sirbu/mercury/trades/gates/smarttakeloss"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 	"strings"
 	"testing"
@@ -431,52 +430,6 @@ func TestShouldHoldProfitHoldRequiresFourHourAgreement(t *testing.T) {
 	}
 	if !strings.Contains(held.Trade.Logs[0].Message, "rides the trend") {
 		t.Errorf("unexpected hold message %q", held.Trade.Logs[0].Message)
-	}
-}
-
-func stlFreezeAI(risk, reversal float64, label4h string) aggragates.AIIndicators {
-	return aggragates.AIIndicators{
-		HasRegimeVerdict:     true,
-		AddAllowed:           true,
-		DownContinuationRisk: risk,
-		ReversalUpEvidence:   reversal,
-		Regimes:              map[string]string{"4h": label4h, "1h": "mixed", "15m": "mixed"},
-	}
-}
-
-func stlFreezeEvent(inverse bool, ai aggragates.AIIndicators) events.Events {
-	trade := testutil.DeepLadderTrade(smarttakeloss.ArmDepth(9), inverse)
-	trade.PositionType = "stopLoss"
-	// The freeze lives next to the regime and crash gates in a real
-	// strategy; both on so the precedence tests exercise the real order.
-	trade.Strategy.Params.RegimeHold = true
-	trade.Strategy.Params.CrashGuard = true
-	return events.Events{
-		Trade: trade,
-		Events: map[string]func(events.Events) (events.Events, error){
-			"updateTrade": testutil.NopUpdateTrade,
-		},
-		Params: aggragates.Params{OldPosition: "active", AIIndicators: ai},
-	}
-}
-
-// Selective HTF freeze: only an armed long with continuation HIGH, weak
-// reversal, and 4h agreeing down parks the add. Not every ARM, not inverse.
-func TestShouldHoldSmartTakeLossHTFFreeze(t *testing.T) {
-	held, err := ShouldHold(stlFreezeEvent(false, stlFreezeAI(smarttakeloss.RiskThreshold, 0, regime.DownPersist)))
-	if err == nil {
-		t.Fatal("armed long + risk 70+ + 4h down + low reversal must freeze the add")
-	}
-	if !strings.Contains(held.Trade.Logs[0].Message, "smart-take-loss: HTF continuation, no add") {
-		t.Errorf("unexpected freeze message %q", held.Trade.Logs[0].Message)
-	}
-
-	if _, err := ShouldHold(stlFreezeEvent(false, stlFreezeAI(smarttakeloss.RiskThreshold, smarttakeloss.MinReversalEvidence, regime.DownPersist))); err != nil {
-		t.Fatalf("reversal >= 60 must not freeze, got %v", err)
-	}
-
-	if _, err := ShouldHold(stlFreezeEvent(true, stlFreezeAI(smarttakeloss.RiskThreshold, 0, regime.DownPersist))); err != nil {
-		t.Fatalf("inverse + dump must not freeze adds, got %v", err)
 	}
 }
 
