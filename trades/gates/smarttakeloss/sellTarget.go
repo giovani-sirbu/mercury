@@ -5,8 +5,9 @@ import "github.com/giovani-sirbu/mercury/trades/aggragates"
 // sellTargetReached is the exit an active trade watches on every tick: the
 // resistance line through the last two lower highs, projected to now, or
 // the upper Bollinger band. Both are read on the smart take loss window, so
-// on the daily interval the band is twenty DAYS wide and two swings are at
-// least a week apart — slower targets than the ladder's own; on an inverse ladder the support line through
+// on the 4h interval the band spans twenty bars — three and a third days —
+// and two swings are at least a day apart. The band is the leg that actually
+// closes these trades; on an inverse ladder the support line through
 // the last two higher lows or the lower band. Touching the level (>=, <=)
 // sells; the engines place the sellLoss limit at the tick price.
 //

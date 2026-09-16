@@ -1,7 +1,6 @@
 package actions
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -44,19 +43,25 @@ func TestDepthSpacingHoldsTheSecondDepthFromTheFirstFill(t *testing.T) {
 }
 
 // The escalated hold (a depth that filled the instant the first hold lifted)
-// still parks the next depth until the doubled wait is over.
-func TestDepthSpacingDoublesWhenADepthFillsTheInstantTheHoldLifts(t *testing.T) {
+// still parks the next depth past the point an unescalated one would have
+// freed it, and it does lift eventually.
+//
+// The exact escalated duration is NOT asserted here: it is base * factor, and
+// the factor is unexported — the schedule itself is pinned in the cooldown
+// package (TestDepthSpacingClampsTheHoldAtTheCeiling). What this test owns is
+// the wiring: that ShouldHold honours the escalation at all. Still parked one
+// base hold past the expiry is exactly that evidence, since step 1 would have
+// freed it there under any factor above one.
+func TestDepthSpacingEscalatesWhenADepthFillsTheInstantTheHoldLifts(t *testing.T) {
 	first := testutil.At("09:00:00")
 	expiry := first.Add(cooldown.DepthSpacingBaseHold)
 	trade := testutil.DepthTrade(first, expiry)
-	// Step 2 is the base doubled, still under the four-hour clamp.
-	want := expiry.Add(2 * cooldown.DepthSpacingBaseHold)
 
-	if _, err := ShouldHold(depthEvent(trade, want.Add(-time.Second))); err == nil {
-		t.Fatal("the escalated hold must still park the next depth")
+	if _, err := ShouldHold(depthEvent(trade, expiry.Add(cooldown.DepthSpacingBaseHold))); err == nil {
+		t.Fatal("the escalated hold must park the next depth past one base hold")
 	}
-	if _, err := ShouldHold(depthEvent(trade, want)); err != nil {
-		t.Fatalf("the doubled hold must lift at the escalated expiry, got %v", err)
+	if _, err := ShouldHold(depthEvent(trade, expiry.Add(30*24*time.Hour))); err != nil {
+		t.Fatalf("the escalated hold must lift, got %v", err)
 	}
 }
 
@@ -71,16 +76,19 @@ func TestDepthSpacingReleasesASingleFillAfterTheBaseHold(t *testing.T) {
 	}
 }
 
-// Two base holds apart is genuinely spaced: every depth lands a full window
-// past the previous expiry, so nothing escalates and nothing is parked.
-func TestDepthSpacingNeverHoldsALadderTwoBaseHoldsApart(t *testing.T) {
+// A full window past each expiry is genuinely spaced: nothing escalates and
+// nothing is parked. The distance is base + window rather than a multiple of
+// the base hold — the window has been both narrower and wider than the hold
+// across calibrations, so a fixed multiple is only accidentally far enough.
+func TestDepthSpacingNeverHoldsALadderAFullWindowPastEachExpiry(t *testing.T) {
 	start := testutil.At("09:00:00")
+	spacing := cooldown.DepthSpacingBaseHold + cooldown.DepthSpacingWindow
 	var placements []time.Time
 	for i := 0; i < 7; i++ {
-		placements = append(placements, start.Add(time.Duration(i)*2*cooldown.DepthSpacingBaseHold))
+		placements = append(placements, start.Add(time.Duration(i)*spacing))
 	}
 	trade := testutil.DepthTrade(placements...)
-	next := placements[len(placements)-1].Add(2 * cooldown.DepthSpacingBaseHold)
+	next := placements[len(placements)-1].Add(spacing)
 
 	if _, err := ShouldHold(depthEvent(trade, next)); err != nil {
 		t.Fatalf("a well-spaced ladder must never be parked, got %v", err)
@@ -159,14 +167,15 @@ func TestDepthSpacingWritesOneStableCooldownRow(t *testing.T) {
 	if row.Type != aggragates.LOG_INFO {
 		t.Errorf("row type = %q, want %q", row.Type, aggragates.LOG_INFO)
 	}
-	// Step 2 is the base doubled; the durations are calibration knobs, so the
-	// expectation is derived rather than written out.
-	want := fmt.Sprintf(
-		"Hold stopLoss: cooldown: depths too close (depth 2, step 2), next add parked for %s",
-		2*cooldown.DepthSpacingBaseHold,
-	)
-	if row.Message != want {
-		t.Fatalf("row = %q, want %q", row.Message, want)
+	// Everything the row owes an operator except the wait itself: the family,
+	// the depth and the escalation step. The wait is base * factor and the
+	// factor is unexported, so pinning it here would only re-encode the
+	// schedule the cooldown package already tests — and this test is about
+	// the row, not the calibration. That it stays byte-identical tick to tick
+	// is asserted below, which is the property SaveHoldLog depends on.
+	want := "Hold stopLoss: cooldown: depths too close (depth 2, step 2), next add parked for "
+	if !strings.HasPrefix(row.Message, want) {
+		t.Fatalf("row = %q, want the prefix %q", row.Message, want)
 	}
 	if held.Trade.PositionType != "active" {
 		t.Errorf("position restored to %q, want the old position", held.Trade.PositionType)

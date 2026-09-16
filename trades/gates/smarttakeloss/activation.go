@@ -3,9 +3,11 @@ package smarttakeloss
 import "github.com/giovani-sirbu/mercury/trades/aggragates"
 
 // activates is the "the price is at the bottom of the window" test, read on
-// EVERY tick of an armed trade. Sophos counts, over its own window of closed
-// daily bars, how many printed under a price — how many bars are to its LEFT
-// — and serves the level where that count is the most the gate allows. A tick
+// EVERY tick of an armed trade. Sophos counts, over its own window of
+// WindowBars closed 4h bars, how many CLOSED THEIR BODY under a price — how
+// many bars are to its LEFT — and serves the level where that count is the
+// most the gate allows. A wick that pierced the price months ago and closed back above it
+// is not one of them. A tick
 // price at or under it activates the trade (at or over the mirror level, for
 // an inverse ladder); the trade then keeps being watched, and the second
 // reading — no bar to the left at all — is what later arms the tolerance
@@ -30,14 +32,14 @@ func activates(trade aggragates.Trades, st state, price float64, ai aggragates.S
 		return false
 	}
 	if trade.Inverse {
-		return ai.HighWithBarsLeft > 0 && price >= ai.HighWithBarsLeft
+		return ai.HighBodyWithBarsLeft > 0 && price >= ai.HighBodyWithBarsLeft
 	}
-	return ai.LowWithBarsLeft > 0 && price <= ai.LowWithBarsLeft
+	return ai.LowBodyWithBarsLeft > 0 && price <= ai.LowBodyWithBarsLeft
 }
 
-// noBarsLeft is the second reading of the same window: NO bar of it printed
-// under the tick price (over it, on an inverse ladder) — the price is the
-// lowest the window has seen. It is what arms the tolerance exit on the last
+// noBarsLeft is the second reading of the same window: NO bar of it closed
+// its body under the tick price (over it, on an inverse ladder) — the price
+// is under every body the window holds. It is what arms the tolerance exit on the last
 // permitted depth; a block without a verdict or without the level arms
 // nothing.
 func noBarsLeft(trade aggragates.Trades, price float64, ai aggragates.SmartTakeLossIndicators) bool {
@@ -45,7 +47,7 @@ func noBarsLeft(trade aggragates.Trades, price float64, ai aggragates.SmartTakeL
 		return false
 	}
 	if trade.Inverse {
-		return ai.HighestHigh > 0 && price >= ai.HighestHigh
+		return ai.HighestBody > 0 && price >= ai.HighestBody
 	}
-	return ai.LowestLow > 0 && price <= ai.LowestLow
+	return ai.LowestBody > 0 && price <= ai.LowestBody
 }

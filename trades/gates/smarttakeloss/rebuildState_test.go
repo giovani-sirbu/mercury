@@ -14,7 +14,7 @@ func activationRow(price float64) aggragates.TradesLogs {
 }
 
 func TestRebuildStateWithoutRows(t *testing.T) {
-	trade := testutil.LadderTrade(false, fills(5, "17:38:00")...)
+	trade := sizedLadder(false, fills(5, "17:38:00")...)
 	// The newest fill is the last in slice order even when its stamp is
 	// older than the one before it (live-testing stamps by hand).
 	trade.History[4].CreatedAt = testutil.At("07:00:00")
@@ -29,7 +29,7 @@ func TestRebuildStateWithoutRows(t *testing.T) {
 }
 
 func TestRebuildStateFindsTheFramedRowAndTheFirstOneWins(t *testing.T) {
-	trade := testutil.LadderTrade(false, fills(5, "17:38:00")...)
+	trade := sizedLadder(false, fills(5, "17:38:00")...)
 	trade.Logs = []aggragates.TradesLogs{
 		{Message: "Hold stopLoss: cooldown: depth 5 held for 30m0s", Price: 180},
 		activationRow(179.78),
@@ -42,7 +42,7 @@ func TestRebuildStateFindsTheFramedRowAndTheFirstOneWins(t *testing.T) {
 }
 
 func TestRebuildStateIgnoresARowWithoutAPrice(t *testing.T) {
-	trade := testutil.LadderTrade(false, fills(5, "17:38:00")...)
+	trade := sizedLadder(false, fills(5, "17:38:00")...)
 	trade.Logs = []aggragates.TradesLogs{activationRow(0)}
 	if st := rebuildState(trade); st.active {
 		t.Fatalf("a marker without a price carries no fill, got %+v", st)
@@ -53,7 +53,7 @@ func TestRebuildStateIgnoresARowWithoutAPrice(t *testing.T) {
 // order: a partial fill of the sixth order is one depth, and an accounting
 // row or a SELL is no depth at all.
 func TestRebuildStateCountsDepthsAfterTheActivatingFill(t *testing.T) {
-	trade := testutil.LadderTrade(false, fills(5, "17:38:00")...)
+	trade := sizedLadder(false, fills(5, "17:38:00")...)
 	trade.Logs = []aggragates.TradesLogs{activationRow(179.78)}
 	if st := rebuildState(trade); st.depthsAfterActivation != 0 {
 		t.Fatalf("nothing filled after the activation, got %+v", st)
@@ -75,7 +75,7 @@ func TestRebuildStateCountsDepthsAfterTheActivatingFill(t *testing.T) {
 // (update_buy) without a fill; the next depth then fills ABOVE the
 // activating price and is still the one permitted depth.
 func TestRebuildStateCountsAFillAboveTheActivationPrice(t *testing.T) {
-	trade := testutil.LadderTrade(false, fills(5, "17:38:00")...)
+	trade := sizedLadder(false, fills(5, "17:38:00")...)
 	trade.Logs = []aggragates.TradesLogs{activationRow(179.78)}
 	trade.History = append(trade.History, aggragates.TradesHistory{Type: "BUY", Quantity: 1, Price: 183.10, OrderId: 6})
 	if st := rebuildState(trade); st.depthsAfterActivation != 1 {
@@ -86,7 +86,7 @@ func TestRebuildStateCountsAFillAboveTheActivationPrice(t *testing.T) {
 // With no fill at the row's price the count falls back to the fills strictly
 // beyond it.
 func TestRebuildStateFallsBackToFillsBeyondThePrice(t *testing.T) {
-	trade := testutil.LadderTrade(false, fills(6, "18:41:00")...) // …, 179.78, 175.83
+	trade := sizedLadder(false, fills(6, "18:41:00")...) // …, 179.78, 175.83
 	trade.Logs = []aggragates.TradesLogs{activationRow(178)}
 	if st := rebuildState(trade); !st.active || st.depthsAfterActivation != 1 {
 		t.Fatalf("only 175.83 is under 178, got %+v", st)
@@ -94,7 +94,7 @@ func TestRebuildStateFallsBackToFillsBeyondThePrice(t *testing.T) {
 }
 
 func TestRebuildStateInverseCountsHigherFills(t *testing.T) {
-	trade := testutil.LadderTrade(true, risingFills(5, "17:38:00")...) // 100 … 108
+	trade := sizedLadder(true, risingFills(5, "17:38:00")...) // 100 … 108
 	trade.Logs = []aggragates.TradesLogs{activationRow(106)}
 	if st := rebuildState(trade); st.depthsAfterActivation != 1 || st.lastFill().Price != 108 {
 		t.Fatalf("108 filled after the activation at 106, got %+v", st)

@@ -1,7 +1,7 @@
 // Package cooldown is the Cooldown flag's two gates, one on each side of the
 // first fill: the first-fill gate (FirstFillHold) — a hold on a local top,
-// activated by the higher-highs verdict sophos serves on /markers and then
-// released by price alone, with no time cap — and depth spacing, the gate
+// activated by the higher-highs verdict sophos serves on /markers, released
+// by price and bounded by FirstFillMaxHold — and depth spacing, the gate
 // that keeps a ladder from cascading through every depth in one drop
 // (DepthSpacingHoldReason).
 package cooldown
@@ -35,12 +35,16 @@ import (
 //   - anything else is a hold, written once and re-logged daily by
 //     gates.SaveHoldLog.
 //
-// No time cap. The previous gate expired after eight hours (run 97: every
-// gain sat in waits under eight hours) because its verdict stayed "expensive"
-// all the way up a rally and the trade entered higher for having waited. Here
-// a rally is the first case above and enters on the tick it is proven, so
-// the cap has nothing left to protect. Product decision 2026-09-05, not yet
-// measured on a backtest.
+// A time cap, FirstFillMaxHold, sits over all three: past it the entry goes
+// through at the tick price whatever the band says. An earlier gate expired
+// after eight hours (run 97: every gain sat in waits under eight hours)
+// because its verdict stayed "expensive" all the way up a rally and the trade
+// entered higher for having waited; that cap was removed on 2026-09-05, since
+// a rally is now the first case above and enters on the tick it is proven.
+// What removing it exposed is the case a rally never covered — a market that
+// goes sideways INSIDE the band, which held BTC trade 56980 for nine days —
+// and that is what the constant bounds now. The release is silent and writes
+// no row: see firstFillExpired and the call site.
 //
 // Every fact of the hold lives in the trade's log rows (firstFillState) and
 // nowhere else. trade.PositionPrice is the tick and is NEVER written here:
@@ -81,6 +85,15 @@ func FirstFillHold(event events.Events, side string) (events.Events, string) {
 
 	state := firstFillState(trade)
 	if state.enteredAbove {
+		return event, ""
+	}
+	// The cap. It releases silently: no row is written, and in particular NOT
+	// the entered row — that one means "the price ran up through the
+	// reference" and is what asks the second depth to arm at 2p
+	// (NextDepthDoubled). A hold that simply ran out of time made no wrong
+	// call about direction and earns no correction. The standing hold rows
+	// and the fill's own history row are the trace.
+	if firstFillExpired(state, event.TickTime()) {
 		return event, ""
 	}
 	if !state.activated {

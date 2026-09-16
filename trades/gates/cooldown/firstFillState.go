@@ -2,6 +2,7 @@ package cooldown
 
 import (
 	"strings"
+	"time"
 
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
@@ -24,7 +25,11 @@ type firstFillRecord struct {
 	// the standing row is a day old, at that day's price, so a later waiting
 	// row is a re-log and never a new reference.
 	reference float64
-	armed     bool
+	// activatedAt is that same row's stamp — the tick the hold started, which
+	// FirstFillMaxHold measures from. Zero when the engine did not stamp it,
+	// and then the hold never expires (firstFillExpired).
+	activatedAt time.Time
+	armed       bool
 	// anchor is the extreme the armed hold trails: the lowest armed-row Price
 	// on a long, the highest on an inverse ladder. A re-logged armed row
 	// carries the price of its day, which can sit anywhere inside the current
@@ -55,6 +60,7 @@ func firstFillState(trade aggragates.Trades) firstFillRecord {
 			if !state.activated {
 				state.activated = true
 				state.reference = row.Price
+				state.activatedAt = row.CreatedAt
 			}
 		case strings.Contains(row.Message, FirstFillArmedPrefix):
 			if !state.armed || firstFillDeeper(trade.Inverse, row.Price, state.anchor) {

@@ -7,36 +7,46 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 )
 
-// max(2, Depths − 3), never at or past the last configured depth.
+// max(minArmDepth, Depths − ArmDepthOffset), never at or past the last
+// configured depth. Written against the constants so a recalibration of the
+// offset moves the expectations with it.
 func TestArmDepth(t *testing.T) {
-	cases := []struct{ maxDepths, want int }{
-		{9, 6}, {8, 5}, {7, 4}, {6, 3}, {5, 2}, {4, 2}, {3, 2}, {2, 2}, {1, 2}, {0, 2},
-	}
-	for _, c := range cases {
-		if got := ArmDepth(c.maxDepths); got != c.want {
-			t.Errorf("ArmDepth(%d) = %d, want %d", c.maxDepths, got, c.want)
+	for maxDepths := 0; maxDepths <= 12; maxDepths++ {
+		got := ArmDepth(maxDepths)
+		if got < minArmDepth {
+			t.Errorf("ArmDepth(%d) = %d, under minArmDepth %d", maxDepths, got, minArmDepth)
+		}
+		if maxDepths > minArmDepth && got >= maxDepths {
+			t.Errorf("ArmDepth(%d) = %d, at or past the last configured depth", maxDepths, got)
+		}
+		if want := maxDepths - ArmDepthOffset; want >= minArmDepth && want < maxDepths && got != want {
+			t.Errorf("ArmDepth(%d) = %d, want Depths − offset = %d", maxDepths, got, want)
+		}
+		if maxDepths <= minArmDepth && got != minArmDepth {
+			t.Errorf("ArmDepth(%d) = %d, want the floor %d", maxDepths, got, minArmDepth)
 		}
 	}
 }
 
-// The w3s row (Depths 8) arms at the fifth fill, not the fourth; a
+// The w3s row (Depths 8) arms at ArmDepth fills and not one earlier; a
 // fractional Depths is floored before the subtraction.
 func TestArmedAtArmDepth(t *testing.T) {
-	if armed(testutil.LadderTrade(false, fills(4, "17:38:00")...)) {
-		t.Fatal("4 of 8 filled entries must not arm")
+	arm := ArmDepth(8)
+	if armed(testutil.LadderTrade(false, fills(arm-1, "17:38:00")...)) {
+		t.Fatalf("%d of 8 filled entries must not arm", arm-1)
 	}
-	five := testutil.LadderTrade(false, fills(5, "17:38:00")...)
-	if !armed(five) {
-		t.Fatal("5 of 8 filled entries must arm")
+	at := testutil.LadderTrade(false, fills(arm, "17:38:00")...)
+	if !armed(at) {
+		t.Fatalf("%d of 8 filled entries must arm", arm)
 	}
 
-	five.StrategyPair.StrategySettings[0].Depths = 8.9
-	if !armed(five) {
-		t.Fatal("Depths 8.9 floors to 8 and arms at 5")
+	at.StrategyPair.StrategySettings[0].Depths = 8.9
+	if !armed(at) {
+		t.Fatalf("Depths 8.9 floors to 8 and arms at %d", arm)
 	}
-	five.StrategyPair.StrategySettings[0].Depths = 9
-	if armed(five) {
-		t.Fatal("Depths 9 arms at 6, not 5")
+	at.StrategyPair.StrategySettings[0].Depths = 9
+	if armed(at) {
+		t.Fatalf("Depths 9 arms at %d, not %d", ArmDepth(9), arm)
 	}
 }
 

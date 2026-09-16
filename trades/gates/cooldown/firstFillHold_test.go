@@ -219,27 +219,81 @@ func TestFirstFillHoldFillsOnTheBounce(t *testing.T) {
 // gates.SaveHoldLog writes a standing row again after a day, at that day's
 // price. The reference is the FIRST waiting row and the anchor the lowest
 // armed row, so a re-log moves neither.
-func TestFirstFillHoldRelogKeepsTheReferenceAndTheLow(t *testing.T) {
-	nextDay := testutil.At("09:00:00").Add(25 * time.Hour)
+//
+// Asserted on firstFillState rather than through FirstFillHold: with
+// holdRelogAfter at 24h and FirstFillMaxHold at 12h no first-fill hold now
+// survives long enough to BE re-logged, so driving the gate 25 hours forward
+// only ever proves the cap. The rule the state owns still has to hold — the
+// rows arrive from the engines, and a wider cap (or none) puts them back in
+// front of it.
+func TestFirstFillStateRelogKeepsTheReferenceAndTheLow(t *testing.T) {
+	day := testutil.At("09:00:00")
+	trade := aggragates.Trades{Logs: []aggragates.TradesLogs{
+		{Message: "Hold entry: " + FirstFillWaitingPrefix + "100", Price: 100, CreatedAt: day},
+		// The re-log of that same wait, a day later at that day's price.
+		{Message: "Hold entry: " + FirstFillWaitingPrefix + "100", Price: 101.5, CreatedAt: day.Add(25 * time.Hour)},
+		{Message: "Hold entry: " + FirstFillArmedPrefix + "97.40", Price: 97.40, CreatedAt: day.Add(26 * time.Hour)},
+		{Message: "Hold entry: " + FirstFillArmedPrefix + "96.50", Price: 96.50, CreatedAt: day.Add(27 * time.Hour)},
+		// The re-log of the armed row, above the low it trails.
+		{Message: "Hold entry: " + FirstFillArmedPrefix + "96.50", Price: 96.60, CreatedAt: day.Add(51 * time.Hour)},
+	}}
 
-	held := ticks(t, firstFillEvent(false, refused()), testutil.At("09:00:00"), 100)
-	relogged, _ := tick(t, held, 101.5, nextDay)
-	if len(relogged.Trade.Logs) != 2 || relogged.Trade.Logs[1].Price != 101.5 {
-		t.Fatalf("the day-old wait must be written again at the day's price, got %q", rows(relogged))
+	state := firstFillState(trade)
+	if !state.activated || state.reference != 100 {
+		t.Fatalf("reference = %v, want the first waiting row's 100", state.reference)
 	}
-	// up(100) = 102.5641; from 101.5 it would be 104.1026.
-	if _, reason := tick(t, relogged, 102.6, nextDay.Add(time.Minute)); reason != "" {
-		t.Fatalf("the reference must stay the first row's price, got %q", reason)
+	if !state.armed || state.anchor != 96.50 {
+		t.Fatalf("anchor = %v, want the lowest armed row's 96.50", state.anchor)
+	}
+	if !state.activatedAt.Equal(day) {
+		t.Fatalf("activatedAt = %s, want the first waiting row's stamp %s", state.activatedAt, day)
+	}
+}
+
+// The cap: past FirstFillMaxHold the entry goes through at the tick price,
+// wherever it sits inside the band that was holding it. BTC trade 56980 of
+// backtest 140 is the shape — nine days inside a band it never left.
+func TestFirstFillHoldExpiresAtTheCap(t *testing.T) {
+	start := testutil.At("09:00:00")
+	held := ticks(t, firstFillEvent(false, refused()), start, 100)
+
+	// A tick inside the band one second under the cap is still held.
+	if _, reason := tick(t, held, 100.5, start.Add(FirstFillMaxHold-time.Second)); reason == "" {
+		t.Fatal("inside the band and under the cap the entry must still be held")
+	}
+	// At the cap it is released, and no row is written: in particular not the
+	// entered row, which would ask the second depth to arm at 2p.
+	released, reason := tick(t, held, 100.5, start.Add(FirstFillMaxHold))
+	if reason != "" {
+		t.Fatalf("at the cap the entry must proceed, got %q", reason)
+	}
+	if len(released.Trade.Logs) != 1 {
+		t.Fatalf("the release must write no row, got %q", rows(released))
+	}
+	if NextDepthDoubled(released.Trade) {
+		t.Fatal("a hold that ran out of time made no wrong call: the next depth must not double")
+	}
+}
+
+// An unknown clock never expires: the cap must not switch the whole gate off
+// on an engine that does not stamp its rows.
+func TestFirstFillHoldNeverExpiresOnUnknownClocks(t *testing.T) {
+	start := testutil.At("09:00:00")
+	held := ticks(t, firstFillEvent(false, refused()), start, 100)
+
+	unstamped := held
+	unstamped.Trade.Logs = append([]aggragates.TradesLogs(nil), held.Trade.Logs...)
+	unstamped.Trade.Logs[0].CreatedAt = time.Time{}
+	if _, reason := tick(t, unstamped, 100.5, start.Add(30*24*time.Hour)); reason == "" {
+		t.Fatal("an unstamped hold row must keep holding, not expire")
 	}
 
-	lower := ticks(t, firstFillEvent(false, refused()), testutil.At("09:00:00"), 100, 97.40, 96.50)
-	relogged, _ = tick(t, lower, 96.60, nextDay)
-	if len(relogged.Trade.Logs) != 4 || relogged.Trade.Logs[3].Price != 96.60 {
-		t.Fatalf("the day-old armed row must be written again at the day's price, got %q", rows(relogged))
-	}
-	// bounce(96.50) = 96.6450; from 96.60 it would be 96.7451.
-	if _, reason := tick(t, relogged, 96.65, nextDay.Add(time.Minute)); reason != "" {
-		t.Fatalf("the anchor must stay the lowest armed row, got %q", reason)
+	noTick := held
+	noTick.Trade.PositionPrice = 100.5
+	noTick.Timestamp = 0
+	side := aggragates.EntrySide(noTick.Trade, noTick.Params.AIIndicators)
+	if _, reason := FirstFillHold(noTick, side); reason == "" {
+		t.Fatal("a zero tick clock must keep holding, not expire")
 	}
 }
 

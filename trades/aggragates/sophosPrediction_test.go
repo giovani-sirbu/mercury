@@ -22,7 +22,7 @@ func TestSophosPredictionIndicatorsMapsVerdict(t *testing.T) {
 		"crashActive":true,
 		"crashScore":91,
 		"crashReasons":["breadth"],
-		"smartTakeLoss":{"hasVerdict":true,"lowestLow":179.75,"lowWithBarsLeft":181.2,"highestHigh":195.1,"highWithBarsLeft":193.4,"upperBB":193.83,"lowerBB":176.4,"resistanceFromTime":1640673000000,"resistanceFromPrice":193.25,"resistanceToTime":1640691900000,"resistanceToPrice":192.97,"supportFromTime":0,"supportFromPrice":0,"supportToTime":0,"supportToPrice":0},
+		"smartTakeLoss":{"hasVerdict":true,"lowestBody":179.75,"lowBodyWithBarsLeft":181.2,"highestBody":195.1,"highBodyWithBarsLeft":193.4,"upperBB":193.83,"lowerBB":176.4,"resistanceFromTime":1640673000000,"resistanceFromPrice":193.25,"resistanceToTime":1640691900000,"resistanceToPrice":192.97,"supportFromTime":0,"supportFromPrice":0,"supportToTime":0,"supportToPrice":0},
 		"patternVerdict":{"name":"asc_triangle","displayName":"ascending triangle","direction":"long","score":71,"level":96000,"levelKind":"resistance","stopLoss":94000,"takeProfit":104500,"interval":"15m"},
 		"fib":{"swingLow":100,"swingHigh":110,"levels":[106.18,105,103.82,102.14]}
 	}`)
@@ -37,8 +37,8 @@ func TestSophosPredictionIndicatorsMapsVerdict(t *testing.T) {
 		t.Fatalf("crash must map, got %+v", mapped)
 	}
 	stl := mapped.SmartTakeLoss
-	if !stl.HasVerdict || stl.LowestLow != 179.75 || stl.LowWithBarsLeft != 181.2 ||
-		stl.HighestHigh != 195.1 || stl.HighWithBarsLeft != 193.4 || stl.UpperBB != 193.83 || stl.LowerBB != 176.4 {
+	if !stl.HasVerdict || stl.LowestBody != 179.75 || stl.LowBodyWithBarsLeft != 181.2 ||
+		stl.HighestBody != 195.1 || stl.HighBodyWithBarsLeft != 193.4 || stl.UpperBB != 193.83 || stl.LowerBB != 176.4 {
 		t.Fatalf("the smart take loss levels must map field for field, got %+v", stl)
 	}
 	if stl.Resistance.From.At != 1640673000000 || stl.Resistance.From.Price != 193.25 ||
@@ -91,7 +91,7 @@ func TestSophosPredictionWithoutSmartTakeLossIsInert(t *testing.T) {
 	}
 
 	var noVerdict SophosPrediction
-	raw := `{"smartTakeLoss":{"hasVerdict":false,"lowestLow":0,"lowWithBarsLeft":0,"highestHigh":0,"highWithBarsLeft":0,"upperBB":0,"lowerBB":0,"resistanceFromTime":0,"resistanceFromPrice":0,"resistanceToTime":0,"resistanceToPrice":0,"supportFromTime":0,"supportFromPrice":0,"supportToTime":0,"supportToPrice":0}}`
+	raw := `{"smartTakeLoss":{"hasVerdict":false,"lowestBody":0,"lowBodyWithBarsLeft":0,"highestBody":0,"highBodyWithBarsLeft":0,"upperBB":0,"lowerBB":0,"resistanceFromTime":0,"resistanceFromPrice":0,"resistanceToTime":0,"resistanceToPrice":0,"supportFromTime":0,"supportFromPrice":0,"supportToTime":0,"supportToPrice":0}}`
 	if err := json.Unmarshal([]byte(raw), &noVerdict); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}

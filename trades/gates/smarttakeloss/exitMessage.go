@@ -10,12 +10,16 @@ import (
 // The legs a forced exit can name in Result.Reason: long on the left, the
 // inverse mirror on the right.
 const (
-	reasonResistanceLine = "resistance line"
-	reasonSupportLine    = "support line"
-	reasonUpperBand      = "upper bollinger band"
-	reasonLowerBand      = "lower bollinger band"
-	reasonToleranceUnder = "tolerance under the last fill"
-	reasonToleranceAbove = "tolerance above the last fill"
+	reasonResistanceLine        = "resistance line"
+	reasonSupportLine           = "support line"
+	reasonUpperBand             = "upper bollinger band"
+	reasonLowerBand             = "lower bollinger band"
+	reasonToleranceUnder        = "tolerance under the last fill"
+	reasonToleranceAbove        = "tolerance above the last fill"
+	reasonSupportBreak          = "support line break"
+	reasonResistanceBreak       = "resistance line break"
+	reasonSupportBounceBreak    = "support break after bounce"
+	reasonResistanceBounceBreak = "resistance break after bounce"
 )
 
 // ExitMessage is the INFO row the engines write beside a forced sellLoss:

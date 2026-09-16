@@ -24,7 +24,7 @@ var (
 )
 
 func armedTrade() aggragates.Trades {
-	return testutil.LadderTrade(false, fills(5, "17:38:00")...)
+	return sizedLadder(false, fills(5, "17:38:00")...)
 }
 
 func activeTrade() aggragates.Trades {
@@ -34,7 +34,7 @@ func activeTrade() aggragates.Trades {
 }
 
 func lastDepthTrade() aggragates.Trades {
-	trade := testutil.LadderTrade(false, fills(6, "18:41:00")...)
+	trade := sizedLadder(false, fills(6, "18:41:00")...)
 	trade.Logs = []aggragates.TradesLogs{activationRow(179.78)}
 	return trade
 }
@@ -82,15 +82,15 @@ func TestApplyInertWithoutTheFlagOnAChildOrWithoutInputs(t *testing.T) {
 }
 
 func TestApplyInertBelowArmDepth(t *testing.T) {
-	four := testutil.LadderTrade(false, fills(4, "17:38:00")...)
-	assertUntouched(t, Apply(four, "", 179.90, activationTick, withBlock(solBlock())), "")
-	assertUntouched(t, Apply(four, "stopLoss", 179.90, activationTick, withBlock(solBlock())), "stopLoss")
+	shallow := testutil.LadderTrade(false, fills(ArmDepth(8)-1, "17:38:00")...)
+	assertUntouched(t, Apply(shallow, "", 179.90, activationTick, withBlock(solBlock())), "")
+	assertUntouched(t, Apply(shallow, "stopLoss", 179.90, activationTick, withBlock(solBlock())), "stopLoss")
 }
 
 // An armed trade whose price still has more than MaxBarsLeft bars under it is
 // the plain ladder: a cent over the level is one bar too many.
 func TestApplyArmedDeadZoneTickUnchanged(t *testing.T) {
-	over := solBlock().LowWithBarsLeft + 0.01
+	over := solBlock().LowBodyWithBarsLeft + 0.01
 	assertUntouched(t, Apply(armedTrade(), "", over, activationTick, withBlock(solBlock())), "")
 	assertUntouched(t, Apply(armedTrade(), "stopLoss", over, activationTick, withBlock(solBlock())), "stopLoss")
 }
@@ -111,11 +111,25 @@ func TestApplyActivationTickReturnsTheRowAndForcesNothing(t *testing.T) {
 		t.Fatalf("the row names the raw state and carries the fill, got %+v", *got.Activation)
 	}
 
-	// The ladder's own proposal on that tick still passes: the one more
-	// depth is permitted.
+	// The ladder's own proposal on that tick: while a depth is permitted the
+	// arming passes; with none permitted it is already the exit — or, inside
+	// a wait, the dropped add.
 	got = Apply(trade, "stopLoss", 175, activationTick, withBlock(solBlock()))
-	if got.Position != "stopLoss" || got.Activation == nil {
-		t.Fatalf("the activation tick keeps the ladder's arming, got %+v", got)
+	if got.Activation == nil {
+		t.Fatalf("the activation tick must hand back the marker row, got %+v", got)
+	}
+	waitOver := activationTick.Sub(testutil.At("17:38:00")) >= MinAgeAfterLastFill
+	switch {
+	case !LastPermittedDepthExit || PermittedDepths > 0:
+		if got.Position != "stopLoss" {
+			t.Fatalf("the activation tick keeps the ladder's arming while a depth is permitted, got %+v", got)
+		}
+	case waitOver:
+		assertForced(t, got, "tolerance under the last fill")
+	default:
+		if got.Position != "" {
+			t.Fatalf("with no depth permitted the arming is dropped while the exit waits, got %+v", got)
+		}
 	}
 }
 
@@ -171,18 +185,33 @@ func TestApplyNeverReforcesARestingSellLoss(t *testing.T) {
 	assertUntouched(t, Apply(trade, "sellLoss", 170, depthExitTick, withBlock(solBlock())), "sellLoss")
 }
 
-// The one permitted depth: its arming passes, and nothing sells before it
-// fills — even far under the activating fill.
+// The permitted depth, while one is permitted: its arming passes, and
+// nothing sells before it fills — even far under the activating fill. With
+// none permitted (PermittedDepths 0) the activating fill is the last depth:
+// the arming is the exit once the wait is over, and under everything the
+// window holds the tolerance sells from the dead zone.
 func TestApplyPermittedDepthPassesTheArmingThrough(t *testing.T) {
 	block := solBlock()
-	for _, tick := range []time.Time{activationTick, activeExitTick} {
-		assertUntouched(t, Apply(activeTrade(), "stopLoss", 175, tick, withBlock(block)), "stopLoss")
-		assertUntouched(t, Apply(activeTrade(), "update_stopLoss", 174, tick, withBlock(block)), "update_stopLoss")
-		buying := activeTrade()
-		buying.PositionType = "stopLoss"
-		assertUntouched(t, Apply(buying, "buy", 175.83, tick, withBlock(block)), "buy")
-		assertUntouched(t, Apply(activeTrade(), "", 175, tick, withBlock(block)), "")
+	if !LastPermittedDepthExit || PermittedDepths > 0 {
+		for _, tick := range []time.Time{activationTick, activeExitTick} {
+			assertUntouched(t, Apply(activeTrade(), "stopLoss", 175, tick, withBlock(block)), "stopLoss")
+			assertUntouched(t, Apply(activeTrade(), "update_stopLoss", 174, tick, withBlock(block)), "update_stopLoss")
+			buying := activeTrade()
+			buying.PositionType = "stopLoss"
+			assertUntouched(t, Apply(buying, "buy", 175.83, tick, withBlock(block)), "buy")
+			assertUntouched(t, Apply(activeTrade(), "", 175, tick, withBlock(block)), "")
+		}
+		return
 	}
+	assertForced(t, Apply(activeTrade(), "stopLoss", 175, activeExitTick, withBlock(block)), "tolerance under the last fill")
+	assertForced(t, Apply(activeTrade(), "update_stopLoss", 174, activeExitTick, withBlock(block)), "tolerance under the last fill")
+	buying := activeTrade()
+	buying.PositionType = "stopLoss"
+	assertForced(t, Apply(buying, "buy", 175.83, activeExitTick, withBlock(block)), "tolerance under the last fill")
+	assertForced(t, Apply(activeTrade(), "", 175, activeExitTick, withBlock(block)), "tolerance under the last fill")
+	// In the dead zone over the tolerance line nothing sells and nothing is
+	// proposed.
+	assertUntouched(t, Apply(activeTrade(), "", 179.90, activeExitTick, withBlock(block)), "")
 }
 
 // Trade 49490 took its permitted depth at 13:09:30 and sold one tolerance
@@ -191,6 +220,9 @@ func TestApplyPermittedDepthPassesTheArmingThrough(t *testing.T) {
 // depth the ladder may not add either: the add-side proposal is dropped, so
 // the wait cannot be reset by a fill it would otherwise take.
 func TestApplyWaitsMinAgeAfterTheLastFillBeforeAnyExit(t *testing.T) {
+	if MinAgeAfterLastFill <= 0 {
+		t.Skip("MinAgeAfterLastFill is deactivated (0): nothing waits, no add is refused")
+	}
 	block := solBlock()
 	block.Resistance = aggragates.TrendLine{From: anchor("06:30:00", 193.25), To: anchor("11:45:00", 192.97)}
 	line, _ := projectLine(block.Resistance, depthTick.UnixMilli())
@@ -257,8 +289,9 @@ func TestApplyMinAgeHoldsOnAnUnknownClock(t *testing.T) {
 	assertUntouched(t, Apply(unstamped, "", tolerance, depthExitTick, withBlock(block)), "")
 	assertUntouched(t, Apply(lastDepthTrade(), "", tolerance, time.Time{}, withBlock(block)), "")
 
-	// …and the add stays refused, so an unmeasurable trade commits nothing.
-	if got := Apply(unstamped, "stopLoss", tolerance, depthExitTick, withBlock(block)); got.Position != "" {
+	// …and, while the last-permitted-depth rule is on, the add stays
+	// refused, so an unmeasurable trade commits nothing.
+	if got := Apply(unstamped, "stopLoss", tolerance, depthExitTick, withBlock(block)); LastPermittedDepthExit && got.Position != "" {
 		t.Fatalf("an unstamped last fill must not add either, got %+v", got)
 	}
 }

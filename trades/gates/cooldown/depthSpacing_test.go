@@ -82,7 +82,7 @@ func TestDepthSpacingResetsTheEscalationAfterARealPause(t *testing.T) {
 func TestDepthSpacingHoldsTheRecordedTrade25858Cascade(t *testing.T) {
 	state := fold(trade25858...)
 
-	if want := testutil.At("16:39:22").Add(4 * time.Hour); !state.eligibleFrom.Equal(want) { // 20:39:22
+	if want := testutil.At("16:39:22").Add(depthSpacingMaxHold); !state.eligibleFrom.Equal(want) {
 		t.Fatalf("eligibleFrom = %s, want %s", state.eligibleFrom, want)
 	}
 	if state.step != 7 {
@@ -90,14 +90,18 @@ func TestDepthSpacingHoldsTheRecordedTrade25858Cascade(t *testing.T) {
 	}
 }
 
-// Two base holds apart is genuinely spaced: each depth lands a full window
-// past the previous expiry, so the escalation never leaves step 1 and no
-// depth is ever parked.
-func TestDepthSpacingNeverHoldsALadderTwoBaseHoldsApart(t *testing.T) {
+// A ladder whose depths land a full window past the previous expiry is
+// genuinely spaced: the escalation never leaves step 1 and no depth is ever
+// parked. That distance is base + window, and it is written as such rather
+// than as a multiple of the base hold — the window is a calibration knob and
+// has been both narrower and wider than the hold, so any fixed multiple is
+// only accidentally far enough.
+func TestDepthSpacingNeverHoldsALadderAFullWindowPastEachExpiry(t *testing.T) {
 	start := testutil.At("09:00:00")
+	spacing := DepthSpacingBaseHold + DepthSpacingWindow
 	var placements []time.Time
 	for i := 0; i < 7; i++ {
-		placements = append(placements, start.Add(time.Duration(i)*2*DepthSpacingBaseHold))
+		placements = append(placements, start.Add(time.Duration(i)*spacing))
 	}
 
 	state := fold(placements...)
@@ -109,25 +113,28 @@ func TestDepthSpacingNeverHoldsALadderTwoBaseHoldsApart(t *testing.T) {
 		t.Fatalf("eligibleFrom = %s, want %s", state.eligibleFrom, want)
 	}
 	// The next depth at the same cadence is already past the expiry.
-	if next := last.Add(2 * DepthSpacingBaseHold); next.Before(state.eligibleFrom) {
+	if next := last.Add(spacing); next.Before(state.eligibleFrom) {
 		t.Error("the next depth at this cadence must not be parked")
 	}
 }
 
-// Doubling from the base hold reaches four hours at the third consecutive fast
-// depth (60m, 2h, 4h). The hold clamps there and stays clamped: past four
-// hours the gate would make the trade sit out the bottom of the move.
+// Escalating from the base hold reaches the ceiling a few fast depths in
+// (4h, 6h, 9h, 12h). The hold clamps there and stays clamped: past the ceiling
+// the gate would make the trade sit out the bottom of the move.
 // The schedule is asserted as a rule, not as a list of durations: the base
-// hold and the window are calibration knobs that move, and a table of literals
-// turns every calibration change into a red suite that says nothing.
-func TestDepthSpacingClampsTheHoldAtFourHours(t *testing.T) {
+// hold, the factor and the window are calibration knobs that move, and a table
+// of literals turns every calibration change into a red suite that says
+// nothing.
+func TestDepthSpacingClampsTheHoldAtTheCeiling(t *testing.T) {
 	if got := depthSpacingHoldFor(1); got != DepthSpacingBaseHold {
 		t.Errorf("the first fast depth costs %s, want the base %s", got, DepthSpacingBaseHold)
 	}
 
 	previous := DepthSpacingBaseHold
 	for step := 2; step <= 40; step++ {
-		want := previous * depthSpacingFactor
+		// The factor is fractional, so the expectation scales the same way
+		// depthSpacingHoldFor does — through float64, not as a Duration.
+		want := time.Duration(float64(previous) * depthSpacingFactor)
 		if want > depthSpacingMaxHold {
 			want = depthSpacingMaxHold
 		}

@@ -16,13 +16,13 @@ import (
 // the same block never activates an inverse trade.
 func solBlock() aggragates.SmartTakeLossIndicators {
 	return aggragates.SmartTakeLossIndicators{
-		HasVerdict:       true,
-		LowestLow:        179.75,
-		LowWithBarsLeft:  181.20,
-		HighestHigh:      195.10,
-		HighWithBarsLeft: 193.40,
-		UpperBB:          193.83,
-		LowerBB:          176.40,
+		HasVerdict:           true,
+		LowestBody:           179.75,
+		LowBodyWithBarsLeft:  181.20,
+		HighestBody:          195.10,
+		HighBodyWithBarsLeft: 193.40,
+		UpperBB:              193.83,
+		LowerBB:              176.40,
 	}
 }
 
@@ -32,14 +32,29 @@ func solBlock() aggragates.SmartTakeLossIndicators {
 // so it never activates a long.
 func risingBlock() aggragates.SmartTakeLossIndicators {
 	return aggragates.SmartTakeLossIndicators{
-		HasVerdict:       true,
-		LowestLow:        90,
-		LowWithBarsLeft:  92,
-		HighestHigh:      108.50,
-		HighWithBarsLeft: 106,
-		UpperBB:          112,
-		LowerBB:          96,
+		HasVerdict:           true,
+		LowestBody:           90,
+		LowBodyWithBarsLeft:  92,
+		HighestBody:          108.50,
+		HighBodyWithBarsLeft: 106,
+		UpperBB:              112,
+		LowerBB:              96,
 	}
+}
+
+// sizedLadder is testutil.LadderTrade with its Depths sized so that the FIFTH
+// fill arms it whatever ArmDepthOffset says and a depth is always left to
+// add: Depths = max(5 + ArmDepthOffset, fills + 1). Every fixture in this
+// package is written around fill 5 (179.78) and fill 6 (175.83) of SOL
+// 45211; the tests of ArmDepth itself use the plain w3s row (Depths 8).
+func sizedLadder(inverse bool, fills ...testutil.LadderFill) aggragates.Trades {
+	trade := testutil.LadderTrade(inverse, fills...)
+	depths := 5 + ArmDepthOffset
+	if len(fills)+1 > depths {
+		depths = len(fills) + 1
+	}
+	trade.StrategyPair.StrategySettings[0].Depths = float64(depths)
+	return trade
 }
 
 // fills is the w3s ladder n deep: the first n−1 fills a quarter hour apart
@@ -67,7 +82,7 @@ func risingFills(n int, lastClock string) []testutil.LadderFill {
 // allows MaxBarsLeft bars under it. Touching it is enough; a cent above is
 // one bar too many.
 func TestActivatesAtTheLevelWithBarsStillToTheLeft(t *testing.T) {
-	trade := testutil.LadderTrade(false, fills(5, "17:38:00")...)
+	trade := sizedLadder(false, fills(5, "17:38:00")...)
 	st := rebuildState(trade)
 	block := solBlock()
 
@@ -76,10 +91,10 @@ func TestActivatesAtTheLevelWithBarsStillToTheLeft(t *testing.T) {
 		price float64
 		want  bool
 	}{
-		{"at the level", block.LowWithBarsLeft, true},
-		{"under it", block.LowWithBarsLeft - 0.01, true},
-		{"under everything the window holds", block.LowestLow - 5, true},
-		{"a cent over the level", block.LowWithBarsLeft + 0.01, false},
+		{"at the level", block.LowBodyWithBarsLeft, true},
+		{"under it", block.LowBodyWithBarsLeft - 0.01, true},
+		{"under everything the window holds", block.LowestBody - 5, true},
+		{"a cent over the level", block.LowBodyWithBarsLeft + 0.01, false},
 		{"far over it", 190, false},
 		{"no price", 0, false},
 	}
@@ -94,14 +109,14 @@ func TestActivatesAtTheLevelWithBarsStillToTheLeft(t *testing.T) {
 // ago activates on the tick the price arrives. This is the whole point of
 // reading it per tick — the trades this rule exists for have stopped filling.
 func TestActivatesOnAnyTickNotOnlyAtAFill(t *testing.T) {
-	stale := testutil.LadderTrade(false, fills(5, "08:00:00")...)
+	stale := sizedLadder(false, fills(5, "08:00:00")...)
 	if !activates(stale, rebuildState(stale), 180, solBlock()) {
 		t.Fatal("a ladder that stopped filling still activates when the price arrives")
 	}
 
 	// The stamp is the exit's business (MinAgeAfterLastFill), never the
 	// activation's: the activation refuses nothing on its tick.
-	unstamped := testutil.LadderTrade(false, fills(5, "17:38:00")...)
+	unstamped := sizedLadder(false, fills(5, "17:38:00")...)
 	unstamped.History[4].CreatedAt = time.Time{}
 	if !activates(unstamped, rebuildState(unstamped), 180, solBlock()) {
 		t.Fatal("a fill without a stamp does not stop the activation")
@@ -112,7 +127,7 @@ func TestActivatesOnAnyTickNotOnlyAtAFill(t *testing.T) {
 // verdict and a block without the level never activate: the cooldown's
 // fail-open posture.
 func TestActivatesNeverWithoutAFillAVerdictOrALevel(t *testing.T) {
-	trade := testutil.LadderTrade(false, fills(5, "17:38:00")...)
+	trade := sizedLadder(false, fills(5, "17:38:00")...)
 	st := rebuildState(trade)
 
 	if activates(trade, st, 180, aggragates.SmartTakeLossIndicators{}) {
@@ -124,7 +139,7 @@ func TestActivatesNeverWithoutAFillAVerdictOrALevel(t *testing.T) {
 		t.Fatal("a block without a verdict must not activate")
 	}
 	noLevel := solBlock()
-	noLevel.LowWithBarsLeft = 0
+	noLevel.LowBodyWithBarsLeft = 0
 	if activates(trade, st, 180, noLevel) {
 		t.Fatal("a block without the level must not activate")
 	}
@@ -134,21 +149,21 @@ func TestActivatesNeverWithoutAFillAVerdictOrALevel(t *testing.T) {
 }
 
 func TestActivatesInverseOnTheHighLevel(t *testing.T) {
-	inverse := testutil.LadderTrade(true, risingFills(5, "17:38:00")...)
+	inverse := sizedLadder(true, risingFills(5, "17:38:00")...)
 	st := rebuildState(inverse)
 	block := risingBlock()
 
-	if !activates(inverse, st, block.HighWithBarsLeft, block) {
+	if !activates(inverse, st, block.HighBodyWithBarsLeft, block) {
 		t.Fatal("an inverse ladder activates at the level with bars still over it")
 	}
-	if activates(inverse, st, block.HighWithBarsLeft-0.01, block) {
+	if activates(inverse, st, block.HighBodyWithBarsLeft-0.01, block) {
 		t.Fatal("a cent under the level is one bar too many for an inverse ladder")
 	}
 	if activates(inverse, st, 179.90, solBlock()) {
 		t.Fatal("the long's low levels are not the inverse ladder's signal")
 	}
 
-	long := testutil.LadderTrade(false, fills(5, "17:38:00")...)
+	long := sizedLadder(false, fills(5, "17:38:00")...)
 	if activates(long, rebuildState(long), 107, block) {
 		t.Fatal("the inverse ladder's high levels are not the long's signal")
 	}
@@ -157,16 +172,16 @@ func TestActivatesInverseOnTheHighLevel(t *testing.T) {
 // The second reading of the same window: no bar to the left AT ALL, which is
 // what arms the tolerance exit.
 func TestNoBarsLeftAtTheWindowsOwnExtreme(t *testing.T) {
-	long := testutil.LadderTrade(false, fills(5, "17:38:00")...)
+	long := sizedLadder(false, fills(5, "17:38:00")...)
 	block := solBlock()
 
-	if !noBarsLeft(long, block.LowestLow, block) {
+	if !noBarsLeft(long, block.LowestBody, block) {
 		t.Fatal("the window's lowest low has no bar under it")
 	}
-	if !noBarsLeft(long, block.LowestLow-1, block) {
+	if !noBarsLeft(long, block.LowestBody-1, block) {
 		t.Fatal("a price under the window has no bar under it either")
 	}
-	if noBarsLeft(long, block.LowestLow+0.01, block) {
+	if noBarsLeft(long, block.LowestBody+0.01, block) {
 		t.Fatal("a cent over the lowest low still has a bar to the left")
 	}
 	// Between the two levels is exactly where the activation stands and the
@@ -175,18 +190,18 @@ func TestNoBarsLeftAtTheWindowsOwnExtreme(t *testing.T) {
 		t.Fatal("between the levels the trade is active and the tolerance is not armed")
 	}
 
-	inverse := testutil.LadderTrade(true, risingFills(5, "17:38:00")...)
+	inverse := sizedLadder(true, risingFills(5, "17:38:00")...)
 	rising := risingBlock()
-	if !noBarsLeft(inverse, rising.HighestHigh, rising) || noBarsLeft(inverse, rising.HighestHigh-0.01, rising) {
+	if !noBarsLeft(inverse, rising.HighestBody, rising) || noBarsLeft(inverse, rising.HighestBody-0.01, rising) {
 		t.Fatal("an inverse ladder mirrors the reading on the window's highest high")
 	}
 
-	if noBarsLeft(long, block.LowestLow, aggragates.SmartTakeLossIndicators{}) {
+	if noBarsLeft(long, block.LowestBody, aggragates.SmartTakeLossIndicators{}) {
 		t.Fatal("the zero block arms nothing")
 	}
 	noVerdict := solBlock()
 	noVerdict.HasVerdict = false
-	if noBarsLeft(long, block.LowestLow, noVerdict) {
+	if noBarsLeft(long, block.LowestBody, noVerdict) {
 		t.Fatal("a block without a verdict arms nothing")
 	}
 }

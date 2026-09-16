@@ -9,11 +9,12 @@ import (
 // Armed is the predicate hermes and live-testing ask before their
 // empty-position early return: flag, parent, ArmDepth.
 func TestArmed(t *testing.T) {
-	if !Armed(testutil.LadderTrade(false, fills(5, "17:38:00")...)) {
-		t.Fatal("a 5-deep w3s ladder under the flag is armed")
+	arm := ArmDepth(8)
+	if !Armed(testutil.LadderTrade(false, fills(arm, "17:38:00")...)) {
+		t.Fatalf("a %d-deep w3s ladder under the flag is armed", arm)
 	}
-	if Armed(testutil.LadderTrade(false, fills(4, "17:38:00")...)) {
-		t.Fatal("4 fills are below ArmDepth")
+	if Armed(testutil.LadderTrade(false, fills(arm-1, "17:38:00")...)) {
+		t.Fatalf("%d fills are below ArmDepth", arm-1)
 	}
 
 	off := testutil.LadderTrade(false, fills(5, "17:38:00")...)

@@ -16,7 +16,7 @@ func anchor(clock string, price float64) aggragates.TrendLineAnchor {
 // The line SOL 45211 had at its activation: H1 193.25 at 06:30, H2 192.97 at
 // 11:45, projected ~192.65 at 17:45 — over the last fill, so it is honoured.
 func TestSellTargetReachedAtTheLine(t *testing.T) {
-	trade := testutil.LadderTrade(false, fills(5, "17:38:00")...) // last fill 179.78
+	trade := sizedLadder(false, fills(5, "17:38:00")...) // last fill 179.78
 	st := rebuildState(trade)
 	block := solBlock()
 	block.Resistance = aggragates.TrendLine{From: anchor("06:30:00", 193.25), To: anchor("11:45:00", 192.97)}
@@ -38,7 +38,7 @@ func TestSellTargetReachedAtTheLine(t *testing.T) {
 }
 
 func TestSellTargetReachedAtTheUpperBand(t *testing.T) {
-	trade := testutil.LadderTrade(false, fills(5, "17:38:00")...)
+	trade := sizedLadder(false, fills(5, "17:38:00")...)
 	st := rebuildState(trade)
 	block := solBlock() // no line: the band is the only target
 	now := testutil.At("17:45:00").UnixMilli()
@@ -59,7 +59,7 @@ func TestSellTargetReachedAtTheUpperBand(t *testing.T) {
 // fill of 179.78: without the guard the 179.41 bounce sells at the bottom,
 // before the one permitted depth. With it the band stands alone.
 func TestSellTargetIgnoresALineUnderTheLastFill(t *testing.T) {
-	trade := testutil.LadderTrade(false, fills(5, "17:38:00")...)
+	trade := sizedLadder(false, fills(5, "17:38:00")...)
 	st := rebuildState(trade)
 	block := solBlock()
 	block.Resistance = aggragates.TrendLine{From: anchor("11:45:00", 192.97), To: anchor("20:15:00", 183.99)}
@@ -81,7 +81,7 @@ func TestSellTargetIgnoresALineUnderTheLastFill(t *testing.T) {
 }
 
 func TestSellTargetInverseMirror(t *testing.T) {
-	trade := testutil.LadderTrade(true, risingFills(5, "17:38:00")...) // last fill 108
+	trade := sizedLadder(true, risingFills(5, "17:38:00")...) // last fill 108
 	st := rebuildState(trade)
 	block := risingBlock()
 	now := testutil.At("17:45:00").UnixMilli()
@@ -114,7 +114,7 @@ func TestSellTargetInverseMirror(t *testing.T) {
 }
 
 func TestSellTargetZeroBlockIsInert(t *testing.T) {
-	trade := testutil.LadderTrade(false, fills(5, "17:38:00")...)
+	trade := sizedLadder(false, fills(5, "17:38:00")...)
 	now := testutil.At("17:45:00").UnixMilli()
 	if reason, hit := sellTargetReached(trade, rebuildState(trade), 1e9, now, aggragates.SmartTakeLossIndicators{}); hit {
 		t.Fatalf("no line and no band sell nothing, got %q", reason)

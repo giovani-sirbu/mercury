@@ -49,20 +49,24 @@ func depthSpacingEligibleFrom(fills []depthFill) depthSpacingState {
 	return state
 }
 
-// depthSpacingHoldFor is base * factor^(step-1), clamped. It doubles in a
+// depthSpacingHoldFor is base * factor^(step-1), clamped. It scales in a
 // loop and returns at the ceiling rather than computing the power, so a long
 // cascade cannot overflow the duration on its way to a value that would have
 // been clamped anyway.
+//
+// The factor is fractional, so each step goes through float64: a Duration is
+// an integer count of nanoseconds and cannot be multiplied by 1.5 directly.
+// The truncation that conversion costs is nanoseconds on a multi-hour hold.
 func depthSpacingHoldFor(step int) time.Duration {
 	if step < 1 {
 		return 0
 	}
 	hold := DepthSpacingBaseHold
 	for i := 1; i < step; i++ {
-		if hold >= depthSpacingMaxHold/depthSpacingFactor {
+		if float64(hold) >= float64(depthSpacingMaxHold)/depthSpacingFactor {
 			return depthSpacingMaxHold
 		}
-		hold *= depthSpacingFactor
+		hold = time.Duration(float64(hold) * depthSpacingFactor)
 	}
 	if hold > depthSpacingMaxHold {
 		return depthSpacingMaxHold

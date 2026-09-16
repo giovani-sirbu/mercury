@@ -33,39 +33,55 @@ type SophosFib struct {
 }
 
 // SophosSmartTakeLoss is the nested `smartTakeLoss` object on
-// GET /:symbol/patterns: 15 flat keys, always present, all zero when sophos
+// GET /:symbol/patterns: 29 flat keys, always present, all zero when sophos
 // has no verdict. A line exists iff both of its time keys are > 0. An older
-// sophos without the object — or one still serving the retired
-// `lowestLow100` / `freshLow` keys of the 1h window — decodes to the zero
-// value, which is inert: the gate reads no level and nothing activates.
+// sophos without the object — or one still serving the retired `lowestLow` /
+// `lowestLow100` wick keys of an older window — decodes to the zero
+// value, which is inert: the gate reads no level and nothing activates. The
+// levels are measured on the candle BODY, so a wick that pierced the price
+// and closed back above it is not a bar to the left.
 type SophosSmartTakeLoss struct {
-	HasVerdict          bool    `json:"hasVerdict"`
-	LowestLow           float64 `json:"lowestLow"`
-	LowWithBarsLeft     float64 `json:"lowWithBarsLeft"`
-	HighestHigh         float64 `json:"highestHigh"`
-	HighWithBarsLeft    float64 `json:"highWithBarsLeft"`
-	UpperBB             float64 `json:"upperBB"`
-	LowerBB             float64 `json:"lowerBB"`
-	ResistanceFromTime  int64   `json:"resistanceFromTime"`
-	ResistanceFromPrice float64 `json:"resistanceFromPrice"`
-	ResistanceToTime    int64   `json:"resistanceToTime"`
-	ResistanceToPrice   float64 `json:"resistanceToPrice"`
-	SupportFromTime     int64   `json:"supportFromTime"`
-	SupportFromPrice    float64 `json:"supportFromPrice"`
-	SupportToTime       int64   `json:"supportToTime"`
-	SupportToPrice      float64 `json:"supportToPrice"`
+	HasVerdict               bool    `json:"hasVerdict"`
+	LowestBody               float64 `json:"lowestBody"`
+	LowBodyWithBarsLeft      float64 `json:"lowBodyWithBarsLeft"`
+	HighestBody              float64 `json:"highestBody"`
+	HighBodyWithBarsLeft     float64 `json:"highBodyWithBarsLeft"`
+	UpperBB                  float64 `json:"upperBB"`
+	LowerBB                  float64 `json:"lowerBB"`
+	ResistanceFromTime       int64   `json:"resistanceFromTime"`
+	ResistanceFromPrice      float64 `json:"resistanceFromPrice"`
+	ResistanceToTime         int64   `json:"resistanceToTime"`
+	ResistanceToPrice        float64 `json:"resistanceToPrice"`
+	SupportFromTime          int64   `json:"supportFromTime"`
+	SupportFromPrice         float64 `json:"supportFromPrice"`
+	SupportToTime            int64   `json:"supportToTime"`
+	SupportToPrice           float64 `json:"supportToPrice"`
+	LowerLowsFromTime        int64   `json:"lowerLowsFromTime"`
+	LowerLowsFromPrice       float64 `json:"lowerLowsFromPrice"`
+	LowerLowsToTime          int64   `json:"lowerLowsToTime"`
+	LowerLowsToPrice         float64 `json:"lowerLowsToPrice"`
+	HigherHighsFromTime      int64   `json:"higherHighsFromTime"`
+	HigherHighsFromPrice     float64 `json:"higherHighsFromPrice"`
+	HigherHighsToTime        int64   `json:"higherHighsToTime"`
+	HigherHighsToPrice       float64 `json:"higherHighsToPrice"`
+	SupportBarsUnder         int     `json:"supportBarsUnder"`
+	ResistanceBarsOver       int     `json:"resistanceBarsOver"`
+	SupportBounceLevel       float64 `json:"supportBounceLevel"`
+	SupportBounceBarsUnder   int     `json:"supportBounceBarsUnder"`
+	ResistanceBounceLevel    float64 `json:"resistanceBounceLevel"`
+	ResistanceBounceBarsOver int     `json:"resistanceBounceBarsOver"`
 }
 
 // Indicators folds the flat wire keys into the block the gate reads.
 func (s SophosSmartTakeLoss) Indicators() SmartTakeLossIndicators {
 	return SmartTakeLossIndicators{
-		HasVerdict:       s.HasVerdict,
-		LowestLow:        s.LowestLow,
-		LowWithBarsLeft:  s.LowWithBarsLeft,
-		HighestHigh:      s.HighestHigh,
-		HighWithBarsLeft: s.HighWithBarsLeft,
-		UpperBB:          s.UpperBB,
-		LowerBB:          s.LowerBB,
+		HasVerdict:           s.HasVerdict,
+		LowestBody:           s.LowestBody,
+		LowBodyWithBarsLeft:  s.LowBodyWithBarsLeft,
+		HighestBody:          s.HighestBody,
+		HighBodyWithBarsLeft: s.HighBodyWithBarsLeft,
+		UpperBB:              s.UpperBB,
+		LowerBB:              s.LowerBB,
 		Resistance: TrendLine{
 			From: TrendLineAnchor{At: s.ResistanceFromTime, Price: s.ResistanceFromPrice},
 			To:   TrendLineAnchor{At: s.ResistanceToTime, Price: s.ResistanceToPrice},
@@ -74,6 +90,20 @@ func (s SophosSmartTakeLoss) Indicators() SmartTakeLossIndicators {
 			From: TrendLineAnchor{At: s.SupportFromTime, Price: s.SupportFromPrice},
 			To:   TrendLineAnchor{At: s.SupportToTime, Price: s.SupportToPrice},
 		},
+		LowerLows: TrendLine{
+			From: TrendLineAnchor{At: s.LowerLowsFromTime, Price: s.LowerLowsFromPrice},
+			To:   TrendLineAnchor{At: s.LowerLowsToTime, Price: s.LowerLowsToPrice},
+		},
+		HigherHighs: TrendLine{
+			From: TrendLineAnchor{At: s.HigherHighsFromTime, Price: s.HigherHighsFromPrice},
+			To:   TrendLineAnchor{At: s.HigherHighsToTime, Price: s.HigherHighsToPrice},
+		},
+		SupportBarsUnder:         s.SupportBarsUnder,
+		ResistanceBarsOver:       s.ResistanceBarsOver,
+		SupportBounceLevel:       s.SupportBounceLevel,
+		SupportBounceBarsUnder:   s.SupportBounceBarsUnder,
+		ResistanceBounceLevel:    s.ResistanceBounceLevel,
+		ResistanceBounceBarsOver: s.ResistanceBounceBarsOver,
 	}
 }
 

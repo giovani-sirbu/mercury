@@ -30,9 +30,9 @@ func ArmDepth(maxDepths int) int {
 	if armDepth < minArmDepth {
 		armDepth = minArmDepth
 	}
-	// Never arm at or past the row's Depths: the arm depth is where the exit
-	// lens starts watching the ladder, and a ladder already at its last
-	// configured rung has no add left to protect — keep one rung of margin.
+	// Never arm at or past the row's Depths: the arm depth is where the rule
+	// starts watching the ladder, and a ladder already at its last configured
+	// depth has no add left to protect — keep one depth of margin.
 	if maxDepths > 0 && armDepth >= maxDepths {
 		armDepth = maxDepths - 1
 	}
