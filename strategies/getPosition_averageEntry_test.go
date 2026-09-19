@@ -11,12 +11,12 @@ import (
 // upside reads profitPercentage, the move against the average entry price.
 const buyLogic = "percentage <= -tradePercentage-tolerance ? 'stopLoss' : (profitPercentage >= tradePercentage+tolerance ? 'takeProfit' : '')"
 
-// Backtest 119 / trade 39385: eight ETH fills averaging 1926.76, the last at
-// 1400.21. Against the last fill alone the take profit was proposed from
-// 1439.8 up — 25% under break even — and only the profit gate stood in the
-// way. Against the average it is proposed at 1926.76 / (1 - 0.0275) = 1981.24,
-// break even + percentage + tolerance, while the next depth still arms 2.75%
-// under the last fill.
+// TestGetPositionBuyArmsTakeProfitFromTheAverageEntryPrice pins what each side
+// of the `buy` row is measured against on a deep ladder. Against the LAST fill
+// alone the take profit is proposed well under break even, and only the profit
+// gate stands between the trade and a close at a loss. Against the average
+// entry price it is proposed at break even plus percentage plus tolerance,
+// while the next depth still arms a full step under the last fill.
 func TestGetPositionBuyArmsTakeProfitFromTheAverageEntryPrice(t *testing.T) {
 	strategy := Strategy{
 		Position: Position{Type: "buy", Price: 1400.21, AverageEntryPrice: 1926.76},

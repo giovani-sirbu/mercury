@@ -13,8 +13,8 @@ const (
 	// CapitulationDisplacementSteps is how many unwidened grid steps below
 	// (long) or above (inverse) the last fill count as a capitulation dump.
 	CapitulationDisplacementSteps = 8
-	// CapitulationClearQuietWindows is how many consecutive 15m sophos
-	// windows without adverse shock clear a freeze when crash never armed.
+	// CapitulationClearQuietWindows is how many consecutive sophos windows
+	// without adverse shock clear a freeze when crash never armed.
 	CapitulationClearQuietWindows = 2
 
 	// CapitulationFreezeHold is the hold reason written while the one
@@ -27,10 +27,10 @@ const (
 	CapitulationFreezeOffPrefix = "Capitulation freeze off"
 )
 
-// ApplyCapitulationOverride is the stopLoss-only exception: a shallow
-// 8-step dump that has printed a 5m reclaim may bypass a 15m shock or
-// add-veto hold so the grid can take one extra fill. Crash-deep and an
-// already-taken shot in this episode are never bypassed.
+// ApplyCapitulationOverride is the stopLoss-only exception: a shallow dump
+// displaced by CapitulationDisplacementSteps that has printed a reclaim may
+// bypass a shock or add-veto hold so the grid can take one extra fill.
+// Crash-deep and an already-taken shot in this episode are never bypassed.
 // Owned by the CrashGuard flag: the caller runs it only under
 // params.CrashGuard, so ai.CrashActive is read here on a crash-guard
 // strategy only. `position` is the gate-normalised position (a force-trailing
@@ -43,8 +43,8 @@ func ApplyCapitulationOverride(event events.Events, position string, ai aggragat
 		// force-trailing re-anchor is NOT leaving the ladder: those states
 		// only move PositionPrice and hand the rung back to stopLoss, and
 		// clearing here wiped hadCrash and the quiet-window counter on every
-		// ratchet — 263 times in run 97, exactly on the deep, falling trades
-		// the episode exists for.
+		// ratchet, and a deep, falling trade ratchets constantly — exactly the
+		// trades the episode exists for.
 		if position != "stopLoss" && !capitulationEpisodeContinues(event.Trade.PositionType) {
 			clearCapitulationLive(event.Trade.ID)
 		}

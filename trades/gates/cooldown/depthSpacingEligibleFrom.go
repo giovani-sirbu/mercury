@@ -9,13 +9,12 @@ import "time"
 // that follow a fast pair. The earlier shape seeded the fold at fills[0], so
 // the second depth could never be held: the gate had nothing to measure until
 // two entries existed, and the first fast pair was spent proving the ladder
-// was cascading rather than being stopped. On trade 32309 that let depth 2
-// land 7m25s after the first fill, which is the fill the rest of the cascade
-// was built on. Seeding at fills[0]+base makes the rule a minimum spacing:
-// no two entries closer than the current hold.
+// was cascading rather than being stopped. That unheld second depth is the
+// fill the rest of a cascade is built on. Seeding at fills[0]+base makes the
+// rule a minimum spacing: no two entries closer than the current hold.
 //
-// This costs nothing on a slow ladder — depths naturally hours apart are
-// already past the expiry — and bites exactly where it was meant to.
+// This costs nothing on a slow ladder — depths naturally spaced wider than the
+// hold are already past the expiry — and bites exactly where it was meant to.
 //
 // The escalation still measures against the PREVIOUS hold's expiry, not the
 // previous fill: a depth that lands the instant a hold lifts is still part of
@@ -24,8 +23,8 @@ import "time"
 //
 // A genuine pause RESETS the escalation. `step` means "how deep into one
 // cascade are we", and a ladder that waited out a full window is no longer in
-// that cascade; carrying the count forever would hand a 4h hold to a trade
-// whose only fast pair happened weeks earlier.
+// that cascade; carrying the count forever would hand an escalated hold to a
+// trade whose only fast pair happened long before.
 func depthSpacingEligibleFrom(fills []depthFill) depthSpacingState {
 	if len(fills) == 0 {
 		return depthSpacingState{}
@@ -54,9 +53,9 @@ func depthSpacingEligibleFrom(fills []depthFill) depthSpacingState {
 // cascade cannot overflow the duration on its way to a value that would have
 // been clamped anyway.
 //
-// The factor is fractional, so each step goes through float64: a Duration is
-// an integer count of nanoseconds and cannot be multiplied by 1.5 directly.
-// The truncation that conversion costs is nanoseconds on a multi-hour hold.
+// The factor may be fractional, so each step goes through float64: a Duration
+// is an integer count of nanoseconds and cannot be scaled by a fractional
+// factor directly. The truncation that conversion costs is nanoseconds.
 func depthSpacingHoldFor(step int) time.Duration {
 	if step < 1 {
 		return 0

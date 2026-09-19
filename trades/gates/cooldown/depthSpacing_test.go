@@ -17,8 +17,8 @@ func fold(placements ...time.Time) depthSpacingState {
 
 // The rule the second depth used to escape. Seeding the fold at the first
 // fill meant the gate had nothing to measure until two entries existed, so
-// depth 2 always went through — on trade 32309 it landed 7m25s after the
-// first fill, and the rest of the cascade was built on it.
+// depth 2 always went through — minutes after the first fill, and the rest of
+// the cascade was built on it.
 func TestDepthSpacingHoldsTheSecondDepthFromTheFirstFill(t *testing.T) {
 	state := fold(trade25858[0])
 
@@ -56,8 +56,8 @@ func TestDepthSpacingDoublesWhenADepthFillsTheInstantTheHoldLifts(t *testing.T) 
 }
 
 // A ladder that waited out a full window is no longer in the cascade, so the
-// escalation goes back to base. Carrying the count forever would hand a
-// four-hour hold to a trade whose only fast pair happened weeks earlier.
+// escalation goes back to base. Carrying the count forever would hand an
+// escalated hold to a trade whose only fast pair happened long before.
 func TestDepthSpacingResetsTheEscalationAfterARealPause(t *testing.T) {
 	first := testutil.At("09:00:00")
 	fast := first.Add(DepthSpacingBaseHold)                       // escalates to step 2
@@ -75,10 +75,10 @@ func TestDepthSpacingResetsTheEscalationAfterARealPause(t *testing.T) {
 	}
 }
 
-// The recorded cascade end to end. Every one of its seven depths landed
-// inside the hold it had earned, so nothing resets and the escalation runs to
-// the ceiling: the eighth depth is parked into the evening instead of being
-// on the book by 16:40.
+// The recorded cascade end to end. Every one of its depths landed inside the
+// hold it had earned, so nothing resets and the escalation runs to the
+// ceiling: the next depth is parked for the maximum hold instead of going
+// onto the book behind the one before it.
 func TestDepthSpacingHoldsTheRecordedTrade25858Cascade(t *testing.T) {
 	state := fold(trade25858...)
 
@@ -118,9 +118,9 @@ func TestDepthSpacingNeverHoldsALadderAFullWindowPastEachExpiry(t *testing.T) {
 	}
 }
 
-// Escalating from the base hold reaches the ceiling a few fast depths in
-// (4h, 6h, 9h, 12h). The hold clamps there and stays clamped: past the ceiling
-// the gate would make the trade sit out the bottom of the move.
+// Escalating from the base hold reaches the ceiling a few fast depths in.
+// The hold clamps there and stays clamped: past the ceiling the gate would
+// make the trade sit out the bottom of the move.
 // The schedule is asserted as a rule, not as a list of durations: the base
 // hold, the factor and the window are calibration knobs that move, and a table
 // of literals turns every calibration change into a red suite that says
@@ -132,7 +132,7 @@ func TestDepthSpacingClampsTheHoldAtTheCeiling(t *testing.T) {
 
 	previous := DepthSpacingBaseHold
 	for step := 2; step <= 40; step++ {
-		// The factor is fractional, so the expectation scales the same way
+		// The factor may be fractional, so the expectation scales the same way
 		// depthSpacingHoldFor does — through float64, not as a Duration.
 		want := time.Duration(float64(previous) * depthSpacingFactor)
 		if want > depthSpacingMaxHold {

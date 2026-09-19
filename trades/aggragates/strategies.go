@@ -16,11 +16,13 @@ type (
 		UseForceTrailing bool  `form:"useForceTrailing" bson:"useForceTrailing" json:"useForceTrailing"`
 		CrashGuard       bool  `form:"crashGuard" bson:"crashGuard" json:"crashGuard"`
 		SmartTakeLoss    bool  `form:"smartTakeLoss" bson:"smartTakeLoss" json:"smartTakeLoss"`
-		// RegimeHold owns the regime-lens holds on an OPEN position: the 15m
-		// shock hold, the long/inverse add veto and the profit hold. It never
+		// RegimeHold owns the regime holds on an OPEN position: the shock
+		// hold, the long/inverse add veto and the profit hold. It never
 		// touches the first fill — that is Cooldown's — and it is the only
-		// flag those gates answer to (run 97/98: they fired for any strategy
-		// that happened to fetch the verdict for another flag).
+		// flag those gates answer to. Were they keyed on payload presence
+		// instead, they would fire for any strategy that merely fetches the
+		// verdict for another flag; that is the FETCH IS NOT GATE rule on
+		// NeedsSophos below.
 		RegimeHold bool `form:"regimeHold" bson:"regimeHold" json:"regimeHold"`
 		// PowerLawQuantiles is reserved: plumbed end to end, read by nothing
 		// yet.

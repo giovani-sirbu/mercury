@@ -8,9 +8,9 @@ import (
 // The price release is what makes the wait pay for itself.
 //
 // A pure time gate only ever DELAYS a depth: the ladder is anchored to price,
-// so the same entry fills at the same level, later. Measured over five years
-// that cost 15% of the profit and left depth, blockage and the longest stall
-// unchanged — the gate bought nothing with the time it spent.
+// so the same entry fills at the same level, later. Over a long window that
+// costs profit and leaves depth, blockage and the longest stall unchanged —
+// the gate buys nothing with the time it spends.
 //
 // So the hold is not a wait, it is a PRICE it asks the market to pay. While a
 // depth is held, one extra `percentage` step per escalation level buys it out:
@@ -18,11 +18,10 @@ import (
 //	release = lastFillPrice * (1 - (percentage + tolerance + percentage*step)/100)
 //
 // `percentage + tolerance` is where the depth would have armed anyway, so what
-// the gate actually demands is `percentage * step` BELOW that. On HBAR/USDT
-// (percentage 2.5, tolerance 0.2) the first hold releases 5.2% under the last
-// fill instead of the usual 2.7%, the second 7.7%, the third 10.2%. Either the
-// drop keeps going and the ladder buys meaningfully lower than it would have,
-// or it does not and the capital was right to wait.
+// the gate actually demands is `percentage * step` BELOW that, one further
+// step for every escalation level the ladder has earned. Either the drop keeps
+// going and the ladder buys meaningfully lower than it would have, or it does
+// not and the capital was right to wait.
 //
 // The reference is the LAST FILL, not the trailed stopLoss anchor: the anchor
 // follows the low and is path-dependent, so two engines replaying the same

@@ -25,8 +25,8 @@ func depthEvent(trade aggragates.Trades, now time.Time) events.Events {
 	}
 }
 
-// The second depth is gated from the first fill: this is what trade 32309
-// escaped, its depth 2 landing 7m25s after the entry.
+// The second depth is gated from the first fill: that is the depth a fold
+// seeded at the first fill let through, minutes after the entry.
 func TestDepthSpacingHoldsTheSecondDepthFromTheFirstFill(t *testing.T) {
 	trade := testutil.DepthTrade(trade25858[0])
 	eligible := testutil.At("13:41:08").Add(cooldown.DepthSpacingBaseHold)

@@ -17,9 +17,9 @@ const fiatConversionSymbol = "USDT"
 //
 //  1. trade.ProfitAsset already pegged to USD (USDT/USDC/etc.) — return
 //     trade.Profit verbatim.
-//  2. event.WsPrices contains the <ProfitAsset>/USDT pair — multiply.
-//     Hermes-fed snapshot; zero exchange round-trips, deterministic in
-//     tests.
+//  2. event.WsPrices contains the <ProfitAsset>/<fiatConversionSymbol> pair —
+//     multiply. Hermes-fed snapshot; zero exchange round-trips, deterministic
+//     in tests.
 //  3. Fallback: event.Exchange.Client().GetPrice. Honors IsCustom so the
 //     virtual exchange (backtesting) and test stubs can substitute a
 //     deterministic price.

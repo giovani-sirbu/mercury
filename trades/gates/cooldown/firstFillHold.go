@@ -18,12 +18,12 @@ import (
 // caller does, or the row never reaches updateTrade.
 //
 // SPOT. The verdict only starts the hold; price ends it. sophos /cooldown
-// reports whether the last closed 15m bar is a local top — fewer than five
-// higher highs among the forty bars before it (HBAR 2021-10-04 18:45 had
-// none). A refused verdict activates the hold at the tick price, which is
-// the reference R, and from then on the verdict is not fetched again
-// (FirstFillVerdictNeeded): the entry is priced with the ladder's own
-// arithmetic (firstFillLevels) and one of three things happens:
+// reports whether the last closed bar of its location interval is a local top
+// — too few of the bars before it printed a higher high, so nothing to the
+// left has been higher recently. A refused verdict activates the hold at the
+// tick price, which is the reference R, and from then on the verdict is not
+// fetched again (FirstFillVerdictNeeded): the entry is priced with the
+// ladder's own arithmetic (firstFillLevels) and one of three things happens:
 //
 //   - the price runs UP through up(R). The hold called the wrong direction,
 //     the entry goes to market on this tick, and the gate writes the entered
@@ -36,15 +36,15 @@ import (
 //     gates.SaveHoldLog.
 //
 // A time cap, FirstFillMaxHold, sits over all three: past it the entry goes
-// through at the tick price whatever the band says. An earlier gate expired
-// after eight hours (run 97: every gain sat in waits under eight hours)
-// because its verdict stayed "expensive" all the way up a rally and the trade
-// entered higher for having waited; that cap was removed on 2026-09-05, since
-// a rally is now the first case above and enters on the tick it is proven.
-// What removing it exposed is the case a rally never covered — a market that
-// goes sideways INSIDE the band, which held BTC trade 56980 for nine days —
-// and that is what the constant bounds now. The release is silent and writes
-// no row: see firstFillExpired and the call site.
+// through at the tick price whatever the band says. An earlier gate expired on
+// a fixed wait because a verdict-only hold stayed refused all the way up a
+// rally and the trade entered higher for having waited; that cap went away
+// once a rally became the first case above and enters on the tick it is
+// proven. What removing it exposed is the case a rally never covered — a
+// market that drifts sideways INSIDE the band, touching neither edge, where
+// the hold would otherwise stand without end — and that is what the constant
+// bounds now. The release is silent and writes no row: see firstFillExpired
+// and the call site.
 //
 // Every fact of the hold lives in the trade's log rows (firstFillState) and
 // nowhere else. trade.PositionPrice is the tick and is NEVER written here:

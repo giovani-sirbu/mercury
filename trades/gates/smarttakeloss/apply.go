@@ -1,22 +1,21 @@
-// Package smarttakeloss is the SmartTakeLoss flag: a rule read off the 4h
-// chart that turns a deep ladder into a seller instead of a buyer.
+// Package smarttakeloss is the SmartTakeLoss flag: a rule read off the
+// pattern window that turns a deep ladder into a seller instead of a buyer.
 //
-// It is two readings of one window — the last WindowBars closed 4h bars
-// sophos serves on GET /:symbol/patterns (eighty, about thirteen days) —
-// both taken against the tick price, and both a count of how many of those
-// bars closed their BODY under it:
+// It is two readings of one window — the last WindowBars closed bars sophos
+// serves on GET /:symbol/patterns — both taken against the tick price, and
+// both a count of how many of those bars closed their BODY under it:
 //
-//   - from ArmDepth filled entries (fill 4 on an 8-deep ladder), every tick
-//     at a price with at most five bars to its left ACTIVATES the trade, with
-//     one marker row, "Hold buy: smartTakeLoss: Potential trend reversal",
+//   - from ArmDepth filled entries, every tick at a price with few enough
+//     bars to its left ACTIVATES the trade, with one marker row,
+//     "Hold buy: smartTakeLoss: Potential trend reversal",
 //     carrying the newest fill's price; nothing is refused on that tick;
 //   - from then on the trade sells at the resistance line through the last
-//     two lower highs or at the upper Bollinger band (20, 2.0). While
+//     two lower highs or at the upper Bollinger band. While
 //     LastPermittedDepthExit is on it is also permitted PermittedDepths more
 //     depths, on the last of which every add-side proposal becomes the exit
 //     and the price sells one tolerance under the last fill once the window
 //     ALSO says there is no bar to the left at all. That rule is switched
-//     OFF since 2026-09-07: the ladder keeps adding.
+//     OFF: the ladder keeps adding.
 //
 // The loss-side exit needs no activation and applies from ARMING on: the
 // support line sophos draws on the same window through the last two LOWER
@@ -27,8 +26,8 @@
 // had already bounced from sells after SupportBounceBreakBars closed bars
 // under that level with the price under it (supportBreakReached).
 //
-// No exit fires within MinAgeAfterLastFill of the newest fill — zero since
-// 2026-09-07, so nothing waits — and while a wait is on and the trade is on
+// No exit fires within MinAgeAfterLastFill of the newest fill — a zero wait
+// disables that — and while a wait is on and the trade is on
 // its last permitted depth the ladder's add is dropped, with one row per
 // fill saying so. Inverse ladders mirror every rule (bars to the left are
 // bars that printed OVER the price, support line through two higher lows as

@@ -5,13 +5,12 @@ package testutil
 
 import "github.com/giovani-sirbu/mercury/trades/aggragates"
 
-// NewHoldTrade is the minimal BTC/USDT trade the hold-gate tests start from.
+// NewHoldTrade is the minimal trade the hold-gate tests start from.
 //
 // It carries one ladder row and the pair's price precision because the
 // cooldown first-fill gate reads both: percentage, tolerance and trailing
 // take profit set the levels the hold waits for, and PriceFilter is how those
-// levels are printed in the hold row. The row is the HBAR/USDT shape the rule
-// was specified against (2.5 / 0.15 / 0.75), on a single row so it governs
+// levels are printed in the hold row. The row stands alone so it governs
 // every depth.
 func NewHoldTrade(positionType string, inverse bool) aggragates.Trades {
 	return aggragates.Trades{

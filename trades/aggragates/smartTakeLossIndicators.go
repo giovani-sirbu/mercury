@@ -15,21 +15,23 @@ type TrendLine struct {
 	To   TrendLineAnchor
 }
 
-// SmartTakeLossIndicators is the 4h chart block sophos serves on
-// GET /:symbol/patterns for the SmartTakeLoss flag: the body levels that say
-// how many bars of its window closed under the price, the resistance (support)
-// line through the last two lower highs (higher lows) with the count of
-// newest closed bars beyond each, and the Bollinger(20, 2.0) bands. HasVerdict is false — and every other field zero
-// — when sophos had fewer than a full window or no readable band; every zero
-// field is inert in gates/smarttakeloss.Apply.
+// SmartTakeLossIndicators is the chart block sophos serves on
+// GET /:symbol/patterns for the SmartTakeLoss flag, computed on one window of
+// WindowBars closed bars of Interval: the body levels that say how many bars
+// of that window closed under the price, the resistance (support) line through
+// the last two lower highs (higher lows) with the count of newest closed bars
+// beyond each, and the Bollinger band (BBPeriod, BBStdDev). HasVerdict is
+// false — and every other field zero — when sophos had fewer than a full
+// window or no readable band; every zero field is inert in
+// gates/smarttakeloss.Apply.
 type SmartTakeLossIndicators struct {
 	HasVerdict bool
-	// The four levels, all read against the tick price, all taken over the
-	// same window of closed 4h bars and all measured on the candle BODY —
+	// The four levels, all read against the tick price, all taken over that
+	// same window of closed bars and all measured on the candle BODY —
 	// min(open, close) on the long side — so a bar whose wick pierced the
 	// price and closed back above it is NOT a bar to the left. A long price at
 	// or under LowestBody has no bar of that window closing below it; at or
-	// under LowBodyWithBarsLeft it has at most the five the gate allows.
+	// under LowBodyWithBarsLeft it has at most MaxBarsLeft of them.
 	// HighestBody and HighBodyWithBarsLeft are the inverse ladder's mirror,
 	// counting bodies that closed higher.
 	LowestBody           float64
@@ -50,11 +52,11 @@ type SmartTakeLossIndicators struct {
 	// not making them.
 	LowerLows   TrendLine
 	HigherHighs TrendLine
-	// SupportBarsUnder is how many of the newest closed 4h bars in a row
-	// CLOSED under the LowerLows line (read at their own open time), counted
-	// back from the last closed bar; ResistanceBarsOver is the mirror over
-	// HigherHighs. Zero without the line. Sophos counts, the gate compares
-	// them with smarttakeloss.SupportBreakBars.
+	// SupportBarsUnder is how many of the newest closed bars of that window in
+	// a row CLOSED under the LowerLows line (read at their own open time),
+	// counted back from the last closed bar; ResistanceBarsOver is the mirror
+	// over HigherHighs. Zero without the line. Sophos counts, the gate
+	// compares them with smarttakeloss.SupportBreakBars.
 	SupportBarsUnder   int
 	ResistanceBarsOver int
 	// SupportBounceLevel is the support the price bounced from: the

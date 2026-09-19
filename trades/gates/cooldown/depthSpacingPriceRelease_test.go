@@ -7,8 +7,7 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 )
 
-// hbarTrade carries HBAR/USDT's real ladder row from backtest 112 — the run
-// the price release was specified against.
+// hbarTrade carries the ladder row the price release was specified against.
 func hbarTrade(step int) aggragates.Trades {
 	trade := testutil.DepthTrade(trade25858[:step]...)
 	trade.StrategyPair.StrategySettings = []aggragates.StrategySettings{
@@ -17,9 +16,10 @@ func hbarTrade(step int) aggragates.Trades {
 	return trade
 }
 
-// The numbers the rule was specified with, on trade 32309's first fill of
-// 0.5652: a depth that would normally arm 2.7% down has to come 2.5% further
-// for each escalation level before the hold lets it through.
+// TestReleasePriceAsksOneLadderStepPerEscalationLevel: a depth that would
+// normally arm one percentage plus tolerance below the last fill has to come
+// one further percentage for every escalation level before the hold lets it
+// through.
 func TestReleasePriceAsksOneLadderStepPerEscalationLevel(t *testing.T) {
 	const lastFill = 0.5652
 

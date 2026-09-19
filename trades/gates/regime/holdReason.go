@@ -33,8 +33,8 @@ func HoldReason(event events.Events, position string, ai aggragates.AIIndicators
 		if inverse {
 			// A rising shock is the same uptrend this veto exists for, just
 			// violent enough that the shock label outranks upPersist on the
-			// wire — without ShockBlocks here, a vertical squeeze slipped the
-			// veto that saved run 74's rally blow-ups precisely because it
+			// wire — without ShockBlocks here, a vertical squeeze slips the
+			// veto that exists for exactly that rally, precisely because it
 			// was too fast. A falling shock stays tradeable: it moves in the
 			// inverse trade's favor.
 			for _, timeframe := range addVetoTimeframes {

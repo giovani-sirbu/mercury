@@ -3,7 +3,7 @@ package cooldown
 import "github.com/giovani-sirbu/mercury/trades/aggragates"
 
 // FirstFillVerdictNeeded tells an engine whether this tick has to fetch the
-// sophos /cooldown verdict for the trade. It stands where the eight-hour
+// sophos /cooldown verdict for the trade. It stands where the old
 // Expired cap stood in the five fetch conditions (backtesting, live-testing
 // and hermes, spot and futures), and it is a fetch decision only — the gate
 // is FirstFillHold.

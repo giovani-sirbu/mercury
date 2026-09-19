@@ -7,7 +7,10 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
-// Backtest 119 / trade 39385: eight ETH buys, 36898.508251 USDT for 19.1505 ETH.
+// TestAverageEntryPriceIsTheCostPerUnitAcrossEveryEntry folds a full ladder of
+// doubling sizes: the average is the total quote spent over the total quantity
+// bought, so the deepest and largest fill dominates it. It is never the mean
+// of the fill prices.
 func TestAverageEntryPriceIsTheCostPerUnitAcrossEveryEntry(t *testing.T) {
 	trade := aggragates.Trades{History: []aggragates.TradesHistory{
 		{Type: "BUY", Quantity: 0.0751, Price: 2883.13, OrderId: 1},

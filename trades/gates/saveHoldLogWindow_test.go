@@ -7,8 +7,8 @@ import (
 )
 
 // Two reasons alternating tick by tick collapse to one row per reason per
-// day: comparing with the last row only, run 98 wrote 18 rows a day on one
-// trade that flipped between the cooldown and the regime reason.
+// window: compared with the last row only, a trade that flips between two
+// reasons writes a row on every tick.
 func TestSaveHoldLogCollapsesAlternatingReasonsWithinWindow(t *testing.T) {
 	at := time.Date(2025, 10, 10, 21, 0, 0, 0, time.UTC)
 	const reasonA = "regime: add not allowed (4h downtrend-persist)"

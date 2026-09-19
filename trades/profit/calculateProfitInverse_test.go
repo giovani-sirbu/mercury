@@ -8,11 +8,11 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
-// TestCalculateProfitInverseNoLongerDoubleChargesSellFees replays backtest 76
-// trade 12840 (LINK/USDT inverse, closed 2025-10-10 21:18): three sell rungs,
-// one buy-back sized from the fee-net proceeds, booked at -0.0024 LINK by the
-// old math although the wallet ended the cycle ahead. With the sell-leg fees
-// recognized as embodied, the same fills settle positive.
+// TestCalculateProfitInverseNoLongerDoubleChargesSellFees is one inverse
+// cycle: several sell depths and a buy-back sized from the fee-net proceeds.
+// The old math booked it as a loss although the wallet ended the cycle ahead.
+// With the sell-leg fees recognized as embodied in the buy-back, the same
+// fills settle positive.
 func TestCalculateProfitInverseNoLongerDoubleChargesSellFees(t *testing.T) {
 	trade := aggragates.Trades{
 		Symbol:        "LINK/USDT",
@@ -29,8 +29,9 @@ func TestCalculateProfitInverseNoLongerDoubleChargesSellFees(t *testing.T) {
 
 	profit := CalculateProfit(events.Events{Trade: trade})
 
-	// Gross 26.37-26.32 = +0.05 LINK, minus the buy-back fee 0.02637, plus
-	// dust: ~+0.0239 LINK. The old cross-converted math landed at ~-0.0024.
+	// The gross quantity bought back over what was sold, minus the buy-back
+	// fee, plus the dust. The old cross-converted math charged the sell-leg
+	// fees a second time and landed under zero.
 	const want = 0.05 - 0.02637 + 0.00029
 	if math.Abs(profit-want) > 1e-9 {
 		t.Fatalf("profit = %v, want %v", profit, want)

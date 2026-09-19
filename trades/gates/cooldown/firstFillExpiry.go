@@ -20,7 +20,7 @@ import "time"
 // different things on different engines.
 //
 // A zero FirstFillMaxHold disables the cap: the gate is then released by
-// price alone, as it was between 2026-09-05 and 2026-09-07.
+// price alone.
 func firstFillExpired(state firstFillRecord, now time.Time) bool {
 	if FirstFillMaxHold <= 0 || !state.activated {
 		return false

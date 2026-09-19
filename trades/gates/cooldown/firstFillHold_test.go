@@ -11,16 +11,17 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 )
 
-// The fixture row is p 2.5, t 0.15, tr 0.75 on a four-decimal pair, so from
-// a reference of 100 the gate's levels are
+// The expectations below are the firstFillLevels formulas (firstFillLevels.go)
+// evaluated on the fixture ladder row from a reference of 100, printed at the
+// fixture pair's price precision:
 //
-//	up      100 / 0.975  = 102.5641   enters at market from it up
-//	arm     100 / 1.0265 = 97.4184    arms from it down
-//	bounce  A / 0.9985                fills strictly above it
-//	trail   A / 1.009                 a new low strictly below it
+//	up      enters at market from it up
+//	arm     arms from it down
+//	bounce  fills strictly above it
+//	trail   a new low strictly below it
 //
-// and on the inverse ladder up is 97.5610, arm 102.7221, with the anchor
-// trailing the high.
+// On the inverse ladder every level mirrors, with the anchor trailing the
+// high.
 const (
 	waitingReason = "cooldown: trying to get a better entry price: reference 100.0000, enters above 102.5641 or below 97.4184 after a bounce"
 	waitingRow    = "Hold entry: " + waitingReason
@@ -184,7 +185,7 @@ func TestFirstFillHoldArmsAtTheLadderStep(t *testing.T) {
 func TestFirstFillHoldTrailsTheLowByFullSteps(t *testing.T) {
 	armed := ticks(t, firstFillEvent(false, refused()), testutil.At("09:00:00"), 100, 97.40)
 
-	// trail(97.40) = 96.5312: inside the step, the same row.
+	// Both prints sit inside the trail step of the anchor: the same row.
 	inside := ticks(t, armed, testutil.At("09:10:00"), 97.0, 96.60)
 	if len(inside.Trade.Logs) != 2 {
 		t.Fatalf("a print inside the step must not move the anchor, got %q", rows(inside))
@@ -193,7 +194,7 @@ func TestFirstFillHoldTrailsTheLowByFullSteps(t *testing.T) {
 	if reason != armedReason("96.5000") || len(lower.Trade.Logs) != 3 || lower.Trade.Logs[2].Price != 96.50 {
 		t.Fatalf("a full step lower must write a new row at the new low, got %q %q", reason, rows(lower))
 	}
-	// bounce(96.50) = 96.6450: back up short of it, the low stands.
+	// Back up, but short of the bounce off the new low: the low stands.
 	back, reason := tick(t, lower, 96.60, testutil.At("09:21:00"))
 	if reason != armedReason("96.5000") || len(back.Trade.Logs) != 3 {
 		t.Fatalf("a print short of the bounce must keep the low, got %q %q", reason, rows(back))
@@ -216,21 +217,20 @@ func TestFirstFillHoldFillsOnTheBounce(t *testing.T) {
 	}
 }
 
-// gates.SaveHoldLog writes a standing row again after a day, at that day's
-// price. The reference is the FIRST waiting row and the anchor the lowest
-// armed row, so a re-log moves neither.
+// gates.SaveHoldLog writes a standing row again once it is older than its
+// re-log window, at the price of that later tick. The reference is the FIRST
+// waiting row and the anchor the lowest armed row, so a re-log moves neither.
 //
-// Asserted on firstFillState rather than through FirstFillHold: with
-// holdRelogAfter at 24h and FirstFillMaxHold at 12h no first-fill hold now
-// survives long enough to BE re-logged, so driving the gate 25 hours forward
-// only ever proves the cap. The rule the state owns still has to hold — the
-// rows arrive from the engines, and a wider cap (or none) puts them back in
-// front of it.
+// Asserted on firstFillState rather than through FirstFillHold: while
+// FirstFillMaxHold is shorter than holdRelogAfter no first-fill hold survives
+// long enough to BE re-logged, so driving the gate past the window only ever
+// proves the cap. The rule the state owns still has to hold — the rows arrive
+// from the engines, and a wider cap (or none) puts them back in front of it.
 func TestFirstFillStateRelogKeepsTheReferenceAndTheLow(t *testing.T) {
 	day := testutil.At("09:00:00")
 	trade := aggragates.Trades{Logs: []aggragates.TradesLogs{
 		{Message: "Hold entry: " + FirstFillWaitingPrefix + "100", Price: 100, CreatedAt: day},
-		// The re-log of that same wait, a day later at that day's price.
+		// The re-log of that same wait, past the window, at a later price.
 		{Message: "Hold entry: " + FirstFillWaitingPrefix + "100", Price: 101.5, CreatedAt: day.Add(25 * time.Hour)},
 		{Message: "Hold entry: " + FirstFillArmedPrefix + "97.40", Price: 97.40, CreatedAt: day.Add(26 * time.Hour)},
 		{Message: "Hold entry: " + FirstFillArmedPrefix + "96.50", Price: 96.50, CreatedAt: day.Add(27 * time.Hour)},
@@ -251,8 +251,8 @@ func TestFirstFillStateRelogKeepsTheReferenceAndTheLow(t *testing.T) {
 }
 
 // The cap: past FirstFillMaxHold the entry goes through at the tick price,
-// wherever it sits inside the band that was holding it. BTC trade 56980 of
-// backtest 140 is the shape — nine days inside a band it never left.
+// wherever it sits inside the band that was holding it. The shape it answers
+// to is a market that drifts sideways inside the band and never leaves it.
 func TestFirstFillHoldExpiresAtTheCap(t *testing.T) {
 	start := testutil.At("09:00:00")
 	held := ticks(t, firstFillEvent(false, refused()), start, 100)
@@ -386,7 +386,7 @@ func TestFirstFillHoldMirrorsTheInverseLadder(t *testing.T) {
 	if reason != armedAt("102.8000") || len(armed.Trade.Logs) != 2 || armed.Trade.Logs[1].Price != 102.8 {
 		t.Fatalf("above arm(R) the inverse entry must arm at the tick, got %q %q", reason, rows(armed))
 	}
-	// trail(102.80) = 103.7336: inside the step the same row, past it a new high.
+	// Inside the trail step of the anchor the same row, past it a new high.
 	inside := ticks(t, armed, testutil.At("09:02:00"), 103.5, 103.0)
 	if len(inside.Trade.Logs) != 2 {
 		t.Fatalf("a print inside the step must not move the anchor, got %q", rows(inside))
@@ -395,7 +395,7 @@ func TestFirstFillHoldMirrorsTheInverseLadder(t *testing.T) {
 	if reason != armedAt("103.8000") || len(higher.Trade.Logs) != 3 {
 		t.Fatalf("a full step higher must write a new row at the new high, got %q %q", reason, rows(higher))
 	}
-	// bounce(103.80) = 103.6445: short of it the high stands, past it the entry fills.
+	// Short of the bounce off the high it stands, past it the entry fills.
 	if _, reason := tick(t, higher, 103.7, testutil.At("09:11:00")); reason != armedAt("103.8000") {
 		t.Fatalf("a print short of the bounce must keep the high, got %q", reason)
 	}

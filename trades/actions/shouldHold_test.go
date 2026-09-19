@@ -193,8 +193,8 @@ func TestShouldHoldWritesInfoLogAndCollapsesRepeats(t *testing.T) {
 
 	// Next tick holds the same position for a DIFFERENT reason: that is a new
 	// row. The old prefix dedup collapsed it and hid every reason change
-	// behind the first hold (run 97: capitulation freezes invisible behind a
-	// regime veto, the regime entry veto invisible behind cooldown).
+	// behind the first hold — a capitulation freeze invisible behind a regime
+	// veto, an entry veto invisible behind cooldown.
 	held.Trade.PositionType = "stopLoss"
 	held.Params.AIIndicators = aggragates.AIIndicators{AIAction: aggragates.ActionHold}
 	again, err := ShouldHold(held)

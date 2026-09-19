@@ -13,10 +13,10 @@ import (
 )
 
 // holdRelogAfter is how long one hold row may stand for a hold that is still
-// in force before the same reason is written again. A row per day keeps a
-// three-week blockade readable as three weeks instead of one line dated the
-// first tick (run 97: one "4h downtrend-persist" row covered 25 simulated
-// days), while a flip-flopping gate still collapses within the day.
+// in force before the same reason is written again. Re-logging keeps a long
+// blockade readable as a long blockade instead of one line dated the first
+// tick, while a gate that flips back and forth still collapses to a single
+// row per reason per window.
 const holdRelogAfter = 24 * time.Hour
 
 // SaveHoldLog records a hold as an INFO entry in the trade logs, restores the
@@ -70,10 +70,10 @@ func SaveHoldLog(event events.Events, position string, reason string) (events.Ev
 // holdLoggedWithin reports whether this exact message already stands in the
 // trade's log within the last holdRelogAfter. Logs are chronological, so the
 // scan runs backwards and stops at the first row old enough to be written
-// again. Comparing only with the LAST row let two reasons that alternate
-// tick by tick (A-B-A-B) write on every tick — run 98: 18 rows a day on one
-// trade; the window collapses that to one row per reason per day. Without a
-// clock (rows never expire) this is the plain "same message anywhere" rule.
+// again. Comparing only with the LAST row lets two reasons that alternate
+// tick by tick (A-B-A-B) write on every tick; the window collapses that to
+// one row per reason per window. Without a clock (rows never expire) this is
+// the plain "same message anywhere" rule.
 func holdLoggedWithin(logs []aggragates.TradesLogs, message string, now time.Time) bool {
 	for i := len(logs) - 1; i >= 0; i-- {
 		if holdRowExpired(logs[i].CreatedAt, now) {

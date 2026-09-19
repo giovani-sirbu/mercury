@@ -21,7 +21,7 @@ import (
 //
 //	first fill (OldPosition "new")   Cooldown  → first-fill gate (higher-highs hold, released by price)
 //	                                 UseAI     → legacy bullish/bearish veto
-//	open position                    RegimeHold    → 15m shock hold, add veto, profit hold
+//	open position                    RegimeHold    → shock hold, add veto, profit hold
 //	                                 UsePatterns   → chart-pattern and fibonacci holds
 //	                                 UseAI         → legacy AI hold
 //	                                 CrashGuard    → flush park, sticky reclaim, capitulation
@@ -41,12 +41,13 @@ import (
 // cap; depth spacing reads only the trade's own fill stamps.
 //
 // With every flag off nothing holds: the ladder runs exactly as the legacy
-// engine ran it, stopped only by funds (matrix H, run R0).
+// engine ran it, stopped only by funds.
 //
 // RegimeHold never reaches the first fill: the regime entry veto was removed
-// (it measured one right call in four on run 97); the first fill is the
-// cooldown's. Whether the first-buy chain runs this function at all is the
-// engines' call through StrategyParams.InjectsEntryHold.
+// because a regime read was wrong about a first fill far more often than it
+// was right; the first fill is the cooldown's. Whether the first-buy chain
+// runs this function at all is the engines' call through
+// StrategyParams.InjectsEntryHold.
 func ShouldHold(event events.Events) (events.Events, error) {
 	if event.Params.OldPosition == "new" {
 		return shouldHoldEntry(event)

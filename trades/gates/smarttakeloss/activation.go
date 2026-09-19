@@ -4,14 +4,13 @@ import "github.com/giovani-sirbu/mercury/trades/aggragates"
 
 // activates is the "the price is at the bottom of the window" test, read on
 // EVERY tick of an armed trade. Sophos counts, over its own window of
-// WindowBars closed 4h bars, how many CLOSED THEIR BODY under a price — how
-// many bars are to its LEFT — and serves the level where that count is the
-// most the gate allows. A wick that pierced the price months ago and closed back above it
-// is not one of them. A tick
-// price at or under it activates the trade (at or over the mirror level, for
-// an inverse ladder); the trade then keeps being watched, and the second
-// reading — no bar to the left at all — is what later arms the tolerance
-// exit.
+// WindowBars closed bars of Interval, how many CLOSED THEIR BODY under a
+// price — how many bars are to its LEFT — and serves the level that still has
+// MaxBarsLeft of them under it. A wick that pierced the price earlier in the
+// window and closed back above it is not one of them. A tick price at or
+// under that level activates the trade (at or over the mirror level, for an
+// inverse ladder); the trade then keeps being watched, and the second reading
+// — no bar to the left at all — is what later arms the tolerance exit.
 //
 // It is not tied to a fill: a ladder sitting in the dead zone between its next
 // depth and its take profit activates on the tick the price arrives, where the

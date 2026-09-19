@@ -14,21 +14,29 @@ const (
 	pollInterval   = 5 * time.Second
 	// staleLockAfter is the window after which a row's locked_at is
 	// considered abandoned and the row can be re-claimed by another worker.
-	// 60s is enough for any healthy handler to complete (the trade /
-	// email / user handlers all finish in <5s under load) while keeping
-	// the redelivery tail short on a real worker crash. Was 5m on master
-	// — too long for trade-related messages.
+	// It sits above the time any healthy handler takes to finish — the trade
+	// / email / user handlers all complete well inside it — so a live
+	// handler's row is never re-claimed under it, and a handler that ran
+	// past this window would see its message delivered a second time. It
+	// sits no higher, because the same window IS the redelivery tail a real
+	// worker crash costs. A crashed worker sends no further notification, so
+	// its rows wait for the next poll: that tail is staleLockAfter plus up to
+	// one pollInterval, which is also why cutting it under pollInterval buys
+	// nothing.
 	staleLockAfter      = 60 * time.Second
 	reconnectMaxBackoff = 30 * time.Second
 	// listenKeepaliveInterval bounds how long the dedicated LISTEN connection
 	// waits for a notification before sending a keepalive ping. That socket
 	// carries no application bytes between notifications, and the gateway's
-	// nginx stream proxy closes a connection idle past its proxy_timeout (12h)
-	// — surfacing here as "unexpected EOF" and forcing a reconnect on every
+	// nginx stream proxy closes a connection idle past its proxy_timeout —
+	// surfacing here as "unexpected EOF" and forcing a reconnect on every
 	// low-traffic topic. Pinging well inside that window keeps bytes on the
-	// wire so an idle connection is never reaped. 5m is far below the 12h cap
-	// (and any plausible intermediate idle timeout) at a cost of one trivial
-	// query per idle connection per interval.
+	// wire so an idle connection is never reaped. It is set far under that
+	// proxy_timeout, and under any plausible intermediate idle timeout, at a
+	// cost of one trivial query per idle connection per interval; the ping it
+	// schedules is bounded by listenKeepalivePingTimeout, which stays well
+	// under this interval so a stalled ping fails and reconnects long before
+	// the next keepalive is due.
 	listenKeepaliveInterval = 5 * time.Minute
 	// listenKeepalivePingTimeout bounds the keepalive ping so a half-open
 	// connection fails fast (and reconnects) instead of blocking the listener.

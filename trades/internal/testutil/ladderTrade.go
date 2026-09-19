@@ -13,12 +13,11 @@ type LadderFill struct {
 	At    time.Time
 }
 
-// LadderTrade is a SOL/USDT trade under SmartTakeLoss on the w3s row
-// {Percentage 2.25, Tolerance 0.25, TrailingTakeProfit 1, Multiplier 2,
-// MinDepths 6, Depths 8} — the strategy of backtest 121 — with PriceFilter
-// 2, one distinct entry order per fill (OrderId i+1, one unit, CreatedAt =
-// the fill's stamp), PositionType "buy" and PositionPrice at the last fill.
-// An inverse ladder holds the same fills as SELLs.
+// LadderTrade is a trade under SmartTakeLoss on one ladder row, so that row's
+// settings govern every depth: one distinct entry order per fill (OrderId
+// i+1, one unit, CreatedAt = the fill's stamp), PositionType "buy" and
+// PositionPrice at the last fill. An inverse ladder holds the same fills as
+// SELLs.
 func LadderTrade(inverse bool, fills ...LadderFill) aggragates.Trades {
 	trade := aggragates.Trades{
 		ID:           45211,
@@ -49,10 +48,9 @@ func LadderTrade(inverse bool, fills ...LadderFill) aggragates.Trades {
 	return trade
 }
 
-// W3sFills is trade 45211's ladder (SOL/USDT, December 2021): the eight
-// fills it took before the funds ran out, one per clock given, stamped with
-// At. W3sFills("13:00:00", "13:15:00") is the two-deep ladder; more than
-// eight clocks are ignored.
+// W3sFills is the fixture ladder's entry prices — a ladder filled to its
+// last depth — one per clock given, stamped with At. Passing two clocks
+// yields the two-deep prefix of it; clocks past the last price are ignored.
 func W3sFills(clocks ...string) []LadderFill {
 	prices := []float64{201.46, 192.81, 188.58, 184.45, 179.78, 175.83, 171.97, 168.2}
 	fills := make([]LadderFill, 0, len(clocks))

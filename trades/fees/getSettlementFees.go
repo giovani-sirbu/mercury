@@ -19,9 +19,9 @@ import (
 // to sell, an inverse sell's quote-asset fee leaves less quote to buy back
 // with. GetProfit's gross figure has therefore already paid the opening leg
 // once, and subtracting its cross-converted value again (as profit math did
-// via GetFees) charged every round trip roughly 0.3% instead of the real
-// 0.2% — on backtest 76 that alone turned the marginal wins 12840 and 12885
-// into booked losses.
+// via GetFees) charges the opening commission a second time, overstating the
+// cost of every round trip and booking marginally profitable trades as
+// losses.
 //
 // What still reduces profit explicitly:
 //   - fees taken in the profit asset itself (spot: quote fees, which come off

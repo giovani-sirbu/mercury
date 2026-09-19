@@ -214,11 +214,11 @@ func TestApplyPermittedDepthPassesTheArmingThrough(t *testing.T) {
 	assertUntouched(t, Apply(activeTrade(), "", 179.90, activeExitTick, withBlock(block)), "")
 }
 
-// Trade 49490 took its permitted depth at 13:09:30 and sold one tolerance
-// under it one second later. Nothing sells inside MinAgeAfterLastFill — not
-// the tolerance, not the band, not the line — and on the last permitted
-// depth the ladder may not add either: the add-side proposal is dropped, so
-// the wait cannot be reset by a fill it would otherwise take.
+// Nothing sells inside MinAgeAfterLastFill — not the tolerance, not the band,
+// not the line — because without that wait a ladder can buy and sell in the
+// same instant. On the last permitted depth the ladder may not add either:
+// the add-side proposal is dropped, so the wait cannot be reset by a fill it
+// would otherwise take.
 func TestApplyWaitsMinAgeAfterTheLastFillBeforeAnyExit(t *testing.T) {
 	if MinAgeAfterLastFill <= 0 {
 		t.Skip("MinAgeAfterLastFill is deactivated (0): nothing waits, no add is refused")

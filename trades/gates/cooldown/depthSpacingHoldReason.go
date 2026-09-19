@@ -23,11 +23,10 @@ import (
 // that file fix it, the same way an earlier fix stamped trade.CreatedAt there
 // so the cooldown first-fill gate could expire (handlers/testing/manageTrades.go:17-23).
 //
-// The shape it answers to is backtest trade 25858 (HBAR/USDT): depths placed
-// at 13:41:08, 13:48:33 (+7m25s), 13:55:45 (+7m12s), 14:25:08, 15:55:10,
-// 16:09:00 (+13m50s), 16:39:22 — seven depths in three hours — after which
-// the trade sat blocked for 54 days before it could sell. The budget was
-// spent in an afternoon on a move that was not finished falling.
+// The shape it answers to is a ladder that fills depth after depth minutes
+// apart during one fast drop: the whole budget is committed on a move that is
+// not finished falling, and the trade is then blocked until the price comes
+// back to the average entry.
 //
 // TIMESTAMPS, AND THEY ARE NOT THE SAME IN EVERY ENGINE. This rule folds over
 // TradesHistory.CreatedAt, and that column means two different things:
@@ -108,16 +107,17 @@ func DepthSpacingHoldReason(event events.Events, position string) string {
 	//
 	// The depth is len(fills), NOT step+1. `step` counts only the entries that
 	// arrived fast, so on any ladder containing one real pause it lags the
-	// trade's actual depth — trade 25858 would have logged "depth 6" while
-	// holding seven entries. len(fills) is ladder.CountFilledEntries by
+	// trade's actual depth and would under-report how many entries are being
+	// held. len(fills) is ladder.CountFilledEntries by
 	// construction (depthFillTimes mirrors it row for row), which is the
 	// number regimeHold and crash-guard print for the same trade on the same
 	// tick.
 	// The release price is in the row because it is the other half of the
-	// decision: an operator reading "parked for 30m0s" alone cannot tell that
-	// a 5.2% drop would have lifted it. It is derived from the last fill and
-	// the settings row, both frozen while the hold stands, so the message
-	// stays byte-identical tick to tick and SaveHoldLog still collapses it.
+	// decision: an operator reading the parked duration alone cannot tell how
+	// far the price would have to move to lift it. It is derived from the last
+	// fill and the settings row, both frozen while the hold stands, so the
+	// message stays byte-identical tick to tick and SaveHoldLog still
+	// collapses it.
 	release, ok := depthSpacingReleasePrice(event.Trade, fills[len(fills)-1].Price, state.step)
 	if !ok {
 		return fmt.Sprintf(

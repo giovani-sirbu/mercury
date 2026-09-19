@@ -21,7 +21,8 @@ import (
 const (
 	// FirstFillWaitingPrefix opens the row written while the entry waits at
 	// the reference. gates.SaveHoldLog frames it as "Hold entry: …" and
-	// re-logs it once a day, so the FIRST such row is the reference.
+	// re-logs it while the hold stands, so the FIRST such row is the
+	// reference.
 	FirstFillWaitingPrefix = "cooldown: trying to get a better entry price: reference "
 	// FirstFillArmedPrefix opens every armed row. The anchor is in the text
 	// on purpose: gates.SaveHoldLog deduplicates on the whole message, so a

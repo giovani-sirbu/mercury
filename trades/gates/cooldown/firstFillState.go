@@ -22,8 +22,9 @@ type firstFillRecord struct {
 	activated bool
 	// reference is the price the hold activated at: the Price column of the
 	// FIRST waiting row. gates.SaveHoldLog writes the same message again once
-	// the standing row is a day old, at that day's price, so a later waiting
-	// row is a re-log and never a new reference.
+	// the standing row is older than its re-log window, at the price of that
+	// later tick, so a later waiting row is a re-log and never a new
+	// reference.
 	reference float64
 	// activatedAt is that same row's stamp — the tick the hold started, which
 	// FirstFillMaxHold measures from. Zero when the engine did not stamp it,
@@ -32,9 +33,9 @@ type firstFillRecord struct {
 	armed       bool
 	// anchor is the extreme the armed hold trails: the lowest armed-row Price
 	// on a long, the highest on an inverse ladder. A re-logged armed row
-	// carries the price of its day, which can sit anywhere inside the current
-	// step, and taking the extreme keeps such a row from moving the anchor
-	// the wrong way.
+	// carries the price of the tick it was re-logged at, which can sit
+	// anywhere inside the current step, and taking the extreme keeps such a
+	// row from moving the anchor the wrong way.
 	anchor float64
 	// enteredAbove: the price ran through the reference and the entry went
 	// to market. The gate is finished with this trade.

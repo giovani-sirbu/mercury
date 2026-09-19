@@ -25,9 +25,10 @@ func regimeHoldEvent(positionType string, inverse bool, ai aggragates.AIIndicato
 	}
 }
 
-// The regime lens never touches the first fill: a 4h downtrend, a refused
-// verdict, a shock — none of it holds a new trade. The first fill is the
-// cooldown's (the 4h entry veto measured one right call in four on run 97).
+// The regime gates never touch the first fill: a higher-timeframe downtrend,
+// a refused verdict, a shock — none of it holds a new trade. The first fill
+// is the cooldown's; a regime read was wrong about a first fill far more
+// often than it was right.
 func TestShouldHoldRegimeHoldNeverVetoesEntry(t *testing.T) {
 	for _, inverse := range []bool{false, true} {
 		for _, label := range []string{regime.DownPersist, regime.UpPersist, regime.Shock, regime.ShockDown, regime.ShockUp} {
@@ -95,8 +96,9 @@ func TestShouldHoldRegimeStopLossBlockedWhenAddNotAllowed(t *testing.T) {
 	}
 }
 
-// A profitable close still sells when 15m is not a favorable persist, and
-// crash neither clears a trend hold nor adds a take-profit hold of its own.
+// A profitable close still sells when the profit-hold timeframe is not a
+// favorable persist, and crash neither clears a trend hold nor adds a
+// take-profit hold of its own.
 //
 // The regime DOES defer a profitable close in one case — regime.HoldReason
 // dispatches takeProfit to profitHoldReason — so the old name here
@@ -123,8 +125,9 @@ func TestShouldHoldRegimeReleasesProfitExitWithoutAFavorablePersist(t *testing.T
 	}
 }
 
-// A 15m shock parks a deep-enough rebuy (via AddAllowed=false in this
-// fixture) but never the first buy and never a profitable close.
+// A shock on the trigger timeframe parks a deep-enough rebuy (via
+// AddAllowed=false in this fixture) but never the first buy and never a
+// profitable close.
 func TestShouldHoldRegimeShockBlocksCapitalNotProfitExit(t *testing.T) {
 	shock := aggragates.AIIndicators{
 		HasRegimeVerdict: true,
@@ -151,9 +154,10 @@ func TestShouldHoldRegimeShockBlocksCapitalNotProfitExit(t *testing.T) {
 	}
 }
 
-// The recalibrated shock policy: a 15m shock parks a rebuy only from
-// ShockHoldMinDepth entries up. Shallow rungs trade straight through the
-// spike — 26 of run 73's 29 shock holds had landed on 0-1 entry trades.
+// The recalibrated shock policy: a shock on the trigger timeframe parks a
+// rebuy only from ShockHoldMinDepth entries up. Shallow depths trade straight
+// through the spike, which is where an ungated shock hold spends almost all
+// of its holds.
 func TestShouldHoldRegimeShockHoldIsDepthAware(t *testing.T) {
 	shock15m := aggragates.AIIndicators{
 		HasRegimeVerdict: true,
@@ -255,10 +259,10 @@ func TestShouldHoldShockDirectionOnDeepRebuys(t *testing.T) {
 	}
 }
 
-// Profit-exit deferral from ProfitHoldMinDepth up while 15m still moves in
-// the trade's favor. A non-persist 15m label still releases the close, and
-// so does a shallow ladder: below four fills the deferral measured as a
-// negative coin flip that tied capital (runs 90/94). Crash does not release.
+// Profit-exit deferral from ProfitHoldMinDepth up while the profit-hold
+// timeframe still moves in the trade's favor. A non-persist label still
+// releases the close, and so does a shallow ladder, where the deferral is a
+// coin flip that ties up capital for nothing. Crash does not release.
 func TestShouldHoldDeepProfitExitRidesTheTrend(t *testing.T) {
 	profitEvent := func(inverse bool, fills int, depths float64, ai aggragates.AIIndicators) events.Events {
 		side := "BUY"
@@ -350,7 +354,7 @@ func TestShouldHoldDeepProfitExitRidesTheTrend(t *testing.T) {
 
 // The inverse ADD veto reads labels, and a violent rally labels as shock-up,
 // not uptrend-persist — without shockBlocks in the veto loop a vertical
-// squeeze slipped exactly the veto that saved run 74's rally blow-ups. The
+// squeeze slips exactly the veto that exists for a rally. The
 // veto follows shock direction at ANY depth (this is the uptrend veto, not
 // the depth-aware shock rule): shock-up parks the add, shock-down is the
 // inverse trade's harvest and passes.
@@ -403,8 +407,9 @@ func profitHoldDeepEvent(fills int, depths float64, ai aggragates.AIIndicators) 
 	}
 }
 
-// C.4: 15m up vs 4h down is disagreement — a deep takeProfit must execute,
-// not ride. 4h still agreeing up keeps the existing deferral.
+// The profit-hold timeframe up against the slower add-veto timeframe down is
+// disagreement, not a trend to ride: a deep takeProfit must execute. The
+// slower timeframe still agreeing up keeps the existing deferral.
 func TestShouldHoldProfitHoldRequiresFourHourAgreement(t *testing.T) {
 	ai := func(label15m, label4h string) aggragates.AIIndicators {
 		return aggragates.AIIndicators{
