@@ -125,7 +125,6 @@ func TestShouldHold(t *testing.T) {
 		event.Params.CoolDownIndicators = aggragates.CoolDownIndicators{
 			HasFirstFillVerdict: true,
 			AllowLongEntry:      false,
-			MarketBearish:       true,
 		}
 		_, err := actions.ShouldHold(event)
 		AssertNoError(t, err)
@@ -140,7 +139,6 @@ func TestShouldHold(t *testing.T) {
 		event.Params.CoolDownIndicators = aggragates.CoolDownIndicators{
 			HasFirstFillVerdict: true,
 			AllowLongEntry:      false,
-			MarketBullish:       true,
 		}
 		_, err := actions.ShouldHold(event)
 		AssertNoError(t, err)

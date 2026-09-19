@@ -19,7 +19,6 @@ func TestHold_StopLossNoLongerHeldOnClassicSignal(t *testing.T) {
 	event.Params.CoolDownIndicators = aggragates.CoolDownIndicators{
 		HasFirstFillVerdict: true,
 		AllowLongEntry:      false,
-		MarketBearish:       true,
 	}
 
 	if _, err := actions.ShouldHold(event); err != nil {

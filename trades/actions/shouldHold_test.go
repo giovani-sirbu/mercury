@@ -41,7 +41,6 @@ func TestShouldHoldIgnoresCooldownAfterFirstFill(t *testing.T) {
 			CoolDownIndicators: aggragates.CoolDownIndicators{
 				HasFirstFillVerdict: true,
 				AllowLongEntry:      false,
-				MarketBearish:       true,
 			},
 		},
 	}

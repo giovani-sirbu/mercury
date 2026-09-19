@@ -40,12 +40,9 @@ type (
 	}
 
 	CoolDownIndicators struct {
-		VolatilityScore     float64 `json:"volatilityScore"`
-		MarketBullish       bool    `json:"marketBullish"`
-		MarketBearish       bool    `json:"marketBearish"`
-		HasFirstFillVerdict bool    `json:"hasFirstFillVerdict"`
-		AllowLongEntry      bool    `json:"allowLongEntry"`
-		AllowShortEntry     bool    `json:"allowShortEntry"`
+		HasFirstFillVerdict bool `json:"hasFirstFillVerdict"`
+		AllowLongEntry      bool `json:"allowLongEntry"`
+		AllowShortEntry     bool `json:"allowShortEntry"`
 	}
 
 	AIIndicators struct {
