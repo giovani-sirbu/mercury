@@ -1,6 +1,6 @@
 // Package cooldown is the Cooldown flag's two gates, one on each side of the
 // first fill: the first-fill gate (FirstFillHold) — a hold on a local top,
-// activated by the higher-highs verdict sophos serves on /markers, released
+// activated by the higher-highs verdict sophos serves on /cooldown, released
 // by price and bounded by FirstFillMaxHold — and depth spacing, the gate
 // that keeps a ladder from cascading through every depth in one drop
 // (DepthSpacingHoldReason).
@@ -17,7 +17,7 @@ import (
 // the caller must carry that event on, the way crashguard.ApplyCapitulationOverride's
 // caller does, or the row never reaches updateTrade.
 //
-// SPOT. The verdict only starts the hold; price ends it. sophos /markers
+// SPOT. The verdict only starts the hold; price ends it. sophos /cooldown
 // reports whether the last closed 15m bar is a local top — fewer than five
 // higher highs among the forty bars before it (HBAR 2021-10-04 18:45 had
 // none). A refused verdict activates the hold at the tick price, which is

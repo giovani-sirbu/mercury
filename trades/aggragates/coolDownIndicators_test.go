@@ -6,16 +6,16 @@ import (
 	"testing"
 )
 
-// The sophos /markers payload is exactly three booleans, and this struct is
+// The sophos /cooldown payload is exactly three booleans, and this struct is
 // the only place mercury reads them: trades/gates/cooldown decides the first
 // fill on HasFirstFillVerdict plus the flag for the side the entry takes.
 // Nothing else in either repo pins these json tags, so a rename or a dropped
 // field would surface only as silently-degraded live trading.
-func TestCoolDownIndicatorsDecodesTheMarkersPayload(t *testing.T) {
+func TestCoolDownIndicatorsDecodesTheCooldownPayload(t *testing.T) {
 	var got CoolDownIndicators
 	raw := []byte(`{"hasFirstFillVerdict":true,"allowLongEntry":false,"allowShortEntry":true}`)
 	if err := json.Unmarshal(raw, &got); err != nil {
-		t.Fatalf("decode markers payload: %v", err)
+		t.Fatalf("decode cooldown payload: %v", err)
 	}
 	if want := (CoolDownIndicators{HasFirstFillVerdict: true, AllowShortEntry: true}); got != want {
 		t.Fatalf("decoded %+v, want %+v", got, want)

@@ -36,7 +36,7 @@ import (
 // spacing that keeps the ladder from cascading through every depth in one
 // drop. They share a flag because they are the same idea — do not spend
 // capital faster than the move deserves — but nothing else: the first-fill
-// gate takes one higher-highs verdict from sophos /markers to activate and
+// gate takes one higher-highs verdict from sophos /cooldown to activate and
 // from then on reads only the tick price and its own log rows, with no time
 // cap; depth spacing reads only the trade's own fill stamps.
 //
