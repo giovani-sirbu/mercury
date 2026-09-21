@@ -11,11 +11,20 @@ import (
 )
 
 func ParentTradeHasProfit(event events.Events) (events.Events, error) {
-	// the quantity the close would actually submit (net of embodied fees)
-	quantity, historyType := quantities.SimulatedCloseQuantity(event)
+	// the quantity the close would actually submit (net of embodied fees), and
+	// the lot-size remainder it would leave behind
+	quantity, dust, historyType := quantities.SimulatedClose(event)
 
 	// simulate sell event to calculate profit & get trade profit
 	trade := event.Trade
+
+	// Sell keeps this remainder as Dust and GetProfit credits it at the
+	// position price. This path refuses the parent's exit on a negative total,
+	// so dropping it holds an impasse open against a close that books above
+	// zero. Each child carries its own through the hasProfit it re-enters
+	// below.
+	trade.Dust = dust
+
 	trade.History = append(trade.History, aggragates.TradesHistory{
 		Type:     historyType,
 		Quantity: quantity,

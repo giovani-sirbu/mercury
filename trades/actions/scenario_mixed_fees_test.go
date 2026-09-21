@@ -24,12 +24,18 @@ import (
 // off the buy's proceeds, so both still have to be charged, alongside the one
 // closing leg the simulated fill does not carry.
 //
+// The lot size floors the closeable quantity and Sell keeps what it cut as
+// dust, which GetProfit credits at the position price — so the simulated close
+// carries that row too, or the gate prices the close below what closing books.
+//
 //	close price       102000 less the 0.25% tolerance     = 101745.00
 //	close quantity    0.007 base less the 0.000004 BTC fee=      0.00699
-//	gross profit      0.00699 * 101745.00 - 680.16        =     31.03755
+//	dust              what the lot-size floor cut         =      0.000006
+//	gross profit      0.00699 * 101745.00 - 680.16
+//	                  + 0.000006 * 102000                 =     31.64955
 //	closing leg       GetFees                             =      0.98416
 //	opening legs      0.0002 BNB * 500 + 0.5 USDC         =      0.6
-//	net                                                   =     29.45339
+//	net                                                   =     30.06539
 func TestMixedFees_SpotProfitNetsAllAssetClasses(t *testing.T) {
 	trade := scenarioBuildTrade("takeProfit", 102000, false)
 	trade.ProfitAsset = "USDC"
@@ -47,7 +53,7 @@ func TestMixedFees_SpotProfitNetsAllAssetClasses(t *testing.T) {
 		t.Fatalf("HasProfit returned error: %v", err)
 	}
 
-	const want = 29.45339
+	const want = 30.06539
 	if math.Abs(got.Trade.Profit-want) > 1e-9 {
 		t.Errorf("net profit = %v, want %v", got.Trade.Profit, want)
 	}
@@ -71,9 +77,10 @@ func TestMixedFees_SpotProfitChargesNothingExtraWithoutAThirdAsset(t *testing.T)
 
 	// Base fees only: fully embodied, so only the closing leg is charged.
 	//	close quantity 0.003 - 0.000003          = 0.00299
-	//	gross          0.00299 * 101745.00 - 296 =  8.21755
+	//	dust           what the lot-size floor cut = 0.000007
+	//	gross          0.00299 * 101745.00 - 296 + 0.000007 * 102000 = 8.93155
 	//	closing leg    0.000001*100000 + 0.000002*98000 = 0.296
-	const want = 0.00299*101745.00 - (0.001*100000 + 0.002*98000) - 0.296
+	const want = 0.00299*101745.00 - (0.001*100000 + 0.002*98000) + 0.000007*102000 - 0.296
 	if math.Abs(got.Trade.Profit-want) > 1e-9 {
 		t.Errorf("net profit = %v, want %v", got.Trade.Profit, want)
 	}

@@ -13,11 +13,18 @@ import (
 // AcceptLoss calculates the trade net profit like HasProfit but accepts a negative
 // result, so a trade in take loss mode can sell below break even
 func AcceptLoss(event events.Events) (events.Events, error) {
-	// the quantity the close would actually submit (net of embodied fees)
-	quantity, historyType := quantities.SimulatedCloseQuantity(event)
+	// the quantity the close would actually submit (net of embodied fees), and
+	// the lot-size remainder it would leave behind
+	quantity, dust, historyType := quantities.SimulatedClose(event)
 
 	// simulate sell event to calculate profit & get trade profit
 	trade := event.Trade
+
+	// Sell keeps this remainder as Dust and GetProfit credits it at the
+	// position price, so the loss this path accepts and logs carries it too.
+	// Without it the cut is reported deeper than the close will book.
+	trade.Dust = dust
+
 	trade.History = append(trade.History, aggragates.TradesHistory{
 		Type:     historyType,
 		Quantity: quantity,

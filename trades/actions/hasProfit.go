@@ -11,11 +11,21 @@ import (
 )
 
 func HasProfit(event events.Events) (events.Events, error) {
-	// the quantity the close would actually submit (net of embodied fees)
-	quantity, historyType := quantities.SimulatedCloseQuantity(event)
+	// the quantity the close would actually submit (net of embodied fees), and
+	// the lot-size remainder it would leave behind
+	quantity, dust, historyType := quantities.SimulatedClose(event)
 
 	// simulate sell event to calculate profit & get trade profit
 	trade := event.Trade
+
+	// Sell assigns this remainder to Dust and GetProfit credits it at the
+	// position price. Without it the gate prices the close below what closing
+	// actually books, by one lot step — enough to hold a minimum-notional
+	// position open at every price it could have closed at. Set on the copy,
+	// never on event.Trade: Dust is the close's own output and persisting it
+	// from a gate that may not close would carry it into the next pass.
+	trade.Dust = dust
+
 	trade.History = append(trade.History, aggragates.TradesHistory{
 		Type:     historyType,
 		Quantity: quantity,
