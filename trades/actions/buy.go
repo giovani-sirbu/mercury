@@ -84,6 +84,18 @@ func Buy(event events.Events) (events.Events, error) {
 		quantity = quantity - sellQty
 	}
 
+	// The wallet is short of what this entry needs by less than HasFunds
+	// tolerates, and HasFunds named the balance rather than blocking the
+	// trade: place the entry for what that balance buys. Zero leaves the
+	// ladder's own quantity standing.
+	if event.Params.AvailableQuantity > 0 {
+		affordableQuantity := event.Params.AvailableQuantity
+		if !event.Trade.Inverse {
+			affordableQuantity = event.Params.AvailableQuantity / event.Trade.PositionPrice
+		}
+		quantity = math.Min(quantity, affordableQuantity)
+	}
+
 	// get quantity
 	quantity = helpers.ToFixed(quantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
 	minQuantity := quantities.CalculateMinOrderQty(event.Trade)

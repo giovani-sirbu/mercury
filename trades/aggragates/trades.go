@@ -127,5 +127,11 @@ type (
 		// the regime profit hold stands down. Set by the engines on a
 		// takeProfit tick; zero elsewhere.
 		PortfolioBlocked bool
+		// AvailableQuantity is the wallet balance the entry being placed must
+		// not exceed, counted in the asset that entry spends: the quote asset
+		// on a spot buy, the base asset on an inverse one. HasFunds sets it
+		// only on the ticks where it waives a shortfall; zero leaves the
+		// entry sized by the ladder alone.
+		AvailableQuantity float64
 	}
 )

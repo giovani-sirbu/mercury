@@ -25,7 +25,6 @@ func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
 
 	// get user assets (and check IP restrictions if any)
 	assets, assetsErr := client.GetUserAssets() // Get user balance
-	sellAction := false
 	if assetsErr != nil {
 		return 0, 0, "", assetsErr
 	}
@@ -61,9 +60,7 @@ func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
 	var assetSymbol string
 	var neededQuantity float64
 
-	if event.Trade.PositionType == "sell" || event.Trade.PositionType == "takeProfit" || event.Trade.PositionType == "sellParent" {
-		sellAction = true
-	}
+	sellAction := IsSellAction(event.Trade.PositionType)
 
 	if sellAction {
 		buyQty, sellQty := quantities.GetGrossQuantities(event)
