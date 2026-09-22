@@ -60,22 +60,18 @@ const (
 	depthSpacingMaxHold = 4 * time.Hour
 )
 
-// Depth-priority tunables — the Cooldown flag's gate on the WALLET, the one
-// that stops every ladder of one wallet from spending the same funds at a
-// shallow depth while a sibling sits short of the depth its grid was sized
-// for. What the gate does with them is on depthPriorityHoldReason.go.
+// Depth-priority tunable — the Cooldown flag's gate on the WALLET, the one
+// that stops every ladder of one wallet from spending at a shallow depth the
+// funds a sibling needs to reach the depth its grid was sized for. What the
+// gate does with it is on depthPriorityHoldReason.go.
 //
 // The operator-facing copy of this behaviour lives in
 // cp/constants/strategy-params.ts and has to move with it.
 const (
-	// DepthPriority switches the gate on and off. Off, every ladder of the
-	// wallet competes for the funds on its own, which is how the wallet was
-	// spent before the gate existed.
+	// DepthPriority switches the wallet reserve on and off. Off, every ladder
+	// of the wallet competes for the funds on its own, which is how the
+	// wallet was spent before the gate existed. There is nothing else to tune:
+	// the reserve is the deepest ladder's own remaining cost, so what holds an
+	// entry is the wallet's arithmetic rather than a calibrated band.
 	DepthPriority = true
-	// DepthPriorityMargin is how near its last configured depth a ladder has
-	// to be before the wallet is reserved for its next entry: it becomes a
-	// candidate past Depths minus this. Widening it reserves the wallet
-	// earlier and for more ladders at once, which is the opposite of what the
-	// gate is for; at one, only the entry before the last one counts.
-	DepthPriorityMargin = 2
 )

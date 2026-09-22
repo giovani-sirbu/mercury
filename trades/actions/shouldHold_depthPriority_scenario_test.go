@@ -13,13 +13,13 @@ import (
 
 // The wallet the gate was asked for, end to end through ShouldHold: five pairs
 // that fell together, each ladder part way down a grid sized for the same
-// number of depths, and one of them short of its last entry.
+// number of depths, and one of them deeper than the rest.
 //
 // Everything here is built as real trades and mapped into the view through
 // ladder.DepthOf — the helper every engine builds its own view with — so the
-// depths the gate reads are counted off the ladders instead of written out
-// beside them. A view written by hand could agree with an engine that counts
-// differently; this one cannot.
+// depths AND the costs the gate reads are taken off the ladders instead of
+// written out beside them. A view written by hand could agree with an engine
+// that counts or prices differently; this one cannot.
 var fallenLadders = []struct {
 	id     uint
 	symbol string
@@ -35,9 +35,13 @@ var fallenLadders = []struct {
 // scenarioDepths is the grid every pair of this wallet is configured for.
 const scenarioDepths = 8
 
-// priorityLadder is the one ladder of the wallet inside the margin of its last
-// depth, so the wallet is reserved for its next entry.
+// priorityLadder is the deepest ladder of the wallet, the one its remaining
+// depths are kept for.
 const priorityLadder = "LINK/USDT"
+
+// runnerUpLadder is the next deepest, the one the reservation passes to when
+// the deepest leaves.
+const runnerUpLadder = "SOL/USDT"
 
 // fallenWallet builds the five ladders as trades.
 func fallenWallet() []aggragates.Trades {
@@ -49,7 +53,7 @@ func fallenWallet() []aggragates.Trades {
 }
 
 // walletDepthsOf is the view an engine hands the tick: every ladder of the
-// wallet, counted by the one helper all four surfaces share.
+// wallet, counted and priced by the one helper all four surfaces share.
 func walletDepthsOf(trades []aggragates.Trades) []aggragates.LadderDepth {
 	wallet := make([]aggragates.LadderDepth, 0, len(trades))
 	for _, trade := range trades {
@@ -58,9 +62,50 @@ func walletDepthsOf(trades []aggragates.Trades) []aggragates.LadderDepth {
 	return wallet
 }
 
+// reserveOf is the ladder a view puts in front of the wallet — the deepest
+// one that has filled anything, its last depth included — and what it keeps.
+// A full ladder keeps nothing and still stands in front until it closes.
+func reserveOf(t *testing.T, wallet []aggragates.LadderDepth) (aggragates.LadderDepth, float64) {
+	t.Helper()
+
+	var deepest aggragates.LadderDepth
+	found := false
+
+	for _, candidate := range wallet {
+		if candidate.MaxDepth <= 0 || candidate.Depth < 1 {
+			continue
+		}
+		if !found || candidate.Depth > deepest.Depth || (candidate.Depth == deepest.Depth && candidate.TradeID < deepest.TradeID) {
+			deepest, found = candidate, true
+		}
+	}
+
+	if !found {
+		t.Fatal("the example wallet must have a ladder that has filled something")
+	}
+
+	return deepest, deepest.RemainingCost
+}
+
+// tightestWallet is the smallest balance on which nobody of this wallet
+// waits: it carries the reserve plus the most expensive next entry in it.
+func tightestWallet(t *testing.T, trades []aggragates.Trades, reserve float64) float64 {
+	t.Helper()
+
+	dearest := 0.0
+	for _, trade := range trades {
+		_, ownCost := ladder.NextEntryCost(trade, reserve)
+		if ownCost > dearest {
+			dearest = ownCost
+		}
+	}
+
+	return reserve + dearest
+}
+
 // withoutLadder is the wallet a close leaves behind: the trade is gone from
-// the view altogether, which is what releases the ladders it was holding
-// without anything having to remember that they were held.
+// the view altogether, which is what ends its reservation without anything
+// having to remember that a hold ever stood.
 func withoutLadder(trades []aggragates.Trades, symbol string) []aggragates.Trades {
 	remaining := make([]aggragates.Trades, 0, len(trades))
 	for _, trade := range trades {
@@ -69,6 +114,19 @@ func withoutLadder(trades []aggragates.Trades, symbol string) []aggragates.Trade
 		}
 	}
 	return remaining
+}
+
+// closedPositionValue is what a ladder's close puts back into the wallet: the
+// base its entries bought, at the price its position sits at. The close is
+// the event the waiting ladders are really waiting for.
+func closedPositionValue(trade aggragates.Trades) float64 {
+	held := 0.0
+	for _, row := range trade.History {
+		if row.Type == "BUY" {
+			held += row.Quantity
+		}
+	}
+	return held * trade.PositionPrice
 }
 
 // configuredDepthOf is the depth the example puts a pair at, read back from
@@ -92,20 +150,20 @@ func filledTo(trade aggragates.Trades, depth int) aggragates.Trades {
 }
 
 // waitingRow is the row the operator reads on a held ladder: which ladder the
-// wallet is reserved for, and where this one stands.
+// wallet is kept for, and where this one stands.
 func waitingRow(priority string, priorityDepth, ownDepth int) string {
 	return fmt.Sprintf(
-		"Hold stopLoss: cooldown: depth priority, %s at depth %d of %d takes the next entry, this ladder waits at depth %d of %d",
+		"Hold stopLoss: cooldown: depth priority, %s at depth %d of %d keeps the wallet for its remaining depths, this ladder waits at depth %d of %d",
 		priority, priorityDepth, scenarioDepths, ownDepth, scenarioDepths,
 	)
 }
 
 // assertFreeToArm fails when the ladder is held on the tick that arms its next
 // entry.
-func assertFreeToArm(t *testing.T, trade aggragates.Trades, wallet []aggragates.LadderDepth) {
+func assertFreeToArm(t *testing.T, trade aggragates.Trades, wallet []aggragates.LadderDepth, free float64) {
 	t.Helper()
 
-	released, err := ShouldHold(priorityEvent(trade, "buy", wallet))
+	released, err := ShouldHold(priorityEvent(trade, "buy", wallet, free))
 	if err != nil {
 		t.Fatalf("%s must be free to arm its next entry, got %v", trade.Symbol, err)
 	}
@@ -114,20 +172,27 @@ func assertFreeToArm(t *testing.T, trade aggragates.Trades, wallet []aggragates.
 	}
 }
 
-// The user's own example: BTC 5, ETH 4, SOL 6, LINK 7, HBAR 2 of eight. LINK
-// is the only ladder past the margin, so it takes the next entry and the four
-// shallower ones wait, each row naming both sides.
-func TestFallenWalletReservesTheNextEntryForTheDeepestLadder(t *testing.T) {
+// The user's own example on a wallet that cannot carry both: LINK is the
+// deepest ladder, so what its remaining depths cost is kept for it and the
+// four shallower ones wait, each row naming both sides.
+func TestFallenWalletReservesItsRemainingDepthsForTheDeepestLadder(t *testing.T) {
 	trades := fallenWallet()
 	wallet := walletDepthsOf(trades)
 
+	priority, reserve := reserveOf(t, wallet)
+	if priority.Symbol != priorityLadder {
+		t.Fatalf("the wallet is kept for %s, want %s", priority.Symbol, priorityLadder)
+	}
+
 	for index, trade := range trades {
+		free := walletShortOf(t, trade, reserve)
+
 		if trade.Symbol == priorityLadder {
-			assertFreeToArm(t, trade, wallet)
+			assertFreeToArm(t, trade, wallet, free)
 			continue
 		}
 
-		held, err := ShouldHold(priorityEvent(trade, "buy", wallet))
+		held, err := ShouldHold(priorityEvent(trade, "buy", wallet, free))
 		if err == nil {
 			t.Fatalf("%s at depth %d must wait for %s", trade.Symbol, fallenLadders[index].depth, priorityLadder)
 		}
@@ -135,7 +200,7 @@ func TestFallenWalletReservesTheNextEntryForTheDeepestLadder(t *testing.T) {
 			t.Fatalf("%s: expected one row, got %v", trade.Symbol, messages(held.Trade.Logs))
 		}
 
-		want := waitingRow(priorityLadder, 7, fallenLadders[index].depth)
+		want := waitingRow(priorityLadder, priority.Depth, fallenLadders[index].depth)
 		if got := held.Trade.Logs[0].Message; got != want {
 			t.Fatalf("%s row = %q, want %q", trade.Symbol, got, want)
 		}
@@ -145,9 +210,25 @@ func TestFallenWalletReservesTheNextEntryForTheDeepestLadder(t *testing.T) {
 	}
 }
 
-// Not one close of that wallet is deferred. The close is the event that frees
-// the funds the deep ladder is waiting for, so a gate that parked it would
-// deadlock the very situation it exists to resolve.
+// The same wallet with enough in it: everybody buys. The reserve is a floor
+// under one ladder's remaining depths, so a balance that clears it and the
+// entry being placed holds nobody — which is what keeps the gate out of the
+// way for all the ticks the wallet is not actually short.
+func TestFallenWalletHoldsNobodyWhenItCoversEveryNextEntry(t *testing.T) {
+	trades := fallenWallet()
+	wallet := walletDepthsOf(trades)
+
+	_, reserve := reserveOf(t, wallet)
+	free := tightestWallet(t, trades, reserve)
+
+	for _, trade := range trades {
+		assertFreeToArm(t, trade, wallet, free)
+	}
+}
+
+// Not one close of that wallet is deferred. The close is the event that
+// refills the wallet the reserve is measured against, so a gate that parked
+// it would deadlock the very situation it exists to resolve.
 func TestFallenWalletNeverDefersAClose(t *testing.T) {
 	trades := fallenWallet()
 	wallet := walletDepthsOf(trades)
@@ -155,7 +236,7 @@ func TestFallenWalletNeverDefersAClose(t *testing.T) {
 	for _, trade := range trades {
 		trade.PositionType = "takeProfit"
 
-		free, err := ShouldHold(priorityEvent(trade, "buy", wallet))
+		free, err := ShouldHold(priorityEvent(trade, "buy", wallet, 0))
 		if err != nil {
 			t.Fatalf("%s must be free to close, got %v", trade.Symbol, err)
 		}
@@ -165,25 +246,30 @@ func TestFallenWalletNeverDefersAClose(t *testing.T) {
 	}
 }
 
-// A trade opened into that wallet has the smallest depth of all, and its first
-// fill spends the same funds: it waits too, and its row is the wallet gate's.
-// The first-fill gate is never consulted, so the verdict it would have
-// activated on is left for the tick the wallet is free on.
+// A trade opened into that wallet spends the same funds, and its first fill
+// is priced like any other entry: it waits too, and its row is the wallet
+// gate's. The first-fill gate is never consulted, so the verdict it would
+// have activated on is left for the tick the wallet can afford the entry on.
 func TestFallenWalletHoldsATradeOpenedIntoIt(t *testing.T) {
 	newcomer := testutil.LadderDepthTrade(21, "ADA/USDT", 0, scenarioDepths)
 	newcomer.PositionType = "buy"
-	newcomer.PositionPrice = 100
 
-	held, err := ShouldHold(priorityEvent(newcomer, "new", walletDepthsOf(fallenWallet())))
+	wallet := walletDepthsOf(fallenWallet())
+	priority, reserve := reserveOf(t, wallet)
+
+	held, err := ShouldHold(priorityEvent(newcomer, "new", wallet, walletShortOf(t, newcomer, reserve)))
 	if err == nil {
-		t.Fatal("a first fill into a reserved wallet must wait")
+		t.Fatal("a first fill the reserved wallet cannot spare must wait")
 	}
 	if len(held.Trade.Logs) != 1 {
 		t.Fatalf("expected one row, got %v", messages(held.Trade.Logs))
 	}
 
 	row := held.Trade.Logs[0].Message
-	want := "Hold entry: cooldown: depth priority, LINK/USDT at depth 7 of 8 takes the next entry, this ladder waits at depth 0 of 8"
+	want := fmt.Sprintf(
+		"Hold entry: cooldown: depth priority, %s at depth %d of %d keeps the wallet for its remaining depths, this ladder waits at depth 0 of %d",
+		priorityLadder, priority.Depth, scenarioDepths, scenarioDepths,
+	)
 	if row != want {
 		t.Fatalf("row = %q, want %q", row, want)
 	}
@@ -192,10 +278,17 @@ func TestFallenWalletHoldsATradeOpenedIntoIt(t *testing.T) {
 	}
 }
 
-// The release the user asked for, both ways round: the reserved ladder fills
-// its last entry, or it closes and leaves the view. Either way every ladder
-// that was waiting is free on the next tick, with nothing to un-hold.
-func TestFallenWalletIsReleasedWhenTheDeepLadderFinishesOrCloses(t *testing.T) {
+// The ladder in front fills its LAST depth. It now keeps nothing, so every
+// sibling the wallet can pay for buys — that is the release — but it stays in
+// front until it closes, and a sibling the wallet cannot pay for keeps
+// waiting on the row that says so.
+//
+// The waiting is the point. Releasing everybody here sends them all at a
+// wallet the ladder has just spent down to its last depth: they reach the
+// funds gate, block, and leave the wallet view, so the ladder that finally
+// closes hands the wallet to whatever shallow ladder is still active rather
+// than to the deepest one.
+func TestFallenWalletHoldsOnlyTheUnaffordableWhenTheDeepLadderFills(t *testing.T) {
 	trades := fallenWallet()
 
 	finished := make([]aggragates.Trades, 0, len(trades))
@@ -207,45 +300,96 @@ func TestFallenWalletIsReleasedWhenTheDeepLadderFinishesOrCloses(t *testing.T) {
 	}
 
 	full := walletDepthsOf(finished)
+	stillInFront, reserve := reserveOf(t, full)
+	if stillInFront.Symbol != priorityLadder {
+		t.Fatalf("the full ladder must stay in front until it closes, got %s", stillInFront.Symbol)
+	}
+	if reserve != 0 {
+		t.Fatalf("a full ladder keeps %f, want nothing", reserve)
+	}
+
 	for _, trade := range finished {
-		assertFreeToArm(t, trade, full)
-	}
-
-	closed := withoutLadder(trades, priorityLadder)
-	gone := walletDepthsOf(closed)
-	for _, trade := range closed {
-		assertFreeToArm(t, trade, gone)
-	}
-}
-
-// Once the reserved ladder is gone the wallet is not reserved for the next
-// deepest one until that one is itself inside the margin: SOL at six of eight
-// releases everybody, and the entry that takes it to seven reserves the wallet
-// in LINK's place.
-func TestFallenWalletHandsTheReservationOnWhenTheNextLadderPassesTheMargin(t *testing.T) {
-	trades := withoutLadder(fallenWallet(), priorityLadder)
-
-	deepened := make([]aggragates.Trades, 0, len(trades))
-	for _, trade := range trades {
-		if trade.Symbol == "SOL/USDT" {
-			trade = filledTo(trade, 7)
-		}
-		deepened = append(deepened, trade)
-	}
-	wallet := walletDepthsOf(deepened)
-
-	for _, trade := range deepened {
-		if trade.Symbol == "SOL/USDT" {
-			assertFreeToArm(t, trade, wallet)
+		if trade.Symbol == priorityLadder {
 			continue
 		}
 
-		held, err := ShouldHold(priorityEvent(trade, "buy", wallet))
+		_, ownCost := ladder.NextEntryCost(trade, 0)
+
+		// A wallet that covers this entry lets it through.
+		assertFreeToArm(t, trade, full, ownCost)
+
+		held, err := ShouldHold(priorityEvent(trade, "buy", full, ownCost-1))
 		if err == nil {
-			t.Fatalf("%s must now wait for SOL/USDT", trade.Symbol)
+			t.Fatalf("%s: a wallet that cannot pay for the entry must hold it, not block it", trade.Symbol)
 		}
 
-		want := waitingRow("SOL/USDT", 7, configuredDepthOf(t, trade.Symbol))
+		want := holdsUntilCloseRow(priorityLadder, scenarioDepths, configuredDepthOf(t, trade.Symbol))
+		if got := held.Trade.Logs[0].Message; got != want {
+			t.Fatalf("%s row = %q, want %q", trade.Symbol, got, want)
+		}
+	}
+}
+
+// And on the close the ladder leaves the view, its position comes back into
+// the wallet, and the next deepest takes over — which is the ladder that was
+// still active and still ranked because it waited instead of blocking.
+func TestFallenWalletIsReleasedWhenTheDeepLadderCloses(t *testing.T) {
+	trades := fallenWallet()
+
+	closed := withoutLadder(trades, priorityLadder)
+	gone := walletDepthsOf(closed)
+	nextInFront, goneReserve := reserveOf(t, gone)
+	if nextInFront.Symbol != runnerUpLadder {
+		t.Fatalf("the wallet passes to %s, got %s", runnerUpLadder, nextInFront.Symbol)
+	}
+
+	proceeds := closedPositionValue(testutil.LadderDepthTrade(14, priorityLadder, configuredDepthOf(t, priorityLadder), scenarioDepths))
+	shortBefore := walletShortOf(t, closed[0], goneReserve)
+	if shortBefore+proceeds < tightestWallet(t, closed, goneReserve) {
+		t.Fatalf("the fixture close must refill the wallet past what the remaining ladders need, got %f", proceeds)
+	}
+
+	for _, trade := range closed {
+		assertFreeToArm(t, trade, gone, shortBefore+proceeds)
+	}
+}
+
+// holdsUntilCloseRow is the row a ladder waiting behind a FULL one carries:
+// no further entry of that ladder will free the wallet, only its close.
+func holdsUntilCloseRow(priority string, priorityDepth, ownDepth int) string {
+	return fmt.Sprintf(
+		"Hold stopLoss: cooldown: depth priority, %s at depth %d of %d holds the wallet until it closes, this ladder waits at depth %d of %d",
+		priority, priorityDepth, scenarioDepths, ownDepth, scenarioDepths,
+	)
+}
+
+// Once the reserved ladder is gone the wallet is kept for the next deepest
+// one — and for ITS remainder, which is a different amount. The row names it,
+// so an operator never reads a reservation for a ladder that is no longer
+// there.
+func TestFallenWalletHandsTheReservationToTheNextDeepestLadder(t *testing.T) {
+	trades := withoutLadder(fallenWallet(), priorityLadder)
+	wallet := walletDepthsOf(trades)
+
+	priority, reserve := reserveOf(t, wallet)
+	if priority.Symbol != runnerUpLadder {
+		t.Fatalf("the wallet is kept for %s, want %s", priority.Symbol, runnerUpLadder)
+	}
+
+	for _, trade := range trades {
+		free := walletShortOf(t, trade, reserve)
+
+		if trade.Symbol == runnerUpLadder {
+			assertFreeToArm(t, trade, wallet, free)
+			continue
+		}
+
+		held, err := ShouldHold(priorityEvent(trade, "buy", wallet, free))
+		if err == nil {
+			t.Fatalf("%s must now wait for %s", trade.Symbol, runnerUpLadder)
+		}
+
+		want := waitingRow(runnerUpLadder, priority.Depth, configuredDepthOf(t, trade.Symbol))
 		if got := held.Trade.Logs[0].Message; got != want {
 			t.Fatalf("%s row = %q, want %q", trade.Symbol, got, want)
 		}
@@ -253,14 +397,18 @@ func TestFallenWalletHandsTheReservationOnWhenTheNextLadderPassesTheMargin(t *te
 }
 
 // A hold that stands writes one row, not one per tick: the message is
-// byte-identical while the wallet view is, which is the property
-// gates.SaveHoldLog deduplicates on. Without it an operator reading a
-// multi-day reservation would be reading a wall of identical lines.
+// byte-identical while the ladders are, which is the property
+// gates.SaveHoldLog deduplicates on. It is also why the row carries no
+// amounts — the balance moves on every tick, and an operator reading a
+// multi-day reservation would be reading a wall of near-identical lines.
 func TestFallenWalletWritesOneRowWhileTheHoldStands(t *testing.T) {
 	wallet := walletDepthsOf(fallenWallet())
-	waiting := testutil.LadderDepthTrade(12, "ETH/USDT", 4, scenarioDepths)
+	_, reserve := reserveOf(t, wallet)
 
-	held, err := ShouldHold(priorityEvent(waiting, "buy", wallet))
+	waiting := testutil.LadderDepthTrade(12, "ETH/USDT", 4, scenarioDepths)
+	free := walletShortOf(t, waiting, reserve)
+
+	held, err := ShouldHold(priorityEvent(waiting, "buy", wallet, free))
 	if err == nil {
 		t.Fatal("expected the shallow ladder to be held")
 	}
@@ -268,9 +416,10 @@ func TestFallenWalletWritesOneRowWhileTheHoldStands(t *testing.T) {
 		t.Fatalf("expected one row, got %v", messages(held.Trade.Logs))
 	}
 
-	// The next tick arms the same depth again on an unchanged wallet.
+	// The next tick arms the same depth again, on the same ladders and a
+	// balance that has drifted the way a live one does.
 	held.Trade.PositionType = "stopLoss"
-	again, err := ShouldHold(priorityEvent(held.Trade, "buy", wallet))
+	again, err := ShouldHold(priorityEvent(held.Trade, "buy", wallet, free-1))
 	if err == nil {
 		t.Fatal("expected the ladder to still be held on the next tick")
 	}

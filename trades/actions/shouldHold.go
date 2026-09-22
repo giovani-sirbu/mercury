@@ -19,13 +19,13 @@ import (
 // degrade-open check, never a switch-on — a verdict fetched for one flag's
 // sake gains no gate for another (see StrategyParams.NeedsSophos).
 //
-//	first fill (OldPosition "new")   Cooldown  → depth priority, then the first-fill gate (higher-highs hold, released by price)
+//	first fill (OldPosition "new")   Cooldown  → the wallet reserve, then the first-fill gate (higher-highs hold, released by price)
 //	                                 UseAI     → legacy bullish/bearish veto
 //	open position                    RegimeHold    → shock hold, add veto, profit hold
 //	                                 UsePatterns   → chart-pattern and fibonacci holds
 //	                                 UseAI         → legacy AI hold
 //	                                 CrashGuard    → flush park, sticky reclaim, capitulation
-//	                                 Cooldown      → depth priority, then depth spacing (stopLoss only)
+//	                                 Cooldown      → the wallet reserve, then depth spacing (stopLoss only)
 //
 // SmartTakeLoss owns no hold gate: it forces exits after the ladder decides
 // (gates/smarttakeloss.Apply, called by the engines).
@@ -41,8 +41,11 @@ import (
 //   - depth spacing keeps one ladder from cascading through every depth in
 //     one drop. It reads only that trade's own fill stamps;
 //   - depth priority keeps the ladders of one wallet from all stopping
-//     half-finished when the pairs fall together. It reads the depths of the
-//     wallet's other ladders and nothing about the market at all.
+//     half-finished when the pairs fall together. It reserves the wallet for
+//     the deepest ladder — what that ladder's remaining depths cost is kept
+//     out of the others' reach — and holds an entry only when placing it
+//     would leave the wallet under that amount. It reads the wallet's other
+//     ladders and its free balance, and nothing about the market at all.
 //
 // Depth priority runs on both sides of the first fill, and first on each:
 // its subject is the wallet, so a trade it holds spends nothing and needs no
@@ -74,12 +77,11 @@ func shouldHoldEntry(event events.Events) (events.Events, error) {
 	side := aggragates.EntrySide(event.Trade, event.Params.AIIndicators)
 
 	if params.Cooldown {
-		// The wallet before the entry: while a sibling ladder is short of the
-		// depth its grid was sized for, the wallet is reserved for that
-		// entry, and a first fill is new capital like any other. It runs
-		// before the first-fill gate so a held entry neither consumes nor
-		// records a first-fill verdict — that judgement belongs to the tick
-		// the wallet is actually free on.
+		// The wallet before the entry: the funds a sibling ladder still needs
+		// for its remaining depths are reserved for it, and a first fill is
+		// new capital like any other. It runs before the first-fill gate so a
+		// held entry neither consumes nor records a first-fill verdict — that
+		// judgement belongs to the tick the wallet can actually afford it on.
 		if reason := cooldown.DepthPriorityHoldReason(event, event.Trade.PositionType); reason != "" {
 			return gates.SaveHoldLog(event, "entry", reason)
 		}
@@ -148,7 +150,7 @@ func shouldHoldPosition(event events.Events) (events.Events, error) {
 	if reason == "" && params.Cooldown {
 		// The wallet before the ladder. Neither cooldown gate has a view of
 		// the market, so nothing above is being displaced; between the two of
-		// them, "a deeper ladder of this wallet takes the next entry" names
+		// them, "a deeper ladder of this wallet is keeping the funds" names
 		// the situation an operator is looking at, and "the last depths were
 		// close together" does not.
 		reason = cooldown.DepthPriorityHoldReason(event, position)

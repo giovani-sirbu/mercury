@@ -73,3 +73,32 @@ func TestConfiguredDepthsFallsBackToTheBaseRowPastTheLastRow(t *testing.T) {
 		}
 	}
 }
+
+// The cost the view carries is measured against the very ceiling it reports,
+// so it moves with the row the next fill reads: two ladders identical but for
+// how many entries that row allows have different amounts left to pay for,
+// and a wallet reserved for the wrong one would be reserved for a tail the
+// ladder is not going to place.
+func TestDepthOfPricesTheDepthsTheNextRowAllows(t *testing.T) {
+	ceilings := func(nextRow float64) []aggragates.StrategySettings {
+		return []aggragates.StrategySettings{
+			{Percentage: 2.5, Multiplier: 2, Depths: 4},
+			{Percentage: 2.5, Multiplier: 2, Depths: 4},
+			{Percentage: 2.5, Multiplier: 2, Depths: nextRow},
+			{Percentage: 2.5, Multiplier: 2, Depths: 4},
+		}
+	}
+
+	short := DepthOf(costLadderTrade(2, 10, ceilings(3)...))
+	long := DepthOf(costLadderTrade(2, 10, ceilings(6)...))
+
+	if short.MaxDepth != 3 || long.MaxDepth != 6 {
+		t.Fatalf("ceilings = %d and %d, want the row of the next fill in each", short.MaxDepth, long.MaxDepth)
+	}
+	if short.RemainingCost <= 0 {
+		t.Fatalf("RemainingCost = %f, want the one entry that row still allows", short.RemainingCost)
+	}
+	if long.RemainingCost <= short.RemainingCost {
+		t.Fatalf("a taller ceiling left %f to pay for, want more than %f", long.RemainingCost, short.RemainingCost)
+	}
+}

@@ -6,8 +6,9 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
-// The wallet view of a trade is exactly what the two folds say about it:
-// every surface builds it here so none of them can count a depth its own way.
+// The wallet view of a trade is exactly what the folds say about it: every
+// surface builds it here so none of them can count a depth, or price one, its
+// own way.
 func TestDepthOfMirrorsTheLadderFolds(t *testing.T) {
 	trade := depthTrade(5, aggragates.StrategySettings{Percentage: 2.5, Depths: 8})
 
@@ -21,6 +22,34 @@ func TestDepthOfMirrorsTheLadderFolds(t *testing.T) {
 	}
 	if got.MaxDepth != ConfiguredDepths(trade) {
 		t.Errorf("MaxDepth = %d, want ConfiguredDepths %d", got.MaxDepth, ConfiguredDepths(trade))
+	}
+
+	wantAsset, wantCost := RemainingCost(trade)
+	if got.Asset != wantAsset {
+		t.Errorf("Asset = %q, want RemainingCost's %q", got.Asset, wantAsset)
+	}
+	if got.RemainingCost != wantCost {
+		t.Errorf("RemainingCost = %f, want RemainingCost's %f", got.RemainingCost, wantCost)
+	}
+}
+
+// The view a wallet gate can actually reserve against: a real ladder answers
+// with the asset it spends and a cost for the depths it has left, and the
+// same ladder once it is full answers with nothing left to keep a wallet for.
+func TestDepthOfCarriesWhatTheLadderStillNeeds(t *testing.T) {
+	rows := rowPerDepthRows(2, 3, 4, 5)
+
+	partway := DepthOf(costLadderTrade(2, 10, rows...))
+	if partway.Asset != "USDT" {
+		t.Errorf("Asset = %q, want the quote side of the pair", partway.Asset)
+	}
+	if partway.RemainingCost <= 0 {
+		t.Errorf("RemainingCost = %f, want the cost of the depths it has left", partway.RemainingCost)
+	}
+
+	full := DepthOf(costLadderTrade(len(rows), 10, rows...))
+	if full.RemainingCost != 0 {
+		t.Errorf("RemainingCost = %f, want nothing left to keep a wallet for", full.RemainingCost)
 	}
 }
 

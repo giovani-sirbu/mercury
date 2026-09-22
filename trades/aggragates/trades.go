@@ -111,6 +111,15 @@ type (
 		SmartTakeLoss SmartTakeLossIndicators
 	}
 
+	// AssetFree is one asset's free balance on the wallet the managed trade
+	// spends from, as of the tick that carries it. The engines read it where
+	// they read the funds gate's own budget, so the gate that consumes it
+	// compares against the same number HasFunds would.
+	AssetFree struct {
+		Asset string  `json:"asset"`
+		Free  float64 `json:"free"`
+	}
+
 	Params struct {
 		OldPositionPrice   float64
 		Percentage         float64
@@ -127,12 +136,25 @@ type (
 		// the regime profit hold stands down. Set by the engines on a
 		// takeProfit tick; zero elsewhere.
 		PortfolioBlocked bool
-		// WalletLadders is every parent trade of this wallet, the managed one
-		// included, active or blocked. The cooldown depth-priority gate reads
-		// it to find the ladder closest to the depth its grid was sized for.
-		// Set by the engines only on the ticks cooldown.DepthPriorityApplies
-		// says can consume it; nil elsewhere, and a nil slice holds nothing.
+		// WalletLadders is every active parent trade of this wallet, the
+		// managed one included while it is active; a ladder blocked on its
+		// next entry is left out, since it cannot take that entry and the
+		// others must not wait for a retry only a close could fund. The
+		// cooldown depth-priority gate reads it to find the deepest ladder
+		// that has filled at least one entry, and then what that ladder says
+		// its remaining entries cost — the amount the wallet is kept for. A
+		// full ladder keeps its place at a reserve of zero until it closes.
+		// Set by the engines only on the ticks
+		// cooldown.DepthPriorityApplies says can consume it; nil elsewhere,
+		// and a nil slice holds nothing.
 		WalletLadders []LadderDepth
+		// WalletFree is the wallet's free balance per asset as of this tick,
+		// the other half of that reserve: the gate holds an entry only when
+		// placing it would leave the wallet under what the deepest ladder
+		// still needs. Filled by the engines on the same ticks WalletLadders
+		// is, nil elsewhere — and an asset with no entry here is an UNKNOWN
+		// balance, which holds nothing rather than guessing.
+		WalletFree []AssetFree
 		// AvailableQuantity is the wallet balance the entry being placed must
 		// not exceed, counted in the asset that entry spends: the quote asset
 		// on a spot buy, the base asset on an inverse one. HasFunds sets it
