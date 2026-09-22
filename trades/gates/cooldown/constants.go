@@ -37,27 +37,27 @@ const FirstFillMaxHold = 4 * time.Hour
 // brake on how fast capital is committed, and the price release is what keeps
 // that brake from being a pure delay.
 const (
-	// DepthSpacingWindow is the grace the escalation allows PAST a hold: a
-	// depth that lands within this of the previous hold's expiry is still the
-	// same drop, and a depth that lands later resets the count. It is
-	// therefore not by itself the line between a ladder and a cascade — that
-	// line is the standing hold plus this window.
-	DepthSpacingWindow = 4 * time.Hour
-	// DepthSpacingBaseHold is what the first fast depth costs the ladder, and
-	// the value the escalation starts from.
-	DepthSpacingBaseHold = 4 * time.Hour
 	// depthSpacingFactor is the escalation. A drop that keeps filling depths
 	// the instant the previous hold lifts is falling faster than the grid was
 	// built for, so the gate grows the wait as the drop consumes depths.
 	// depthSpacingHoldFor scales through float64, so a fractional factor
 	// stays valid here without a code change.
 	depthSpacingFactor = 1.5
+	// DepthSpacingBaseHold is what the first fast depth costs the ladder, and
+	// the value the escalation starts from.
+	DepthSpacingBaseHold = 4 * time.Hour
 	// depthSpacingMaxHold caps one hold, and is what a fully escalated ladder
 	// is left with. Past it the gate stops being a gate and becomes an
 	// outage: the trade sits out the bottom of the very move it was slowed
 	// down for, and that bottom depth is the one that pays for the rest of
 	// the ladder. The price release is what bounds the damage beyond it.
-	depthSpacingMaxHold = 4 * time.Hour
+	depthSpacingMaxHold = 6 * time.Hour
+	// DepthSpacingWindow is the grace the escalation allows PAST a hold: a
+	// depth that lands within this of the previous hold's expiry is still the
+	// same drop, and a depth that lands later resets the count. It is
+	// therefore not by itself the line between a ladder and a cascade — that
+	// line is the standing hold plus this window.
+	DepthSpacingWindow = 12 * time.Hour
 )
 
 // Depth-priority tunable — the Cooldown flag's gate on the WALLET, the one
