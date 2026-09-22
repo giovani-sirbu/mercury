@@ -1,9 +1,11 @@
-// Package cooldown is the Cooldown flag's two gates, one on each side of the
-// first fill: the first-fill gate (FirstFillHold) — a hold on a local top,
-// activated by the higher-highs verdict sophos serves on /cooldown, released
-// by price and bounded by FirstFillMaxHold — and depth spacing, the gate
-// that keeps a ladder from cascading through every depth in one drop
-// (DepthSpacingHoldReason).
+// Package cooldown is the Cooldown flag's three gates. Two sit on either side
+// of the first fill: the first-fill gate (FirstFillHold) — a hold on a local
+// top, activated by the higher-highs verdict sophos serves on /cooldown,
+// released by price and bounded by FirstFillMaxHold — and depth spacing, the
+// gate that keeps a ladder from cascading through every depth in one drop
+// (DepthSpacingHoldReason). The third looks past the trade at the wallet:
+// depth priority (DepthPriorityHoldReason) makes the shallower ladders of one
+// wallet wait while a sibling is short of the depth its grid was sized for.
 package cooldown
 
 import (

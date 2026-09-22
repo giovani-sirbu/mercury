@@ -127,6 +127,12 @@ type (
 		// the regime profit hold stands down. Set by the engines on a
 		// takeProfit tick; zero elsewhere.
 		PortfolioBlocked bool
+		// WalletLadders is every parent trade of this wallet, the managed one
+		// included, active or blocked. The cooldown depth-priority gate reads
+		// it to find the ladder closest to the depth its grid was sized for.
+		// Set by the engines only on the ticks cooldown.DepthPriorityApplies
+		// says can consume it; nil elsewhere, and a nil slice holds nothing.
+		WalletLadders []LadderDepth
 		// AvailableQuantity is the wallet balance the entry being placed must
 		// not exceed, counted in the asset that entry spends: the quote asset
 		// on a spot buy, the base asset on an inverse one. HasFunds sets it
