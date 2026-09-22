@@ -14,7 +14,7 @@ import (
 // InitialBidReservePercent is the wallet slice held out of the depth ladder's
 // budget. Fees, LotSize rounding and the minimum-quantity bump all charge the
 // wallet outside the ladder math; without a reserve they defund the last rung.
-const InitialBidReservePercent = 20.0
+const InitialBidReservePercent = 10.0
 
 func CalculateInitialBid(amount float64, trade aggragates.Trades, strategyIndex int) (float64, error) {
 	var initialBid float64

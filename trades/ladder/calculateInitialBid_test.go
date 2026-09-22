@@ -35,14 +35,17 @@ func ladderSettings() aggragates.StrategySettings {
 // (needed 128×bid, had ~99×bid left).
 func TestCalculateInitialBidInverseLadderFitsTheWallet(t *testing.T) {
 	wallet := 151532.0 // HBAR free when trade 8195 started
+	settings := ladderSettings()
 
-	bid, err := CalculateInitialBid(wallet, sizingTrade(true, 0.0817, ladderSettings()), 0)
+	bid, err := CalculateInitialBid(wallet, sizingTrade(true, 0.0817, settings), 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// budget/(2^8−1): 151532 × 0.80 / 255
-	if want := 475.3945; math.Abs(bid-want) > 0.001 {
+	// Derived from the haircut budget at max depth, with the inverse percentage-0
+	// rule, so retuning InitialBidReservePercent cannot break this expectation.
+	want := GetInitialBidByDepth(wallet*(1-InitialBidReservePercent/100), settings.Depths, settings.Multiplier, 0)
+	if math.Abs(bid-want) > 0.001 {
 		t.Fatalf("inverse bid = %f, want %f", bid, want)
 	}
 
@@ -56,13 +59,18 @@ func TestCalculateInitialBidInverseLadderFitsTheWallet(t *testing.T) {
 }
 
 func TestCalculateInitialBidNormalKeepsDiscountedRatio(t *testing.T) {
-	bid, err := CalculateInitialBid(50000, sizingTrade(false, 118000, ladderSettings()), 0)
+	wallet := 50000.0
+	settings := ladderSettings()
+
+	bid, err := CalculateInitialBid(wallet, sizingTrade(false, 118000, settings), 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// 40000 × (1.96−1)/(1.96^8−1) — the quote ladder keeps its price discount.
-	if want := 177.1256; math.Abs(bid-want) > 0.001 {
+	// Derived from the haircut budget at max depth, keeping the quote ladder's
+	// price discount, so retuning InitialBidReservePercent cannot break this.
+	want := GetInitialBidByDepth(wallet*(1-InitialBidReservePercent/100), settings.Depths, settings.Multiplier, settings.Percentage)
+	if math.Abs(bid-want) > 0.001 {
 		t.Fatalf("normal bid = %f, want %f", bid, want)
 	}
 }
@@ -79,16 +87,20 @@ func TestCalculateInitialBidStillRefusesDustWallets(t *testing.T) {
 }
 
 func TestCalculateInitialBidImpasseSizesOnImpasseDepth(t *testing.T) {
-	trade := sizingTrade(true, 0.1, ladderSettings())
+	wallet := 63000.0
+	settings := ladderSettings()
+	trade := sizingTrade(true, 0.1, settings)
 	trade.ParentID = 7
 
-	bid, err := CalculateInitialBid(63000, trade, 0)
+	bid, err := CalculateInitialBid(wallet, trade, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// 63000 × 0.80 / (2^6−1)
-	if want := 800.0; math.Abs(bid-want) > 0.001 {
+	// Derived from the haircut budget at the impasse child's depth, with the
+	// inverse percentage-0 rule, so a retune of the reserve cannot break this.
+	want := GetInitialBidByDepth(wallet*(1-InitialBidReservePercent/100), settings.ImpasseDepth, settings.Multiplier, 0)
+	if math.Abs(bid-want) > 0.001 {
 		t.Fatalf("impasse bid = %f, want %f", bid, want)
 	}
 }
