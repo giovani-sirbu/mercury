@@ -9,6 +9,7 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/gates/crashguard"
 	"github.com/giovani-sirbu/mercury/trades/gates/patterns"
 	"github.com/giovani-sirbu/mercury/trades/gates/regime"
+	"github.com/giovani-sirbu/mercury/trades/gates/smarttakeloss"
 )
 
 // ShouldHold blocks the action chain when a strategy flag advises against
@@ -19,16 +20,20 @@ import (
 // degrade-open check, never a switch-on — a verdict fetched for one flag's
 // sake gains no gate for another (see StrategyParams.NeedsSophos).
 //
-//	first fill (OldPosition "new")   Cooldown  → the wallet reserve, then the first-fill gate (higher-highs hold, released by price)
-//	                                 UseAI     → legacy bullish/bearish veto
+//	first fill (OldPosition "new")   Cooldown      → the wallet reserve
+//	                                 SmartTakeLoss → quiet slow-decline hold (long parents, while the verdict stands)
+//	                                 Cooldown      → the first-fill gate (higher-highs hold, released by price)
+//	                                 UseAI         → legacy bullish/bearish veto
 //	open position                    RegimeHold    → shock hold, add veto, profit hold
 //	                                 UsePatterns   → chart-pattern and fibonacci holds
 //	                                 UseAI         → legacy AI hold
 //	                                 CrashGuard    → slow-decline hold (released by price), capitulation
 //	                                 Cooldown      → the wallet reserve, then depth spacing (stopLoss only)
 //
-// SmartTakeLoss owns no hold gate: it forces exits after the ladder decides
-// (gates/smarttakeloss.Apply, called by the engines).
+// SmartTakeLoss holds nothing on an open position: it forces exits after the
+// ladder decides (gates/smarttakeloss.Apply, called by the engines). Its one
+// hold is the first fill, so no new ladder opens into the decline its exit
+// sells a long ladder out of.
 //
 // Each family lives in its own package under trades/gates; this function
 // only orders them. Cooldown owns THREE gates. They share a flag because they
@@ -66,9 +71,11 @@ func ShouldHold(event events.Events) (events.Events, error) {
 	return shouldHoldPosition(event)
 }
 
-// shouldHoldEntry is the first fill: cooldown owns it. No regime gate here.
+// shouldHoldEntry is the first fill: cooldown owns most of it, and the smart
+// take loss holds a long parent while its quiet slow-decline verdict stands.
+// No regime gate here.
 //
-// Both gates judge the direction the entry would take, resolved once by
+// The gates judge the direction the entry would take, resolved once by
 // aggragates.EntrySide. They used to take event.Trade.Inverse, which is the
 // direction on spot and never the direction on futures — where Inverse is
 // always false and the ML verdict decides the side.
@@ -85,7 +92,16 @@ func shouldHoldEntry(event events.Events) (events.Events, error) {
 		if reason := cooldown.DepthPriorityHoldReason(event, event.Trade.PositionType); reason != "" {
 			return gates.SaveHoldLog(event, "entry", reason)
 		}
-
+	}
+	if params.SmartTakeLoss {
+		// No new ladder while sophos reads a quiet slow decline on the pair.
+		// Before the first-fill gate for the reason the wallet reserve is: a
+		// held entry must neither consume nor record a first-fill verdict.
+		if reason := smarttakeloss.EntryHoldReason(event.Trade, side, event.Params.AIIndicators); reason != "" {
+			return gates.SaveHoldLog(event, "entry", reason)
+		}
+	}
+	if params.Cooldown {
 		// The gate hands the event back: on the tick it releases an entry
 		// above its reference it has written the row NextDepthDoubled reads,
 		// and only the event that continues down the chain reaches updateTrade.

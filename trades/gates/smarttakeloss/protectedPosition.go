@@ -13,6 +13,10 @@ package smarttakeloss
 //     which refuses to close below the minimum profit. Forcing "sellLoss" over
 //     them swaps that gate for acceptLoss, which accepts a negative result —
 //     a close the ladder priced as profitable would be sold below break even.
+//     On a ladder the indecision direction has latched, "sell" — the trailing
+//     take profit's sale — runs acceptLoss instead (SaleActions), so that sale
+//     may close under the minimum profit. It is still the ladder's own close,
+//     and this overlay still never replaces it.
 //   - "impasse" is not a close but a chain: createChildrenTrades, then
 //     parentTradeHasProfit, then sellAll. Replacing it leaves the parent with
 //     no children to sell.

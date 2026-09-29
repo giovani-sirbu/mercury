@@ -55,11 +55,13 @@ func (p StrategyParams) NeedsAIRoute() bool {
 }
 
 // InjectsEntryHold is true when the first-buy action chain should include
-// shouldHold. This is a PRODUCT rule: cooldown owns the first-fill lens, and
-// UseAI owns its legacy entry veto; UsePatterns keeps its seat for the
-// futures pre-chain. CrashGuard, SmartTakeLoss and RegimeHold gate only adds
-// and exits by design, so a strategy running just those keeps its first buy
-// ungated (TestStrategyParamsNeedsSophosAndEntryHold pins this).
+// shouldHold. This is a PRODUCT rule: cooldown owns the first-fill gate,
+// UseAI owns its legacy entry veto, and SmartTakeLoss holds a long first fill
+// while its quiet slow-decline verdict stands, so no new ladder opens into
+// the decline its exit sells out of; UsePatterns keeps its seat for the
+// futures pre-chain. CrashGuard and RegimeHold gate only adds and exits by
+// design, so a strategy running just those keeps its first buy ungated
+// (TestStrategyParamsNeedsSophosAndEntryHold pins this).
 func (p StrategyParams) InjectsEntryHold() bool {
-	return p.Cooldown || p.UseAI || p.UsePatterns
+	return p.Cooldown || p.UseAI || p.UsePatterns || p.SmartTakeLoss
 }

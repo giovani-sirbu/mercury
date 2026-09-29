@@ -6,30 +6,37 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
-// state is what the trade's own rows say about the smart take loss: whether
-// the ladder is deep enough to arm, whether a fill has activated it and at
-// what price, the entry fills themselves, and how many depths filled after
-// the activating one. It is rebuilt from trade.Logs and trade.History on
+// state is what the trade's own rows say about the smart take loss: the
+// entry fills, where the ladder stands with the quiet slow-decline exit,
+// whether capital protection watches it, and where it stands with the
+// indecision direction. It is rebuilt from trade.Logs and trade.History on
 // every tick, the way cooldown.firstFillState rebuilds the first-fill gate:
 // the rows are the only state. Nothing is kept in Redis, in a column or on
 // trade.PositionPrice.
 type state struct {
-	armed  bool
-	active bool
-	// activationPrice is the Price column of the FIRST activation row: the
-	// newest fill at the moment the price reached the window's level. A later
-	// row with the marker is a duplicate written under a lost lock, never a
-	// new activation.
-	activationPrice float64
-	fills           []entryFill
-	// depthsAfterActivation counts the distinct entry fills placed AFTER
-	// the activating one; the trade is on its last permitted depth once it
-	// reaches PermittedDepths.
-	depthsAfterActivation int
-	// waitLogged: the refusal that the wait after this very fill causes has
-	// already been written to the trade, so it is not proposed again on the
-	// next tick.
-	waitLogged bool
+	fills []entryFill
+	// slowDeclineWatched: the quiet slow-decline exit watches this ladder
+	// (slowDeclineWatched). slowDeclinePending: the last slow-decline row of a
+	// watched ladder is a marker, so Apply reads its band; a cancel or reset
+	// row after it takes that away until the next marker.
+	// slowDeclinePendingFrom is that marker's Price: the fill the ladder is
+	// pending from, the one slowDeclineFillUnjudged compares its newest fill
+	// with. Zero while not pending.
+	slowDeclineWatched     bool
+	slowDeclinePending     bool
+	slowDeclinePendingFrom float64
+	// capitalProtectionWatched: the capital protection exit watches this
+	// ladder (capitalProtectionWatched).
+	capitalProtectionWatched bool
+	// indecisionWatched: the indecision direction watches this ladder
+	// (indecisionWatched). indecision: a watched ladder carries an indecision
+	// row, so it is latched; no row takes the latch away, and it holds until
+	// the trade closes.
+	indecisionWatched bool
+	indecision        bool
+	// depthPriorityHeld: a depth priority holds this ladder
+	// (depthPriorityHeld), which pauses every rule on it until its next fill.
+	depthPriorityHeld bool
 }
 
 // lastFill is the newest entry fill in slice order, zero when none filled.
@@ -40,56 +47,55 @@ func (st state) lastFill() entryFill {
 	return st.fills[len(st.fills)-1]
 }
 
-// rebuildState folds the rows. Each is matched by its marker anywhere in the
-// message (they carry gates.SaveHoldLog's "Hold buy: " frame) and must carry
-// a price: the FIRST activation row wins, and a wait row counts as written
-// for the fill whose price it holds, so the refusal is logged once per fill
-// and not once per tick.
+// rebuildState folds the rows in slice order — hermes loads them in id order,
+// sisyphus appends them. A row is matched by its marker anywhere in the
+// message (the rows carry gates.SaveHoldLog's "Hold …: " frame) and must carry
+// a price. A slow-decline marker makes a watched ladder pending from the fill
+// its price names, and a cancel row or a reset row makes it not pending — the
+// last of them wins, and none touches a ladder the exit does not watch, so
+// while QuietSlowDeclineExit is off every such row is ignored. The depth
+// priority hold is read apart, on every trade, off the rows' stamps and the
+// newest fill (depthPriorityHeld). An indecision row latches a ladder the
+// indecision direction watches, and nothing takes the latch away; it touches
+// no ladder that rule does not watch, so while IndecisionDirection is off
+// every such row is ignored too. The two folds are independent: a ladder one
+// rule watches folds that rule's rows whether or not the other watches it.
+// Every other row is ignored, the activation and wait rows of the retired
+// trend-reversal rule that older releases wrote included.
+//
+// Every watch is read off the fills already folded here: entryFills counts
+// them the way ladder.CountFilledEntries does, row for row, so they agree
+// with slowDeclineWatched, capitalProtectionWatched and indecisionWatched
+// exactly.
 func rebuildState(trade aggragates.Trades) state {
-	st := state{fills: entryFills(trade), armed: armed(trade)}
-	lastFillPrice := st.lastFill().Price
+	fills := entryFills(trade)
+	st := state{
+		fills:                    fills,
+		slowDeclineWatched:       quietSlowDeclineExit && !trade.Inverse && len(fills) >= SlowDeclineArmDepth,
+		capitalProtectionWatched: capitalProtectionEligible(trade) && lastDepthFilled(trade, len(fills)),
+		indecisionWatched:        indecisionEligible(trade) && len(fills) >= IndecisionArmDepth,
+	}
+	st.depthPriorityHeld = depthPriorityHeld(trade, st.lastFill())
+	if !st.slowDeclineWatched && !st.indecisionWatched {
+		return st
+	}
 	for _, row := range trade.Logs {
 		if row.Price <= 0 {
 			continue
 		}
-		switch {
-		case strings.Contains(row.Message, ActivationMarker):
-			if !st.active {
-				st.active = true
-				st.activationPrice = row.Price
-			}
-		case strings.Contains(row.Message, WaitMarker):
-			if row.Price == lastFillPrice {
-				st.waitLogged = true
+		if st.slowDeclineWatched {
+			switch {
+			case strings.Contains(row.Message, SlowDeclineMarker):
+				st.slowDeclinePending = true
+				st.slowDeclinePendingFrom = row.Price
+			case strings.Contains(row.Message, SlowDeclineCancelMarker), strings.Contains(row.Message, SlowDeclineResetMarker):
+				st.slowDeclinePending = false
+				st.slowDeclinePendingFrom = 0
 			}
 		}
-	}
-	if st.active {
-		st.depthsAfterActivation = depthsAfterActivation(trade.Inverse, st.fills, st.activationPrice)
+		if st.indecisionWatched && strings.Contains(row.Message, IndecisionMarker) {
+			st.indecision = true
+		}
 	}
 	return st
-}
-
-// depthsAfterActivation locates the activating fill by its price — the row
-// was written with the fill's own history price, so equality holds — and
-// counts the distinct entry fills after it in slice order. The order, not
-// the price, is what makes a later fill count: after the activation the
-// ladder can take profit, sell, re-anchor (update_buy) and fill the next
-// depth ABOVE the activating price, and that is still the one depth
-// permitted. When no fill carries the price (a row written by hand, a
-// re-priced history) the count falls back to the fills strictly beyond it:
-// lower on a long, higher on an inverse ladder.
-func depthsAfterActivation(inverse bool, fills []entryFill, activationPrice float64) int {
-	for index, fill := range fills {
-		if fill.Price == activationPrice {
-			return len(fills) - index - 1
-		}
-	}
-	beyond := 0
-	for _, fill := range fills {
-		if (inverse && fill.Price > activationPrice) || (!inverse && fill.Price < activationPrice) {
-			beyond++
-		}
-	}
-	return beyond
 }

@@ -40,11 +40,15 @@ type (
 		// per unit of base across every entry fill (ladder.AverageEntryPrice).
 		// The upside branches of the `buy` rows read `profitPercentage`, the
 		// move measured against it, so a take profit is proposed at break even
-		// + percentage + tolerance at every depth. Price — the last fill or the
-		// last re-anchor — keeps anchoring `percentage`: the downside (stopLoss
-		// spacing) and every armed state. At depth 1 the two coincide, so the
-		// first depth behaves exactly as before. Zero (no fills yet) makes
-		// profitPercentage fall back to percentage.
+		// + percentage + tolerance at every depth — and, from break even up, on
+		// a trade the quiet slow-decline exit holds pending at the newest
+		// fill's take profit, and on a trade the indecision direction has
+		// latched at Price's take profit, wherever that is lower
+		// (GetPosition). Price — the last fill or the last re-anchor — keeps
+		// anchoring `percentage`: the downside (stopLoss spacing) and every
+		// armed state. At depth 1 the two coincide, so the first depth behaves
+		// exactly as before. Zero (no fills yet) makes profitPercentage fall
+		// back to percentage.
 		AverageEntryPrice float64
 	}
 	Strategy struct {
@@ -60,7 +64,12 @@ type (
 // GetPosition get the new position based on a strategy logic. percentage is
 // the move against Position.Price, profitPercentage the move against
 // Position.AverageEntryPrice (GetPercentage / GetProfitPercentage, both
-// negated by the engines for an inverse trade).
+// negated by the engines for an inverse trade) — or, while that move is at
+// or over break even, the larger of it and the move against the newest fill
+// on a trade the quiet slow-decline exit holds pending, and the move against
+// Position.Price — percentage itself — on a trade the indecision direction
+// has latched, which the engines read through
+// smarttakeloss.TakeProfitPercentage.
 func (S Strategy) GetPosition(percentage float64, profitPercentage float64) string {
 	if len(S.Settings) < 1 {
 		return ""

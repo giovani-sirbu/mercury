@@ -43,9 +43,11 @@ func ownershipEvent(trade aggragates.Trades, ai aggragates.AIIndicators, cool ag
 	}
 }
 
-// fullHoldPayload carries every signal that could hold a long stopLoss.
+// fullHoldPayload carries every signal that could hold a long stopLoss, and
+// the smart take loss's slow-decline verdict, which holds a first fill only.
 func fullHoldPayload() aggragates.AIIndicators {
 	return aggragates.AIIndicators{
+		SmartTakeLoss:      aggragates.SmartTakeLossIndicators{SlowDeclineExit: true},
 		HasRegimeVerdict:   true,
 		EnterAllowed:       false,
 		AddAllowed:         false,
@@ -108,7 +110,7 @@ func TestShouldHoldOwnershipMatrixStopLoss(t *testing.T) {
 		{"cooldown is inert after the first fill", aggragates.StrategyParams{Cooldown: true}, ""},
 		{"regimeHold", aggragates.StrategyParams{RegimeHold: true}, "regime: market in shock (15m shock-down, depth 4)"},
 		{"crashGuard", aggragates.StrategyParams{CrashGuard: true}, crashguard.FreeFallHoldReason},
-		{"smartTakeLoss never holds: it forces exits outside ShouldHold", aggragates.StrategyParams{SmartTakeLoss: true}, ""},
+		{"smartTakeLoss holds no open position, verdict or not: it forces exits outside ShouldHold", aggragates.StrategyParams{SmartTakeLoss: true}, ""},
 		{"useAI", aggragates.StrategyParams{UseAI: true}, "AI market is bearish"},
 		{"usePatterns", aggragates.StrategyParams{UsePatterns: true}, "pattern: ascending triangle found (resistance 96000.0000), preventing stopLoss"},
 		{"useForceTrailing", aggragates.StrategyParams{UseForceTrailing: true}, ""},
@@ -141,7 +143,7 @@ func TestShouldHoldOwnershipMatrixTakeProfit(t *testing.T) {
 		{"cooldown", aggragates.StrategyParams{Cooldown: true}, ""},
 		{"regimeHold", aggragates.StrategyParams{RegimeHold: true}, "regime: rides the trend (15m uptrend-persist)"},
 		{"crashGuard never holds an exit", aggragates.StrategyParams{CrashGuard: true}, ""},
-		{"smartTakeLoss never holds an exit", aggragates.StrategyParams{SmartTakeLoss: true}, ""},
+		{"smartTakeLoss never holds an exit, verdict or not", aggragates.StrategyParams{SmartTakeLoss: true}, ""},
 		{"useAI", aggragates.StrategyParams{UseAI: true}, "AI market is bullish"},
 		{"usePatterns", aggragates.StrategyParams{UsePatterns: true}, "pattern: ascending triangle in play, riding to target 104500.0000"},
 	}

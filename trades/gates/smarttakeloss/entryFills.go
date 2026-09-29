@@ -16,17 +16,18 @@ type entryFill struct {
 
 // entryFills is the trade's ladder, one entry per executed entry order, in
 // history slice order — the placement order on every engine (GORM id order
-// in hermes, append order in sisyphus). The one-more-depth counter and the
-// last fill both read that order, not the stamps: ladder.GetLatestTradePrice
-// ranks by CreatedAt, which live-testing stamps by hand.
+// in hermes, append order in sisyphus). The watches and the newest fill both
+// read that order, not the stamps: ladder.GetLatestTradePrice ranks by
+// CreatedAt, which live-testing stamps by hand.
 //
 // Membership mirrors ladder.CountFilledEntries row for row: entry-side rows
 // (BUY, or SELL on an inverse trade) with a real quantity, above the
 // accounting sentinel price, one entry per distinct exchange order id — a
 // partial fill updates its order in place and never adds a depth — and a
 // synthetic id for legacy rows that carry none. The first row of an order
-// supplies its price and stamp. A zero stamp is kept: it only keeps that
-// fill from activating (see activates), it does not void the ladder.
+// supplies its price and stamp. A zero stamp is kept: it only keeps the leg
+// from being read smooth from that fill (slowDeclineReadsForTheLadder), it
+// does not void the ladder.
 func entryFills(trade aggragates.Trades) []entryFill {
 	entrySide := "BUY"
 	if trade.Inverse {

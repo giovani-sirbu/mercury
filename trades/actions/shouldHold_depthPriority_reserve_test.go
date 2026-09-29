@@ -568,20 +568,23 @@ func TestReserveKeepsItsSizeWhileTheDeepestEntryIsStillSettling(t *testing.T) {
 }
 
 // A ladder that has filled its last depth stays in front of the wallet until
-// it CLOSES, and the siblings it stands in front of wait rather than spend.
+// it CLOSES, and while it stands there the wallet is kept for the NEXT ladder
+// in line that still has depths left.
 //
-// It reserves nothing — there is no entry left to keep funds for — so the
-// only question left is whether the wallet can pay for the entry being
-// weighed: it can, the sibling buys, and that is the release at the ceiling.
-// It cannot, and the sibling is HELD.
+// The full ladder reserves nothing — there is no entry left to keep funds
+// for — so for the ladder next in line the only question left is whether the
+// wallet can pay for its entry: it can, and it buys; it cannot, and it is
+// HELD on the row that names the close. Every ladder behind it waits for ITS
+// remainder, on the row that names a remainder.
 //
 // Held, not blocked, is the whole of it. A sibling released into a wallet the
 // full ladder has just spent down reaches the funds gate instead, and a
 // funds-blocked ladder leaves the view the engines build — so when the close
 // finally refills the wallet, the deepest siblings are no longer in it and
-// the shallowest ladder still active inherits the wallet over them. Holding
-// keeps each sibling active, in the view, at its own rank, and lets the close
-// hand the wallet on in the order the depths say.
+// the shallowest ladder still active inherits the wallet over them. And a
+// wallet kept for nobody while the full ladder stands goes to whichever
+// sibling prints first on a refill. Keeping it for the next in line lets the
+// close hand the wallet on in the order the depths say.
 func TestReserveHoldsSiblingsBehindAFullLadderUntilItCloses(t *testing.T) {
 	const fullSymbol = "LINK/USDT"
 
@@ -594,8 +597,8 @@ func TestReserveHoldsSiblingsBehindAFullLadderUntilItCloses(t *testing.T) {
 		t.Fatalf("a ladder at its ceiling reserves %v, want nothing left to keep", fullView.RemainingCost)
 	}
 
-	// Two siblings level at a shallower depth — so the handover after the
-	// close is split on the trade id — and one shallower still, so the
+	// Two siblings level at a shallower depth — so the ladder next in line is
+	// split from its twin on the trade id — and one shallower still, so the
 	// wallet can afford one entry without affording the others.
 	deeper := reserveGridTrade(13, "SOL/USDT", 5)
 	level := reserveGridTrade(16, "ETH/USDT", 5)
@@ -619,8 +622,14 @@ func TestReserveHoldsSiblingsBehindAFullLadderUntilItCloses(t *testing.T) {
 
 	view := []aggragates.LadderDepth{fullView, ladder.DepthOf(deeper), ladder.DepthOf(level), ladder.DepthOf(shallow)}
 
-	// A wallet under the cheapest entry of the wallet: every sibling waits,
-	// and waits on the row that names the close.
+	nextInLine := reserveGridKeeper(t, view)
+	if nextInLine.Symbol != deeper.Symbol {
+		t.Fatalf("the wallet is kept for %s, want the lower trade id of the level pair (%s)", nextInLine.Symbol, deeper.Symbol)
+	}
+
+	// A wallet under the cheapest entry of the wallet: every sibling waits.
+	// The ladder next in line waits on the row that names the close, and the
+	// ones behind it wait for its remainder.
 	for _, sibling := range siblings {
 		held, err := ShouldHold(priorityEvent(sibling, "buy", view, cheapest-1))
 		if err == nil {
@@ -633,21 +642,25 @@ func TestReserveHoldsSiblingsBehindAFullLadderUntilItCloses(t *testing.T) {
 			t.Fatalf("%s: expected one row, got %v", sibling.Symbol, messages(held.Trade.Logs))
 		}
 
-		want := reserveGridClosingRow("stopLoss", fullSymbol, reserveGridDepths, depthOf[sibling.Symbol])
+		want := reserveGridRow("stopLoss", nextInLine.Symbol, nextInLine.Depth, depthOf[sibling.Symbol])
+		if sibling.Symbol == nextInLine.Symbol {
+			want = reserveGridClosingRow("stopLoss", fullSymbol, reserveGridDepths, depthOf[sibling.Symbol])
+		}
 		if got := held.Trade.Logs[0].Message; got != want {
 			t.Fatalf("%s row = %q, want %q", sibling.Symbol, got, want)
 		}
 	}
 
-	// Raised to exactly what the cheapest entry costs, that one ladder buys
+	// Raised to exactly what the next in line's entry costs, that ladder buys
 	// while the others go on waiting: the full ladder keeps nothing back, so
-	// what decides is only whether the wallet covers the entry.
+	// for the next in line what decides is only whether the wallet covers its
+	// entry, and what any other entry would leave falls short of its remainder.
 	for _, sibling := range siblings {
-		released, err := ShouldHold(priorityEvent(sibling, "buy", view, cheapest))
+		released, err := ShouldHold(priorityEvent(sibling, "buy", view, costs[nextInLine.Symbol]))
 
-		if costs[sibling.Symbol] > cheapest {
+		if sibling.Symbol != nextInLine.Symbol {
 			if err == nil {
-				t.Fatalf("%s costs more than the wallet holds and must still wait", sibling.Symbol)
+				t.Fatalf("%s must wait for what %s still needs", sibling.Symbol, nextInLine.Symbol)
 			}
 			continue
 		}
@@ -660,9 +673,9 @@ func TestReserveHoldsSiblingsBehindAFullLadderUntilItCloses(t *testing.T) {
 	}
 
 	// The close: the full ladder leaves the view and the wallet comes back.
-	// The wallet is now in front of the deepest ladder LEFT — split from its
-	// level twin on the trade id — and that one waits for nobody while the
-	// others wait behind it, on the row that names a remainder again.
+	// The wallet is still kept for the deepest ladder LEFT — split from its
+	// level twin on the trade id — which now waits for nobody, while the
+	// others wait behind it on the very row they carried before the close.
 	closed := []aggragates.LadderDepth{ladder.DepthOf(deeper), ladder.DepthOf(level), ladder.DepthOf(shallow)}
 
 	next := reserveGridKeeper(t, closed)

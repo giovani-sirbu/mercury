@@ -278,17 +278,20 @@ func TestFallenWalletHoldsATradeOpenedIntoIt(t *testing.T) {
 	}
 }
 
-// The ladder in front fills its LAST depth. It now keeps nothing, so every
-// sibling the wallet can pay for buys — that is the release — but it stays in
-// front until it closes, and a sibling the wallet cannot pay for keeps
-// waiting on the row that says so.
+// The ladder in front fills its LAST depth. It now keeps nothing, but it
+// stays in front until it closes, and while it does the wallet is kept for
+// the next ladder in line that still has depths left — the runner-up. The
+// runner-up has nobody but the full ladder ahead of it, so it buys whenever
+// the wallet can pay for its entry and otherwise waits on the row that names
+// the close; every ladder behind it waits for the runner-up's remainder.
 //
 // The waiting is the point. Releasing everybody here sends them all at a
 // wallet the ladder has just spent down to its last depth: they reach the
 // funds gate, block, and leave the wallet view, so the ladder that finally
 // closes hands the wallet to whatever shallow ladder is still active rather
-// than to the deepest one.
-func TestFallenWalletHoldsOnlyTheUnaffordableWhenTheDeepLadderFills(t *testing.T) {
+// than to the deepest one. And a wallet kept for nobody while the full ladder
+// stands goes to whichever ladder prints first on a refill.
+func TestFallenWalletKeepsTheWalletForTheRunnerUpWhenTheDeepLadderFills(t *testing.T) {
 	trades := fallenWallet()
 
 	finished := make([]aggragates.Trades, 0, len(trades))
@@ -308,22 +311,47 @@ func TestFallenWalletHoldsOnlyTheUnaffordableWhenTheDeepLadderFills(t *testing.T
 		t.Fatalf("a full ladder keeps %f, want nothing", reserve)
 	}
 
+	var runnerUp aggragates.Trades
 	for _, trade := range finished {
-		if trade.Symbol == priorityLadder {
+		if trade.Symbol == runnerUpLadder {
+			runnerUp = trade
+		}
+	}
+
+	// The runner-up: a wallet that covers its entry lets it through, and one
+	// that cannot pay for it holds it on the row that names the close.
+	_, runnerUpCost := ladder.NextEntryCost(runnerUp, 0)
+	assertFreeToArm(t, runnerUp, full, runnerUpCost)
+
+	held, err := ShouldHold(priorityEvent(runnerUp, "buy", full, runnerUpCost-1))
+	if err == nil {
+		t.Fatalf("%s: a wallet that cannot pay for the entry must hold it, not block it", runnerUpLadder)
+	}
+
+	want := holdsUntilCloseRow(priorityLadder, scenarioDepths, configuredDepthOf(t, runnerUpLadder))
+	if got := held.Trade.Logs[0].Message; got != want {
+		t.Fatalf("%s row = %q, want %q", runnerUpLadder, got, want)
+	}
+
+	// Every ladder behind it: a wallet that covers the runner-up's remainder
+	// and this entry lets it through, and one unit less holds it on the row
+	// that names the runner-up.
+	next := ladder.DepthOf(runnerUp)
+	for _, trade := range finished {
+		if trade.Symbol == priorityLadder || trade.Symbol == runnerUpLadder {
 			continue
 		}
 
 		_, ownCost := ladder.NextEntryCost(trade, 0)
 
-		// A wallet that covers this entry lets it through.
-		assertFreeToArm(t, trade, full, ownCost)
+		assertFreeToArm(t, trade, full, next.RemainingCost+ownCost)
 
-		held, err := ShouldHold(priorityEvent(trade, "buy", full, ownCost-1))
+		held, err := ShouldHold(priorityEvent(trade, "buy", full, next.RemainingCost+ownCost-1))
 		if err == nil {
-			t.Fatalf("%s: a wallet that cannot pay for the entry must hold it, not block it", trade.Symbol)
+			t.Fatalf("%s: a wallet short of what %s still needs must hold the entry", trade.Symbol, runnerUpLadder)
 		}
 
-		want := holdsUntilCloseRow(priorityLadder, scenarioDepths, configuredDepthOf(t, trade.Symbol))
+		want := waitingRow(runnerUpLadder, next.Depth, configuredDepthOf(t, trade.Symbol))
 		if got := held.Trade.Logs[0].Message; got != want {
 			t.Fatalf("%s row = %q, want %q", trade.Symbol, got, want)
 		}

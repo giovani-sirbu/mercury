@@ -108,11 +108,13 @@ type (
 		SlowDecline        bool
 		FreeFall           bool
 		SlowDeclineReasons []string
-		// Smart take loss: the daily chart block from GET /:symbol/patterns
-		// (the two levels counting how many bars of the window printed under
-		// the price, resistance and support lines, Bollinger bands). Every
-		// zero field is inert; the engines hand it to
-		// gates/smarttakeloss.Apply after the ladder has decided.
+		// Smart take loss: the chart block from GET /:symbol/patterns — the
+		// quiet slow-decline verdict with its sell band, and the capital
+		// protection band with its SMC trend reading, both read on the closed
+		// window sophos' crash detectors read. Every zero field is inert; the
+		// engines hand it to gates/smarttakeloss.Apply after the ladder has
+		// decided, and ShouldHold reads the slow-decline verdict on the first
+		// fill.
 		SmartTakeLoss SmartTakeLossIndicators
 	}
 

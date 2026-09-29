@@ -1,297 +1,216 @@
 package smarttakeloss
 
 import (
-	"fmt"
+	"math"
+	"reflect"
+	"slices"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
+	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
-// The fixtures replay SOL 45211 on the w3s row. armedTrade is the ladder at
-// its fifth fill (179.78, stamped 17:38); activeTrade carries the activation
-// row for that fill; lastDepthTrade took the one permitted depth after it
-// (175.83).
-// The exit ticks are the same ladders once MinAgeAfterLastFill has passed
-// since their newest fill; the plain ticks sit minutes after it, where every
-// exit still waits.
-var (
-	activationTick = testutil.At("17:45:00")
-	depthTick      = testutil.At("18:45:00")
-	activeExitTick = testutil.At("17:38:00").Add(MinAgeAfterLastFill)
-	depthExitTick  = testutil.At("18:41:00").Add(MinAgeAfterLastFill)
-)
-
-func armedTrade() aggragates.Trades {
-	return sizedLadder(false, fills(5, "17:38:00")...)
+// gridCloses are the positions a close was decided in: as the proposal or
+// as the trade's own state, Apply replaces none of them.
+var gridCloses = map[string]bool{
+	"sell":                    true,
+	"takeProfit":              true,
+	"update_takeProfit":       true,
+	"sellParent":              true,
+	"impasse":                 true,
+	"sellLoss":                true,
+	"forceTrailingTakeProfit": true,
 }
 
-func activeTrade() aggragates.Trades {
-	trade := armedTrade()
-	trade.Logs = []aggragates.TradesLogs{activationRow(179.78)}
-	return trade
-}
-
-func lastDepthTrade() aggragates.Trades {
-	trade := sizedLadder(false, fills(6, "18:41:00")...)
-	trade.Logs = []aggragates.TradesLogs{activationRow(179.78)}
-	return trade
-}
-
-func withBlock(block aggragates.SmartTakeLossIndicators) aggragates.AIIndicators {
-	return aggragates.AIIndicators{SmartTakeLoss: block}
-}
-
-func assertUntouched(t *testing.T, got Result, position string) {
-	t.Helper()
-	if got.Position != position || got.Reason != "" || got.Activation != nil {
-		t.Fatalf("expected %q untouched with no row, got %+v", position, got)
-	}
-}
-
-func assertForced(t *testing.T, got Result, reason string) {
-	t.Helper()
-	if got.Position != "sellLoss" || got.Reason != reason {
-		t.Fatalf("expected a forced sellLoss for %q, got %+v", reason, got)
-	}
-}
-
-// The flag owns the overlay; a child, a zero price or no settings is inert.
+// The flag owns the overlay: without it, on a child, on no price or without
+// settings Apply hands the proposal back untouched with no row, whatever the
+// block — and so it does on a trade no rule watches: a long ladder short of
+// SlowDeclineArmDepth, of IndecisionArmDepth and of its last depth, a ladder
+// with no fill, an inverse ladder. The block serves every reading at once.
 func TestApplyInertWithoutTheFlagOnAChildOrWithoutInputs(t *testing.T) {
-	band := solBlock().UpperBB
-
-	off := lastDepthTrade()
+	reading := solBlock()
+	reading.SlowDeclineExit = true
+	reading.SlowDeclineSellBand = capitalProtectionBand
+	reading.SlowDeclineIndecision = true
+	reading.SlowDeclineBreakReasons = indecisionReasons
+	off := lastDepthLadder()
 	off.Strategy.Params.SmartTakeLoss = false
-	assertUntouched(t, Apply(off, "stopLoss", 176, depthTick, withBlock(solBlock())), "stopLoss")
-	offArmed := armedTrade()
-	offArmed.Strategy.Params.SmartTakeLoss = false
-	assertUntouched(t, Apply(offArmed, "", band, activationTick, withBlock(solBlock())), "")
-
-	child := lastDepthTrade()
+	child := lastDepthLadder()
 	child.ParentID = 7
-	assertUntouched(t, Apply(child, "stopLoss", 176, depthTick, withBlock(solBlock())), "stopLoss")
-	childArmed := armedTrade()
-	childArmed.ParentID = 7
-	assertUntouched(t, Apply(childArmed, "", 179.90, activationTick, withBlock(solBlock())), "")
+	bare := lastDepthLadder()
+	bare.StrategyPair.StrategySettings = nil
 
-	assertUntouched(t, Apply(lastDepthTrade(), "stopLoss", 0, depthTick, withBlock(solBlock())), "stopLoss")
-	noSettings := lastDepthTrade()
-	noSettings.StrategyPair.StrategySettings = nil
-	assertUntouched(t, Apply(noSettings, "stopLoss", 176, depthTick, withBlock(solBlock())), "stopLoss")
+	for name, tc := range map[string]struct {
+		trade aggragates.Trades
+		price float64
+	}{
+		"without the flag":     {off, capitalProtectionBand},
+		"on a child":           {child, capitalProtectionBand},
+		"without settings":     {bare, capitalProtectionBand},
+		"without a price":      {lastDepthLadder(), 0},
+		"short of every watch": {testutil.LadderTrade(false, fills(min(SlowDeclineArmDepth, IndecisionArmDepth)-1, "17:38:00")...), capitalProtectionBand},
+		"with no fill":         {testutil.LadderTrade(false), capitalProtectionBand},
+		"on an inverse ladder": {testutil.LadderTrade(true, fills(lastDepthFills, "21:30:00")...), capitalProtectionBand},
+	} {
+		for _, position := range []string{"", "stopLoss"} {
+			if got := Apply(tc.trade, position, tc.price, withBlock(reading)); !reflect.DeepEqual(got, Result{Position: position}) {
+				t.Errorf("%s, %q: got %+v", name, position, got)
+			}
+		}
+	}
 }
 
-func TestApplyInertBelowArmDepth(t *testing.T) {
-	shallow := testutil.LadderTrade(false, fills(ArmDepth(8)-1, "17:38:00")...)
-	assertUntouched(t, Apply(shallow, "", 179.90, activationTick, withBlock(solBlock())), "")
-	assertUntouched(t, Apply(shallow, "stopLoss", 179.90, activationTick, withBlock(solBlock())), "stopLoss")
+// gridDepths are the fill counts of the grid's ladders: one short of each
+// rule's watch and at it — SlowDeclineArmDepth, IndecisionArmDepth and the
+// last depth — each once.
+func gridDepths() []int {
+	var depths []int
+	for _, depth := range []int{SlowDeclineArmDepth - 1, SlowDeclineArmDepth, IndecisionArmDepth - 1, IndecisionArmDepth, lastDepthFills - 1, lastDepthFills} {
+		if depth > 0 && !slices.Contains(depths, depth) {
+			depths = append(depths, depth)
+		}
+	}
+	return depths
 }
 
-// An armed trade whose price still has more than MaxBarsLeft bars under it is
-// the plain ladder: a cent over the level is one bar too many.
-func TestApplyArmedDeadZoneTickUnchanged(t *testing.T) {
-	over := solBlock().LowBodyWithBarsLeft + 0.01
-	assertUntouched(t, Apply(armedTrade(), "", over, activationTick, withBlock(solBlock())), "")
-	assertUntouched(t, Apply(armedTrade(), "stopLoss", over, activationTick, withBlock(solBlock())), "stopLoss")
+// gridTrades are the ladders the grid runs on: the w3s ladder at every
+// gridDepths count — long, inverse, futures, under an impasse strategy, a
+// child and without the flag — each with no row, pending from its newest
+// fill, latched at it by the indecision direction, and both.
+func gridTrades() []aggragates.Trades {
+	kinds := []func(*aggragates.Trades){
+		func(*aggragates.Trades) {},
+		func(trade *aggragates.Trades) { trade.Strategy.TradeType = aggragates.Futures },
+		func(trade *aggragates.Trades) { trade.Strategy.Params.Impasse = true },
+		func(trade *aggragates.Trades) { trade.ParentID = 7 },
+		func(trade *aggragates.Trades) { trade.Strategy.Params.SmartTakeLoss = false },
+	}
+	var trades []aggragates.Trades
+	for _, depth := range gridDepths() {
+		ladders := []aggragates.Trades{testutil.LadderTrade(true, fills(depth, "21:30:00")...)}
+		for _, kind := range kinds {
+			trade := testutil.LadderTrade(false, fills(depth, "21:30:00")...)
+			kind(&trade)
+			ladders = append(ladders, trade)
+		}
+		for _, trade := range ladders {
+			marker := aggragates.TradesLogs{Message: SlowDeclineMessage("buy", nil), Price: trade.PositionPrice}
+			latch := aggragates.TradesLogs{Message: IndecisionMessage("buy", nil), Price: trade.PositionPrice}
+			pending, latched, both := trade, trade, trade
+			pending.Logs = []aggragates.TradesLogs{marker}
+			latched.Logs = []aggragates.TradesLogs{latch}
+			both.Logs = []aggragates.TradesLogs{marker, latch}
+			trades = append(trades, trade, pending, latched, both)
+		}
+	}
+	return trades
 }
 
-// The activation tick hands back the marker row with the FILL price — not
-// the tick price on trade.PositionPrice — and refuses nothing.
-func TestApplyActivationTickReturnsTheRowAndForcesNothing(t *testing.T) {
-	trade := armedTrade()
-	trade.PositionPrice = 179.90
-	got := Apply(trade, "", 179.90, activationTick, withBlock(solBlock()))
-	if got.Position != "" || got.Reason != "" {
-		t.Fatalf("the activation tick forces nothing, got %+v", got)
+// gridCarries is whether a grid trade carries a row with a price whose
+// message holds marker.
+func gridCarries(trade aggragates.Trades, marker string) bool {
+	for _, row := range trade.Logs {
+		if row.Price > 0 && strings.Contains(row.Message, marker) {
+			return true
+		}
 	}
-	if got.Activation == nil {
-		t.Fatal("the activation tick must hand back the marker row")
-	}
-	if got.Activation.Message != "Hold buy: smartTakeLoss: Potential trend reversal" || got.Activation.Price != 179.78 {
-		t.Fatalf("the row names the raw state and carries the fill, got %+v", *got.Activation)
-	}
+	return false
+}
 
-	// The ladder's own proposal on that tick: while a depth is permitted the
-	// arming passes; with none permitted it is already the exit — or, inside
-	// a wait, the dropped add.
-	got = Apply(trade, "stopLoss", 175, activationTick, withBlock(solBlock()))
-	if got.Activation == nil {
-		t.Fatalf("the activation tick must hand back the marker row, got %+v", got)
+// expectedApply is Apply stated on its own for the grid's ladders, whose rows
+// are a marker and an indecision row at the newest fill and whose blocks
+// serve no verdict and no quiet leg, so no slow-decline row ever comes back.
+// Past the guards, a ladder the indecision direction watches — a long spot
+// one from IndecisionArmDepth fills — that carries no indecision row gets
+// its row on a block serving the indecision reading, whatever the proposal
+// and the trade's state. Past the closes the ladder or the trade already
+// decided, a pending ladder the quiet slow decline watches sells at its sell
+// band, and else a ladder at its last depth capital protection watches sells
+// at the upper band while the SMC trend reads bearish.
+func expectedApply(trade aggragates.Trades, position string, price float64, block aggragates.SmartTakeLossIndicators, slowDecline, capitalProtection, indecision bool) Result {
+	want := Result{Position: position}
+	if !trade.Strategy.Params.SmartTakeLoss || trade.ParentID != 0 || price <= 0 || len(trade.StrategyPair.StrategySettings) == 0 {
+		return want
 	}
-	waitOver := activationTick.Sub(testutil.At("17:38:00")) >= MinAgeAfterLastFill
+	filled := ladder.CountFilledEntries(trade)
+	watched := indecision && !trade.Inverse && trade.Strategy.TradeType != aggragates.Futures && filled >= IndecisionArmDepth
+	if watched && block.SlowDeclineIndecision && !gridCarries(trade, IndecisionMarker) {
+		want.Indecision = &Row{Message: IndecisionMessage(trade.PositionType, block.SlowDeclineBreakReasons), Price: trade.PositionPrice}
+	}
+	if gridCloses[position] || gridCloses[trade.PositionType] {
+		return want
+	}
+	pending := slowDecline && !trade.Inverse && filled >= SlowDeclineArmDepth && gridCarries(trade, SlowDeclineMarker)
+	lastDepth := capitalProtection && !trade.Inverse && trade.Strategy.TradeType != aggragates.Futures &&
+		!trade.Strategy.Params.Impasse && filled >= int(trade.StrategyPair.StrategySettings[0].Depths)
 	switch {
-	case !LastPermittedDepthExit || PermittedDepths > 0:
-		if got.Position != "stopLoss" {
-			t.Fatalf("the activation tick keeps the ladder's arming while a depth is permitted, got %+v", got)
-		}
-	case waitOver:
-		assertForced(t, got, "tolerance under the last fill")
-	default:
-		if got.Position != "" {
-			t.Fatalf("with no depth permitted the arming is dropped while the exit waits, got %+v", got)
-		}
+	case pending && block.SlowDeclineSellBand > 0 && price >= block.SlowDeclineSellBand:
+		want.Position, want.Reason = "sellLoss", reasonSellBand
+	case lastDepth && block.CapitalProtectionSmcBearish && block.CapitalProtectionUpperBB > 0 && price >= block.CapitalProtectionUpperBB:
+		want.Position, want.Reason = "sellLoss", reasonCapitalProtection
+	}
+	return want
+}
+
+// gridBlocks serve the two bands in either order with the SMC trend bearish,
+// both bands with it not bearish, and no band at all — then the indecision
+// reading with the bands and the trend bearish, and on its own.
+func gridBlocks() []aggragates.SmartTakeLossIndicators {
+	lower, upper := capitalProtectionBand, slowDeclineBand
+	return []aggragates.SmartTakeLossIndicators{
+		{SlowDeclineSellBand: upper, CapitalProtectionUpperBB: lower, CapitalProtectionSmcBearish: true},
+		{SlowDeclineSellBand: lower, CapitalProtectionUpperBB: upper, CapitalProtectionSmcBearish: true},
+		{SlowDeclineSellBand: lower, CapitalProtectionUpperBB: lower},
+		{CapitalProtectionSmcBearish: true},
+		{SlowDeclineSellBand: upper, CapitalProtectionUpperBB: lower, CapitalProtectionSmcBearish: true, SlowDeclineIndecision: true, SlowDeclineBreakReasons: indecisionReasons},
+		{SlowDeclineIndecision: true},
 	}
 }
 
-func TestApplySecondTickWritesNoSecondRow(t *testing.T) {
-	assertUntouched(t, Apply(activeTrade(), "", 179.90, activationTick, withBlock(solBlock())), "")
+// gridPrices sit under, at, between and over the two bands.
+func gridPrices() []float64 {
+	lower, upper := capitalProtectionBand, slowDeclineBand
+	return []float64{math.Nextafter(lower, 0), lower, (lower + upper) / 2, upper, upper + 1}
 }
 
-// Active: the band (or the line) sells from whatever the ladder proposed on
-// the add side, the dead zone included.
-func TestApplyActiveSellsAtTheBandAndTheLine(t *testing.T) {
-	block := solBlock()
-	for _, position := range []string{"", "stopLoss", "update_stopLoss", "buy", "forceTrailingStopLoss"} {
-		assertForced(t, Apply(activeTrade(), position, block.UpperBB, activeExitTick, withBlock(block)), "upper bollinger band")
-	}
-	assertUntouched(t, Apply(activeTrade(), "", block.UpperBB-0.01, activeExitTick, withBlock(block)), "")
-
-	block.Resistance = aggragates.TrendLine{From: anchor("06:30:00", 193.25), To: anchor("11:45:00", 192.97)}
-	level, _ := projectLine(block.Resistance, activeExitTick.UnixMilli())
-	assertForced(t, Apply(activeTrade(), "", level, activeExitTick, withBlock(block)), "resistance line")
-}
-
-// Ported from the old protectedPosition tests: a close the ladder already
-// decided is never replaced, whether it is the proposal or the trade's own
-// state. A force-trailing take profit reads as the take profit it re-arms.
-func TestApplyNeverReplacesADecidedClose(t *testing.T) {
-	block := solBlock()
-	protected := []string{"sell", "takeProfit", "update_takeProfit", "sellParent", "impasse", "sellLoss", "forceTrailingTakeProfit"}
-	for _, position := range protected {
-		assertUntouched(t, Apply(activeTrade(), position, block.UpperBB, activeExitTick, withBlock(block)), position)
-		assertUntouched(t, Apply(lastDepthTrade(), position, 175, depthExitTick, withBlock(block)), position)
-	}
-
-	states := []string{"sell", "takeProfit", "sellParent", "impasse", "sellLoss", "forceTrailingTakeProfit"}
-	for _, state := range states {
-		trade := activeTrade()
-		trade.PositionType = state
-		assertUntouched(t, Apply(trade, "", block.UpperBB, activeExitTick, withBlock(block)), "")
-
-		last := lastDepthTrade()
-		last.PositionType = state
-		assertUntouched(t, Apply(last, "", 175, depthExitTick, withBlock(block)), "")
-	}
-}
-
-// A resting sellLoss limit is re-placed only by its own logic row: the
-// overlay never re-forces it on the prints under the tolerance line.
-func TestApplyNeverReforcesARestingSellLoss(t *testing.T) {
-	trade := lastDepthTrade()
-	trade.PositionType = "sellLoss"
-	for _, price := range []float64{175.39, 175.0, 170.0} {
-		assertUntouched(t, Apply(trade, "", price, depthExitTick, withBlock(solBlock())), "")
-	}
-	assertUntouched(t, Apply(trade, "sellLoss", 170, depthExitTick, withBlock(solBlock())), "sellLoss")
-}
-
-// The permitted depth, while one is permitted: its arming passes, and
-// nothing sells before it fills — even far under the activating fill. With
-// none permitted (PermittedDepths 0) the activating fill is the last depth:
-// the arming is the exit once the wait is over, and under everything the
-// window holds the tolerance sells from the dead zone.
-func TestApplyPermittedDepthPassesTheArmingThrough(t *testing.T) {
-	block := solBlock()
-	if !LastPermittedDepthExit || PermittedDepths > 0 {
-		for _, tick := range []time.Time{activationTick, activeExitTick} {
-			assertUntouched(t, Apply(activeTrade(), "stopLoss", 175, tick, withBlock(block)), "stopLoss")
-			assertUntouched(t, Apply(activeTrade(), "update_stopLoss", 174, tick, withBlock(block)), "update_stopLoss")
-			buying := activeTrade()
-			buying.PositionType = "stopLoss"
-			assertUntouched(t, Apply(buying, "buy", 175.83, tick, withBlock(block)), "buy")
-			assertUntouched(t, Apply(activeTrade(), "", 175, tick, withBlock(block)), "")
-		}
-		return
-	}
-	assertForced(t, Apply(activeTrade(), "stopLoss", 175, activeExitTick, withBlock(block)), "tolerance under the last fill")
-	assertForced(t, Apply(activeTrade(), "update_stopLoss", 174, activeExitTick, withBlock(block)), "tolerance under the last fill")
-	buying := activeTrade()
-	buying.PositionType = "stopLoss"
-	assertForced(t, Apply(buying, "buy", 175.83, activeExitTick, withBlock(block)), "tolerance under the last fill")
-	assertForced(t, Apply(activeTrade(), "", 175, activeExitTick, withBlock(block)), "tolerance under the last fill")
-	// In the dead zone over the tolerance line nothing sells and nothing is
-	// proposed.
-	assertUntouched(t, Apply(activeTrade(), "", 179.90, activeExitTick, withBlock(block)), "")
-}
-
-// Nothing sells inside MinAgeAfterLastFill — not the tolerance, not the band,
-// not the line — because without that wait a ladder can buy and sell in the
-// same instant. On the last permitted depth the ladder may not add either:
-// the add-side proposal is dropped, so the wait cannot be reset by a fill it
-// would otherwise take.
-func TestApplyWaitsMinAgeAfterTheLastFillBeforeAnyExit(t *testing.T) {
-	if MinAgeAfterLastFill <= 0 {
-		t.Skip("MinAgeAfterLastFill is deactivated (0): nothing waits, no add is refused")
-	}
-	block := solBlock()
-	block.Resistance = aggragates.TrendLine{From: anchor("06:30:00", 193.25), To: anchor("11:45:00", 192.97)}
-	line, _ := projectLine(block.Resistance, depthTick.UnixMilli())
-	tolerance := toleranceLine(175.83, false)
-
-	// Minutes after the sixth fill: every leg waits.
-	assertUntouched(t, Apply(lastDepthTrade(), "", tolerance, depthTick, withBlock(block)), "")
-	assertUntouched(t, Apply(lastDepthTrade(), "", block.UpperBB, depthTick, withBlock(block)), "")
-	assertUntouched(t, Apply(lastDepthTrade(), "", line, depthTick, withBlock(block)), "")
-
-	// …and no further depth is committed while it waits.
-	for _, position := range []string{"stopLoss", "update_stopLoss", "buy", "forceTrailingStopLoss"} {
-		if got := Apply(lastDepthTrade(), position, 170, depthTick, withBlock(block)); got.Position != "" || got.Reason != "" {
-			t.Fatalf("an add on the last permitted depth is dropped while the exit waits, %q gave %+v", position, got)
+// Every grid ladder, state, proposal, block and price, under the three
+// switches in every position: Apply answers expectedApply exactly.
+func TestApplyOnTheGrid(t *testing.T) {
+	positions := []string{"", "buy", "stopLoss", "update_stopLoss", "update_buy", "forceTrailingStopLoss", "takeProfit", "forceTrailingTakeProfit"}
+	states := []string{"buy", "stopLoss", "takeProfit", "sellLoss"}
+	blocks, prices := gridBlocks(), gridPrices()
+	sold := map[string]int{}
+	rows := 0
+	for _, switches := range [][3]bool{{true, true, true}, {true, false, true}, {false, true, true}, {false, false, true}, {true, true, false}, {true, false, false}, {false, true, false}, {false, false, false}} {
+		withQuietSlowDeclineExit(t, switches[0])
+		withCapitalProtectionExit(t, switches[1])
+		withIndecisionDirection(t, switches[2])
+		for _, trade := range gridTrades() {
+			for _, state := range states {
+				trade.PositionType = state
+				for _, position := range positions {
+					for _, block := range blocks {
+						for _, price := range prices {
+							got := Apply(trade, position, price, withBlock(block))
+							want := expectedApply(trade, position, price, block, switches[0], switches[1], switches[2])
+							if !reflect.DeepEqual(got, want) {
+								t.Fatalf("switches %v, %d fills (inverse %v, state %q, rows %d), %q at %v, block %+v:\ngot  %+v\nwant %+v",
+									switches, len(trade.History), trade.Inverse, state, len(trade.Logs), position, price, block, got, want)
+							}
+							sold[got.Reason]++
+							if got.Indecision != nil {
+								rows++
+							}
+						}
+					}
+				}
+			}
 		}
 	}
-
-	// A decided close is still the ladder's, waiting or not.
-	assertUntouched(t, Apply(lastDepthTrade(), "takeProfit", 200, depthTick, withBlock(block)), "takeProfit")
-
-	// The refusal is the only thing an operator can see, so it is written —
-	// once for the fill it stands for, whatever the ladder proposes next.
-	got := Apply(lastDepthTrade(), "stopLoss", 170, depthTick, withBlock(block))
-	if got.Wait == nil || got.Wait.Price != 175.83 {
-		t.Fatalf("the refusal must name the fill it waits on, got %+v", got)
+	if sold[reasonSellBand] == 0 || sold[reasonCapitalProtection] == 0 || sold[""] == 0 || rows == 0 {
+		t.Fatalf("fixture drifted: the grid must sell under both reasons, keep proposals and hand back indecision rows, got %v and %d rows", sold, rows)
 	}
-	if want := fmt.Sprintf("Hold buy: smartTakeLoss: last fill too fresh to sell, no add (%s)", MinAgeAfterLastFill); got.Wait.Message != want {
-		t.Fatalf("wait row %q, want %q", got.Wait.Message, want)
-	}
-	logged := lastDepthTrade()
-	logged.Logs = append(logged.Logs, aggragates.TradesLogs{Message: got.Wait.Message, Price: got.Wait.Price})
-	if again := Apply(logged, "stopLoss", 170, depthTick, withBlock(block)); again.Wait != nil || again.Position != "" {
-		t.Fatalf("a fill whose refusal already stands writes no second row, got %+v", again)
-	}
-	// The row of an earlier fill does not cover the newest one.
-	stale := lastDepthTrade()
-	stale.Logs = append(stale.Logs, aggragates.TradesLogs{Message: got.Wait.Message, Price: 179.78})
-	if again := Apply(stale, "stopLoss", 170, depthTick, withBlock(block)); again.Wait == nil {
-		t.Fatalf("each fill gets its own refusal row, got %+v", again)
-	}
-	// Nothing is written when nothing was overridden: the exit simply waits.
-	if quiet := Apply(lastDepthTrade(), "", tolerance, depthTick, withBlock(block)); quiet.Wait != nil {
-		t.Fatalf("a waiting exit that overrides nothing writes no row, got %+v", quiet)
-	}
-
-	// One second before the window closes and one second after it.
-	last := testutil.At("18:41:00")
-	assertUntouched(t, Apply(lastDepthTrade(), "", tolerance, last.Add(MinAgeAfterLastFill-time.Second), withBlock(block)), "")
-	assertForced(t, Apply(lastDepthTrade(), "", tolerance, last.Add(MinAgeAfterLastFill), withBlock(block)), "tolerance under the last fill")
-}
-
-// The guard measures the fill's own stamp against the tick clock, and an
-// unknown clock on either side holds the exit: this gate acts by closing the
-// trade, and the permitted depth it reads passes no age check of its own, so
-// a row that lost its stamp must not sell on the tick it appears.
-func TestApplyMinAgeHoldsOnAnUnknownClock(t *testing.T) {
-	block := solBlock()
-	tolerance := toleranceLine(175.83, false)
-
-	unstamped := lastDepthTrade()
-	for index := range unstamped.History {
-		unstamped.History[index].CreatedAt = time.Time{}
-	}
-	assertUntouched(t, Apply(unstamped, "", tolerance, depthExitTick, withBlock(block)), "")
-	assertUntouched(t, Apply(lastDepthTrade(), "", tolerance, time.Time{}, withBlock(block)), "")
-
-	// …and, while the last-permitted-depth rule is on, the add stays
-	// refused, so an unmeasurable trade commits nothing.
-	if got := Apply(unstamped, "stopLoss", tolerance, depthExitTick, withBlock(block)); LastPermittedDepthExit && got.Position != "" {
-		t.Fatalf("an unstamped last fill must not add either, got %+v", got)
-	}
+	t.Logf("answers by reason: %v, indecision rows: %d", sold, rows)
 }
