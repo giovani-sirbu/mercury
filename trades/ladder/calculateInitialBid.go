@@ -16,6 +16,15 @@ import (
 // wallet outside the ladder math; without a reserve they defund the last rung.
 const InitialBidReservePercent = 10.0
 
+// CalculateInitialBid sizes a ladder's first entry off amount, less
+// InitialBidReservePercent, from the row strategyIndex of the rows the trade
+// it is handed carries: at the deepest depth on the half-depth grid, from the
+// row's depths down to its minimum depths, whose bid clears the pair's
+// minimum notional — an impasse child at the row's impasse depth — and with
+// an insufficient-funds error when none does. A first entry the engine named
+// rows for (aggragates.Params.EntrySettings) is sized by handing it
+// aggragates.Params.SizingTrade's copy, so the caller's trade and its rows are
+// never touched.
 func CalculateInitialBid(amount float64, trade aggragates.Trades, strategyIndex int) (float64, error) {
 	var initialBid float64
 	var initialBidInQuote float64

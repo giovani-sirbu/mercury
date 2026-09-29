@@ -116,6 +116,14 @@ type (
 		// decided, and ShouldHold reads the slow-decline verdict on the first
 		// fill.
 		SmartTakeLoss SmartTakeLossIndicators
+		// Dynamic params: the Super Guppy and Bull Market Support Band reads
+		// of sophos' SMC trend dashboard on the timeframe the DynamicParams
+		// flag watches, from GET /:symbol/patterns. The zero block is not
+		// read and raises nothing. The engines shape rows from it only
+		// through dynamicparams.RaisedSettings — dynamicparams.Changed and
+		// TransitionMessage name its edges on the trade — and no gate holds
+		// on it.
+		DynamicParams DynamicParamsIndicators
 	}
 
 	// AssetFree is one asset's free balance on the wallet the managed trade
@@ -168,5 +176,12 @@ type (
 		// only on the ticks where it waives a shortfall; zero leaves the
 		// entry sized by the ladder alone.
 		AvailableQuantity float64
+		// EntrySettings is the rows the FIRST entry of the ladder is sized
+		// with when set; nil leaves it on the trade's own rows. The engines
+		// set it to the rows dynamicparams.RaisedSettings raises, on the
+		// ticks it raises them. Only the first-entry sizing reads it, through
+		// SizingTrade: the adds, the gates and everything written keep the
+		// trade's rows. Never persisted.
+		EntrySettings []StrategySettings
 	}
 )

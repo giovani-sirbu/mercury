@@ -44,7 +44,11 @@ func HasFunds(event events.Events) (events.Events, error) {
 		// lost the wallet to InverseUsedAmount flipped to impasse and the
 		// next tick ran createChildrenTrades → sellAll against no position.
 		firstEntry := len(event.Trade.History) == 0
-		// set trade to impasse if this feature is activated for this strategy
+		// set trade to impasse if this feature is activated for this strategy.
+		// The check sizes a ladder from the trade's own rows, never from
+		// Params.EntrySettings: those size a first entry (Buy), and a ladder
+		// that reaches this check has fills. A first entry reaches no sizing
+		// here at all — it needs nothing from the funds gate.
 		if !firstEntry && event.Trade.Strategy.Params.Impasse && event.Trade.ParentID == 0 {
 			usedAmount := quantities.GetUsedQuantities(event) * event.Trade.PositionPrice
 			_, hasFundsError := ladder.CalculateInitialBid(usedAmount, event.Trade, 0)

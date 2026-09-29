@@ -2,6 +2,7 @@ package actions
 
 import (
 	"github.com/giovani-sirbu/mercury/trades/gates/crashguard"
+	"github.com/giovani-sirbu/mercury/trades/gates/dynamicparams"
 	"github.com/giovani-sirbu/mercury/trades/gates/regime"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 	"strings"
@@ -43,11 +44,13 @@ func ownershipEvent(trade aggragates.Trades, ai aggragates.AIIndicators, cool ag
 	}
 }
 
-// fullHoldPayload carries every signal that could hold a long stopLoss, and
-// the smart take loss's slow-decline verdict, which holds a first fill only.
+// fullHoldPayload carries every signal that could hold a long stopLoss, the
+// smart take loss's slow-decline verdict, which holds a first fill only, and
+// both dynamic params reads bearish, which hold nothing at all.
 func fullHoldPayload() aggragates.AIIndicators {
 	return aggragates.AIIndicators{
 		SmartTakeLoss:      aggragates.SmartTakeLossIndicators{SlowDeclineExit: true},
+		DynamicParams:      aggragates.DynamicParamsIndicators{Timeframe: "1D", Guppy: -1, BMSB: -1, Valid: true},
 		HasRegimeVerdict:   true,
 		EnterAllowed:       false,
 		AddAllowed:         false,
@@ -74,7 +77,7 @@ func expensiveCooldown() aggragates.CoolDownIndicators {
 	return aggragates.CoolDownIndicators{HasFirstFillVerdict: true, AllowLongEntry: false, AllowShortEntry: false}
 }
 
-var holdFamilyPrefixes = []string{"cooldown:", "regime:", "pattern:", "fibonacci:", "crash-guard:", "smartTakeLoss:", "AI ", "Capitulation"}
+var holdFamilyPrefixes = []string{"cooldown:", "regime:", "pattern:", "fibonacci:", "crash-guard:", "smartTakeLoss:", "AI ", "Capitulation", dynamicparams.TransitionPrefix}
 
 func assertOnlyFamily(t *testing.T, logs []aggragates.TradesLogs, want string) {
 	t.Helper()
@@ -115,6 +118,7 @@ func TestShouldHoldOwnershipMatrixStopLoss(t *testing.T) {
 		{"usePatterns", aggragates.StrategyParams{UsePatterns: true}, "pattern: ascending triangle found (resistance 96000.0000), preventing stopLoss"},
 		{"useForceTrailing", aggragates.StrategyParams{UseForceTrailing: true}, ""},
 		{"powerLawQuantiles", aggragates.StrategyParams{PowerLawQuantiles: true}, ""},
+		{"dynamicParams shapes the rows and holds no add, both reads bearish", aggragates.StrategyParams{DynamicParams: true}, ""},
 	}
 	for _, c := range cases {
 		trade := ownershipTrade("stopLoss", 4)
@@ -146,6 +150,7 @@ func TestShouldHoldOwnershipMatrixTakeProfit(t *testing.T) {
 		{"smartTakeLoss never holds an exit, verdict or not", aggragates.StrategyParams{SmartTakeLoss: true}, ""},
 		{"useAI", aggragates.StrategyParams{UseAI: true}, "AI market is bullish"},
 		{"usePatterns", aggragates.StrategyParams{UsePatterns: true}, "pattern: ascending triangle in play, riding to target 104500.0000"},
+		{"dynamicParams never holds an exit, both reads bearish", aggragates.StrategyParams{DynamicParams: true}, ""},
 	}
 	for _, c := range cases {
 		trade := ownershipTrade("takeProfit", 4)
@@ -195,6 +200,25 @@ func TestShouldHoldRegimeHoldNeverFiresOnEntry(t *testing.T) {
 				t.Fatalf("inverse=%v %s: the cooldown must hold the refused first fill", inverse, label)
 			}
 			assertOnlyFamily(t, held.Trade.Logs, "cooldown: trying to get a better entry price")
+		}
+	}
+}
+
+// DynamicParams has no seat on the first fill either: with both reads
+// bearish it holds no new ladder, long or inverse, and writes no row. It
+// sizes that first entry for the raised rows; it never refuses it.
+func TestShouldHoldDynamicParamsHoldsNoFirstFill(t *testing.T) {
+	for _, inverse := range []bool{false, true} {
+		trade := ownershipTrade("buy", 0)
+		trade.Inverse = inverse
+		trade.Strategy.Params = aggragates.StrategyParams{DynamicParams: true}
+
+		event := ownershipEvent(trade, fullHoldPayload(), expensiveCooldown())
+		event.Params.OldPosition = "new"
+
+		held, err := ShouldHold(event)
+		if err != nil || len(held.Trade.Logs) != 0 {
+			t.Fatalf("inverse=%v: DynamicParams must not touch the first fill, got %v %v", inverse, err, messages(held.Trade.Logs))
 		}
 	}
 }

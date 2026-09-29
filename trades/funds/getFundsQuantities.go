@@ -51,7 +51,9 @@ func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
 	strategySettings := event.Trade.StrategyPair.StrategySettings
 	filledEntries := ladder.CountFilledEntries(event.Trade)
 	// Same row-selection contract as Buy: entry N reads row N-1, missing rows
-	// fall back to the base row 0.
+	// fall back to the base row 0. Always the trade's own rows: the only entry
+	// Params.EntrySettings sizes is a first one, and a first entry has no fill
+	// to multiply, so it needs nothing here whatever rows Buy sizes it from.
 	settingsIndex := ladder.SettingsIndexOrBase(strategySettings, filledEntries)
 
 	pairSymbols := strings.Split(event.Trade.Symbol, "/")

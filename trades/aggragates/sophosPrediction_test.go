@@ -425,6 +425,68 @@ func TestSophosPredictionMapsTheIndecision(t *testing.T) {
 	}
 }
 
+// The dynamic params block maps onto the reads field for field: the
+// dashboard row sophos read and the two reads in their wire values.
+func TestSophosPredictionMapsTheDynamicParams(t *testing.T) {
+	var prediction SophosPrediction
+	raw := `{"action":"LONG","dynamicParams":{"timeframe":"1D","guppy":-1,"bmsb":1,"valid":true}}`
+	if err := json.Unmarshal([]byte(raw), &prediction); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	want := DynamicParamsIndicators{Timeframe: "1D", Guppy: -1, BMSB: 1, Valid: true}
+	if got := prediction.Indicators().DynamicParams; got != want {
+		t.Fatalf("the dynamic params block must map field for field, got %+v want %+v", got, want)
+	}
+}
+
+// A sophos without the object, or one serving it with every key zero,
+// decodes to the zero block — not read, which raises no row. A block served
+// as not read keeps its reads beside Valid false, and the gate reads none of
+// them.
+func TestSophosPredictionWithoutDynamicParamsIsInert(t *testing.T) {
+	for name, raw := range map[string]string{
+		"no object":      `{"action":"LONG","hasRegimeVerdict":true,"crashActive":true}`,
+		"every key zero": `{"dynamicParams":{"timeframe":"","guppy":0,"bmsb":0,"valid":false}}`,
+	} {
+		var prediction SophosPrediction
+		if err := json.Unmarshal([]byte(raw), &prediction); err != nil {
+			t.Fatalf("%s: unmarshal: %v", name, err)
+		}
+		if got := prediction.Indicators().DynamicParams; got != (DynamicParamsIndicators{}) {
+			t.Fatalf("%s must map to the zero block, got %+v", name, got)
+		}
+	}
+
+	var unread SophosPrediction
+	if err := json.Unmarshal([]byte(`{"dynamicParams":{"timeframe":"1D","guppy":-1,"bmsb":-1,"valid":false}}`), &unread); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got := unread.Indicators().DynamicParams; got.Valid || got.Timeframe != "1D" {
+		t.Fatalf("a block served unread must map unread with its timeframe, got %+v", got)
+	}
+}
+
+// The wire keys the block travels under, which sophos pins its own side
+// against.
+func TestSophosDynamicParamsWireKeys(t *testing.T) {
+	block := reflect.TypeOf(SophosDynamicParams{})
+	want := []string{"timeframe", "guppy", "bmsb", "valid"}
+	if block.NumField() != len(want) {
+		t.Fatalf("SophosDynamicParams has %d fields, want %d", block.NumField(), len(want))
+	}
+	for index, key := range want {
+		if got := block.Field(index).Tag.Get("json"); got != key {
+			t.Errorf("field %s: json key %q, want %q", block.Field(index).Name, got, key)
+		}
+	}
+
+	field, found := reflect.TypeOf(SophosPrediction{}).FieldByName("DynamicParams")
+	if !found || field.Tag.Get("json") != "dynamicParams" {
+		t.Fatalf("SophosPrediction must carry the block under dynamicParams, got %q", field.Tag.Get("json"))
+	}
+}
+
 // Free fall travels on its own key: sophos can serve it without a slow
 // decline, and the mapping keeps the two apart for the gate to combine.
 func TestSophosPredictionMapsFreeFallApartFromSlowDecline(t *testing.T) {

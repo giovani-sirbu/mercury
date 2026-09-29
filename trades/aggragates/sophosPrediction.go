@@ -88,6 +88,29 @@ func (s SophosSmartTakeLoss) Indicators() SmartTakeLossIndicators {
 	}
 }
 
+// SophosDynamicParams is the nested `dynamicParams` object on
+// GET /:symbol/patterns: the dashboard row sophos read for the DynamicParams
+// flag and its Super Guppy and Bull Market Support Band reads, keys always
+// present. A sophos without the object decodes to a block that is not read
+// (Valid false), which gates/dynamicparams treats as the configured rows:
+// inert.
+type SophosDynamicParams struct {
+	Timeframe string `json:"timeframe"`
+	Guppy     int    `json:"guppy"`
+	BMSB      int    `json:"bmsb"`
+	Valid     bool   `json:"valid"`
+}
+
+// Indicators folds the wire keys into the block the gate reads.
+func (d SophosDynamicParams) Indicators() DynamicParamsIndicators {
+	return DynamicParamsIndicators{
+		Timeframe: d.Timeframe,
+		Guppy:     d.Guppy,
+		BMSB:      d.BMSB,
+		Valid:     d.Valid,
+	}
+}
+
 // SophosPrediction is the wire contract shared by hermes and sisyphus for
 // GET /:symbol and GET /:symbol/patterns. Extra fields sophos may send are
 // ignored; missing ones stay at the zero value and stay inert.
@@ -114,6 +137,7 @@ type SophosPrediction struct {
 	FreeFall           bool                 `json:"freeFall"`
 	SlowDeclineReasons []string             `json:"slowDeclineReasons"`
 	SmartTakeLoss      SophosSmartTakeLoss  `json:"smartTakeLoss"`
+	DynamicParams      SophosDynamicParams  `json:"dynamicParams"`
 	PatternVerdict     SophosPatternVerdict `json:"patternVerdict"`
 	Fib                SophosFib            `json:"fib"`
 }
@@ -140,6 +164,7 @@ func (p SophosPrediction) Indicators() AIIndicators {
 		FreeFall:           p.FreeFall,
 		SlowDeclineReasons: p.SlowDeclineReasons,
 		SmartTakeLoss:      p.SmartTakeLoss.Indicators(),
+		DynamicParams:      p.DynamicParams.Indicators(),
 		PatternName:        p.PatternVerdict.Name,
 		PatternDisplayName: p.PatternVerdict.DisplayName,
 		PatternDirection:   p.PatternVerdict.Direction,

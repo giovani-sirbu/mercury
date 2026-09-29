@@ -25,6 +25,12 @@ import (
 // budget is the wallet the first entry would be sized against, exactly as the
 // buy action sizes it; it takes no part once the ladder has a fill to
 // multiply.
+//
+// A first entry is priced from the rows of the trade it is handed. Handed
+// aggragates.Params.SizingTrade's copy, it prices a first entry on the rows
+// the engine named for it (Params.EntrySettings), exactly as the buy action
+// sizes it, while an add keeps the trade's own rows — SizingTrade hands a
+// ladder with fills back as it is.
 func NextEntryCost(trade aggragates.Trades, budget float64) (string, float64) {
 	asset := SpendingAsset(trade)
 

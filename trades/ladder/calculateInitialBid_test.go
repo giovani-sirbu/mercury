@@ -2,6 +2,7 @@ package ladder
 
 import (
 	"math"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -83,6 +84,85 @@ func TestCalculateInitialBidStillRefusesDustWallets(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "Insufficient funds") {
 		t.Fatalf("error = %q, want it to name insufficient funds", err.Error())
+	}
+}
+
+// deeperLadderSettings is ladderSettings a depth deeper and a step wider:
+// the shape of the rows an engine names for a first entry while it raises
+// them.
+func deeperLadderSettings() aggragates.StrategySettings {
+	settings := ladderSettings()
+	settings.Depths++
+	settings.Percentage += 0.5
+	return settings
+}
+
+// A first entry the engine named rows for is sized from them: handed
+// Params.SizingTrade's copy, CalculateInitialBid sizes the named row — a
+// depth deeper, so a smaller first entry — while the trade the copy was taken
+// from keeps its own rows, the very array.
+func TestCalculateInitialBidSizesAFirstEntryOnTheEntrySettings(t *testing.T) {
+	const wallet = 50000.0
+
+	trade := sizingTrade(false, 118000, ladderSettings())
+	stored := trade.StrategyPair.StrategySettings
+	storedRow := stored[0]
+	deeper := deeperLadderSettings()
+
+	sizing := aggragates.Params{EntrySettings: []aggragates.StrategySettings{deeper}}.SizingTrade(trade)
+	bid, err := CalculateInitialBid(wallet, sizing, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := GetInitialBidByDepth(wallet*(1-InitialBidReservePercent/100), deeper.Depths, deeper.Multiplier, deeper.Percentage)
+	if math.Abs(bid-want) > 0.001 {
+		t.Fatalf("bid on the named rows = %f, want %f", bid, want)
+	}
+
+	configured, err := CalculateInitialBid(wallet, trade, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if bid >= configured {
+		t.Fatalf("a first entry sized a depth deeper = %f, want less than the configured %f", bid, configured)
+	}
+
+	if &trade.StrategyPair.StrategySettings[0] != &stored[0] || !reflect.DeepEqual(trade.StrategyPair.StrategySettings[0], storedRow) {
+		t.Fatal("the trade must keep its own rows")
+	}
+}
+
+// With no rows named — EntrySettings nil or empty — and on a ladder that has
+// a fill whatever is named, the sizing copy carries the trade's own rows, the
+// very slice, so CalculateInitialBid answers exactly what it answers without
+// one.
+func TestCalculateInitialBidWithoutEntrySettingsIsUnchanged(t *testing.T) {
+	const wallet = 50000.0
+
+	trade := sizingTrade(false, 118000, ladderSettings())
+	want, wantErr := CalculateInitialBid(wallet, trade, 0)
+	if wantErr != nil {
+		t.Fatalf("unexpected error: %v", wantErr)
+	}
+
+	filled := trade
+	filled.History = []aggragates.TradesHistory{{Type: "BUY", Quantity: 0.001, Price: 118000, OrderId: 1}}
+	named := []aggragates.StrategySettings{deeperLadderSettings()}
+
+	for name, sized := range map[string]aggragates.Trades{
+		"no rows named":        aggragates.Params{}.SizingTrade(trade),
+		"an empty set of rows": aggragates.Params{EntrySettings: []aggragates.StrategySettings{}}.SizingTrade(trade),
+		"a ladder with a fill": aggragates.Params{EntrySettings: named}.SizingTrade(filled),
+	} {
+		if &sized.StrategyPair.StrategySettings[0] != &trade.StrategyPair.StrategySettings[0] {
+			t.Errorf("%s: the sizing copy must carry the trade's own rows", name)
+		}
+
+		got, err := CalculateInitialBid(wallet, sized, 0)
+		if err != nil || got != want {
+			t.Errorf("%s: bid = %v (%v), want exactly %v", name, got, err, want)
+		}
 	}
 }
 

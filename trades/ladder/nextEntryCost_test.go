@@ -1,6 +1,7 @@
 package ladder
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/giovani-sirbu/mercury/helpers"
@@ -149,6 +150,64 @@ func TestNextEntryCostFloorsAFirstEntryAtThePairMinimum(t *testing.T) {
 
 	_, inverseCost := NextEntryCost(inverse, starved)
 	testutil.AssertFloatEqual(t, inverseCost, inverse.StrategyPair.TradeFilters.MinNotional/inverse.PositionPrice, costEpsilon, "cost of a refused inverse first entry")
+}
+
+// Handed Params.SizingTrade's copy, a first entry is priced on the rows the
+// engine named for it — exactly as the buy action sizes it — and a ladder a
+// depth deeper opens cheaper; with nothing named it prices exactly as the
+// trade alone does. The trade keeps its own rows either way.
+func TestNextEntryCostPricesAFirstEntryOnTheEntrySettings(t *testing.T) {
+	const budget = 10000
+
+	rows := rowPerDepthRows(2, 3, 4, 5)
+	fresh := costLadderTrade(0, 10, rows...)
+	storedBefore := append([]aggragates.StrategySettings(nil), rows...)
+
+	deeper := append([]aggragates.StrategySettings(nil), rows...)
+	for index := range deeper {
+		deeper[index].Depths++
+	}
+
+	sizing := aggragates.Params{EntrySettings: deeper}.SizingTrade(fresh)
+	want, bidErr := CalculateInitialBid(budget, sizing, 0)
+	if bidErr != nil {
+		t.Fatalf("the named rows must size a first bid from this budget: %v", bidErr)
+	}
+
+	_, cost := NextEntryCost(sizing, budget)
+	testutil.AssertFloatEqual(t, cost, want, costEpsilon, "cost of a first entry on the named rows")
+
+	_, configured := NextEntryCost(fresh, budget)
+	if cost >= configured {
+		t.Fatalf("a first entry a depth deeper cost %f, want less than the configured %f", cost, configured)
+	}
+
+	if _, unnamed := NextEntryCost(aggragates.Params{}.SizingTrade(fresh), budget); unnamed != configured {
+		t.Fatalf("with no rows named a first entry cost %f, want exactly %f", unnamed, configured)
+	}
+
+	if !reflect.DeepEqual(fresh.StrategyPair.StrategySettings, storedBefore) {
+		t.Fatal("the trade must keep its own rows")
+	}
+}
+
+// An add is priced on the trade's own rows whatever rows are named for a
+// first entry: SizingTrade hands a ladder with fills back as it is, so even a
+// named multiplier far off the configured one moves nothing.
+func TestNextEntryCostPricesAnAddOnTheTradesOwnRows(t *testing.T) {
+	rows := rowPerDepthRows(2, 3, 4, 5)
+	filled := costLadderTrade(2, 10, rows...)
+
+	named := append([]aggragates.StrategySettings(nil), rows...)
+	for index := range named {
+		named[index].Multiplier *= 10
+	}
+
+	_, want := NextEntryCost(filled, 0)
+	_, got := NextEntryCost(aggragates.Params{EntrySettings: named}.SizingTrade(filled), 0)
+	if got != want {
+		t.Fatalf("an add cost %f with rows named for a first entry, want exactly %f", got, want)
+	}
 }
 
 // A trade nothing can be priced from costs nothing: the gate then weighs the

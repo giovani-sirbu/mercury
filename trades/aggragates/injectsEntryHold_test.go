@@ -5,7 +5,8 @@ import "testing"
 // The first-buy gate injection is a product rule: cooldown, UseAI,
 // UsePatterns and SmartTakeLoss own it — the last for its quiet slow-decline
 // hold; CrashGuard and RegimeHold fetch the verdict for adds and exits only,
-// and PowerLawQuantiles does nothing yet. Pinned so the difference between
+// DynamicParams fetches its reads to shape the rows and holds nothing, and
+// PowerLawQuantiles does nothing yet. Pinned so the difference between
 // "fetches the verdict" and "gates the first buy" stays deliberate rather than
 // accidental.
 func TestInjectsEntryHoldIsOwnedByEntryFlags(t *testing.T) {
@@ -22,13 +23,35 @@ func TestInjectsEntryHoldIsOwnedByEntryFlags(t *testing.T) {
 		{"smartTakeLoss only", StrategyParams{SmartTakeLoss: true}, true},
 		{"regimeHold only", StrategyParams{RegimeHold: true}, false},
 		{"powerLawQuantiles only", StrategyParams{PowerLawQuantiles: true}, false},
+		{"dynamicParams only", StrategyParams{DynamicParams: true}, false},
 		{"crashGuard with usePatterns", StrategyParams{CrashGuard: true, UsePatterns: true}, true},
 		{"crashGuard with regimeHold", StrategyParams{CrashGuard: true, RegimeHold: true}, false},
 		{"smartTakeLoss with crashGuard and regimeHold", StrategyParams{SmartTakeLoss: true, CrashGuard: true, RegimeHold: true}, true},
+		{"dynamicParams with crashGuard and regimeHold", StrategyParams{DynamicParams: true, CrashGuard: true, RegimeHold: true}, false},
+		{"dynamicParams with cooldown", StrategyParams{DynamicParams: true, Cooldown: true}, true},
 	}
 	for _, tc := range cases {
 		if got := tc.params.InjectsEntryHold(); got != tc.want {
 			t.Errorf("%s: InjectsEntryHold = %v, want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+// DynamicParams alone fetches sophos, on the /patterns route its reads ride
+// on and nothing else, and gates no first buy: fetch is not gate.
+func TestDynamicParamsFetchesThePatternRouteOnly(t *testing.T) {
+	params := StrategyParams{DynamicParams: true}
+
+	if !params.NeedsSophos() {
+		t.Error("DynamicParams must fetch sophos")
+	}
+	if !params.NeedsPatternRoute() {
+		t.Error("DynamicParams must fetch /patterns, where its reads ride")
+	}
+	if params.NeedsAIRoute() {
+		t.Error("DynamicParams must not fetch the ML route")
+	}
+	if params.InjectsEntryHold() {
+		t.Error("DynamicParams must not gate the first buy")
 	}
 }

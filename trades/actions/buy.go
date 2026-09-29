@@ -28,7 +28,12 @@ func Buy(event events.Events) (events.Events, error) {
 	quantity := ladder.GetLatestQuantityByHistory(event.Trade.History, quantityType)
 	buyQty, sellQty := quantities.GetGrossQuantities(event)
 
-	strategySettings := event.Trade.StrategyPair.StrategySettings
+	// A first entry is sized from the rows the engine named for it
+	// (Params.EntrySettings, through SizingTrade); every entry after it, and a
+	// first entry the engine named none for, reads the trade's own rows. The
+	// sizing copy stays here: event.Trade and its rows are not touched.
+	sizing := event.Params.SizingTrade(event.Trade)
+	strategySettings := sizing.StrategyPair.StrategySettings
 	filledEntries := ladder.CountFilledEntries(event.Trade)
 	// The row for the entry being placed now: entry N reads row N-1; a depth
 	// with no configured row falls back to the base row 0. A single-row
@@ -63,7 +68,7 @@ func Buy(event events.Events) (events.Events, error) {
 			}
 
 			var err error
-			quantity, err = ladder.CalculateInitialBid(amount, event.Trade, settingsIndex)
+			quantity, err = ladder.CalculateInitialBid(amount, sizing, settingsIndex)
 
 			if !event.Trade.Inverse {
 				quantity /= event.Trade.PositionPrice

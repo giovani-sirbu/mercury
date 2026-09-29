@@ -128,7 +128,10 @@ func DepthPriorityHoldReason(event events.Events, position string) string {
 		return ""
 	}
 
-	_, ownCost := ladder.NextEntryCost(event.Trade, free)
+	// The entry is priced as Buy will place it: a first entry on the rows the
+	// engine named for it (Params.EntrySettings, through SizingTrade), an add
+	// on the trade's own rows. The depth above stays on the trade's own rows.
+	_, ownCost := ladder.NextEntryCost(event.Params.SizingTrade(event.Trade), free)
 	if !depthPriorityHolds(ownCost, free, priority.RemainingCost) {
 		return ""
 	}

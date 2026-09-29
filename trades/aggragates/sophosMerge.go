@@ -55,7 +55,9 @@ func MergeSophosVerdicts(
 
 // copyRegimeCrash carries the regime and crash blocks the ML route attaches
 // when no pattern leg succeeded. The smart take loss block is served by the
-// pattern route only, so an ML-only merge leaves it zero (inert).
+// pattern route only, so an ML-only merge leaves it zero (inert). So is the
+// dynamic params block: the pattern leg carries it through the merge, and an
+// ML-only merge leaves it not read, which raises no row.
 func copyRegimeCrash(dst *AIIndicators, src AIIndicators) {
 	dst.HasRegimeVerdict = src.HasRegimeVerdict
 	dst.EnterAllowed = src.EnterAllowed
