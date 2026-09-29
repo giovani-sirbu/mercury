@@ -65,4 +65,7 @@ func copyRegimeCrash(dst *AIIndicators, src AIIndicators) {
 	dst.CrashActive = src.CrashActive
 	dst.CrashScore = src.CrashScore
 	dst.CrashReasons = src.CrashReasons
+	dst.SlowDecline = src.SlowDecline
+	dst.FreeFall = src.FreeFall
+	dst.SlowDeclineReasons = src.SlowDeclineReasons
 }

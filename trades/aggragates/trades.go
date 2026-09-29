@@ -91,18 +91,23 @@ type (
 		AddAllowed bool
 		Regime     string
 		Regimes    map[string]string
-		// Crash guard: a market-wide flush is in progress (10.10.2025-style).
-		// Arms the ladder widening and the deep-trade rebuy hold; distinct from
-		// a single-symbol volatility shock, which travels as the "shock-*"
-		// labels in Regimes.
-		// CrashReasons names the components that carried the score, so the
-		// engines can say WHY the guard armed instead of just that it did.
+		// Crash score: a market-wide flush is in progress; distinct from a
+		// single-symbol volatility shock, which travels as the "shock-*"
+		// labels in Regimes. It holds nothing by itself: the capitulation
+		// override reads it as "a flush was seen during this episode".
+		// CrashReasons names the components that carried the score.
 		CrashActive  bool
 		CrashScore   float64
 		CrashReasons []string
-		// CrashSticky is engine-local: this trade already saw an ARM (redis
-		// on live, trade logs in backtest). Sophos does not serve it.
-		CrashSticky bool
+		// Slow decline: the symbol's own down leg has fallen far and long
+		// enough without a rally large enough to end it, and not mostly in a
+		// flush. FreeFall: the price is under every low of the support window
+		// behind the current fall. The CrashGuard flag holds deep entries on
+		// these two (gates/crashguard.ApplyToHold); SlowDeclineReasons only
+		// ever reaches the ARMED trade log row.
+		SlowDecline        bool
+		FreeFall           bool
+		SlowDeclineReasons []string
 		// Smart take loss: the daily chart block from GET /:symbol/patterns
 		// (the two levels counting how many bars of the window printed under
 		// the price, resistance and support lines, Bollinger bands). Every

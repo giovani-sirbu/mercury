@@ -12,13 +12,26 @@ import (
 )
 
 // The capitulation override recognises the holds of other families by their
-// text (crashguard.keepCapitulationHold / capitulationEligibleHold). Those
-// families live in their own packages now, so this test — in the one package
-// that imports all of them — pins the texts together: a rename on either
-// side fails here instead of silently un-coupling capitulation.
+// text (crashguard.capitulationEligibleHold). Those families live in their
+// own packages now, so this test — in the one package that imports all of
+// them — pins the texts together: a rename on either side fails here instead
+// of silently un-coupling capitulation.
 func TestHoldReasonContractAcrossFamilies(t *testing.T) {
-	if !strings.HasPrefix(crashguard.DeepHoldReason, "crash-guard: deep") {
-		t.Fatalf("crashguard.DeepHoldReason = %q, capitulation keeps holds by the prefix \"crash-guard: deep\"", crashguard.DeepHoldReason)
+	// The crash guard's own holds must never read as a regime hold, or
+	// capitulation would bypass them.
+	crashHolds := []string{
+		crashguard.FreeFallHoldReason,
+		crashguard.ApplyToHold(crashGuardEvent(testutil.DeepTrade(true), "buy", 93, slowDeclineVerdict(false)), "stopLoss", slowDeclineVerdict(false), ""),
+	}
+	for _, reason := range crashHolds {
+		if !strings.HasPrefix(reason, crashguard.SlowDeclineHoldPrefix) {
+			t.Errorf("crash-guard hold %q does not open with %q", reason, crashguard.SlowDeclineHoldPrefix)
+		}
+		if strings.Contains(reason, regime.ShockHoldPrefix) ||
+			strings.HasPrefix(reason, regime.AddVetoPrefix) ||
+			strings.HasPrefix(reason, regime.InverseAddVetoPrefix) {
+			t.Errorf("crash-guard hold %q reads as a regime hold capitulation may bypass", reason)
+		}
 	}
 
 	// regime.HoldReason must produce the three prefixes capitulation bypasses.

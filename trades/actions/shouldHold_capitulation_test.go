@@ -97,15 +97,16 @@ func TestShouldHoldCapitulationLongNoOverrideWhileFalling(t *testing.T) {
 
 func TestShouldHoldCapitulationNoOverrideWhenCrashDeep(t *testing.T) {
 	ai := capShockAI(false)
-	ai.CrashActive = true
+	ai.SlowDecline = true
+	ai.FreeFall = true
 	event := capEvent(capTrade(false, crashguard.DeRiskMinDepth, 100, 79), ai, capReclaimBucket(false))
 	event.Trade.Strategy.Params.CrashGuard = true
 	held, err := ShouldHold(event)
 	if err == nil {
-		t.Fatal("crash-deep must not be overridden")
+		t.Fatal("a deep crash-guard hold must not be overridden")
 	}
-	if !strings.Contains(held.Trade.Logs[len(held.Trade.Logs)-1].Message, "crash-guard: deep") {
-		t.Errorf("expected crash-deep hold, got %q", held.Trade.Logs[len(held.Trade.Logs)-1].Message)
+	if !strings.Contains(held.Trade.Logs[len(held.Trade.Logs)-1].Message, crashguard.SlowDeclineHoldPrefix) {
+		t.Errorf("expected the crash-guard hold, got %q", held.Trade.Logs[len(held.Trade.Logs)-1].Message)
 	}
 }
 

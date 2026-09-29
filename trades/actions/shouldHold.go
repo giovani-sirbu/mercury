@@ -24,7 +24,7 @@ import (
 //	open position                    RegimeHold    → shock hold, add veto, profit hold
 //	                                 UsePatterns   → chart-pattern and fibonacci holds
 //	                                 UseAI         → legacy AI hold
-//	                                 CrashGuard    → flush park, sticky reclaim, capitulation
+//	                                 CrashGuard    → slow-decline hold (released by price), capitulation
 //	                                 Cooldown      → the wallet reserve, then depth spacing (stopLoss only)
 //
 // SmartTakeLoss owns no hold gate: it forces exits after the ladder decides
@@ -132,7 +132,7 @@ func shouldHoldPosition(event events.Events) (events.Events, error) {
 
 	reason := regimeReason
 	if params.CrashGuard {
-		// A flush reason replaces whatever held; capitulation may then refuse
+		// A slow-decline reason replaces whatever held; capitulation may then refuse
 		// or bypass a regime hold on a reclaimed dump. Both run before the
 		// other families are consulted, so a bypass releases only what the
 		// regime had to say. ApplyCapitulationOverride runs on every tick,

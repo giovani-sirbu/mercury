@@ -1,24 +1,21 @@
 // Package crashguard is the CrashGuard flag's overlay on the ladder: the
-// flush park and sticky reclaim on deep trades (ApplyToHold) and the
-// capitulation override that lets a shallow dump take one extra fill
+// slow-decline hold on deep trades (ApplyToHold) and the capitulation
+// override that lets a shallow dump take one extra fill
 // (ApplyCapitulationOverride). It matches regime hold reasons by their text.
 package crashguard
 
 import (
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/gates/regime"
 	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
-// DeepHoldReason is the flush park on a deep trade. The capitulation
-// override keeps it by its "crash-guard: deep" prefix (keepCapitulationHold).
-const DeepHoldReason = "crash-guard: deep trade, no new capital during a flush"
-
-// ApplyToHold is the CrashGuard flag's overlay: a flush parks a deep
-// rebuy, replacing whatever held. It does not release a profit hold and does
-// not flatten. The caller owns the flag — this runs only under
-// params.CrashGuard, so UseAI cannot arm the guard by itself.
+// ApplyToHold is the CrashGuard flag's overlay: while sophos reads a slow
+// decline, a deep long ladder stops committing capital the way the decline
+// would otherwise draw it in — one depth after another at the top of every
+// small bounce. Its reason replaces whatever held. It does not release a
+// profit hold and does not flatten. The caller owns the flag — this runs only
+// under params.CrashGuard, so UseAI cannot arm the guard by itself.
 func ApplyToHold(event events.Events, position string, ai aggragates.AIIndicators, hold string) string {
 	if reason := holdReason(event, position, ai); reason != "" {
 		return reason
@@ -26,42 +23,36 @@ func ApplyToHold(event events.Events, position string, ai aggragates.AIIndicator
 	return hold
 }
 
+// holdReason is the slow-decline hold on a long stopLoss transition from
+// DeRiskMinDepth filled entries:
+//
+//   - slow decline with free fall: every stopLoss transition holds — arming
+//     the next depth and the trailing re-anchor alike. The price has left
+//     every support of the window behind and there is no level to buy at;
+//   - slow decline alone: only the ARMING of the next depth holds, and only
+//     while the tick is above the level SlowDeclineDepthFactor steps down
+//     (slowDeclineArmLevel). Once the price pays that distance the depth arms
+//     as it always would.
+//
+// Inverse ladders are never held: the verdict reads a falling market, which
+// is the side an inverse ladder is not trapped on.
 func holdReason(event events.Events, position string, ai aggragates.AIIndicators) string {
-	if position != "stopLoss" {
+	if event.Trade.Inverse || position != "stopLoss" || !ai.SlowDecline {
 		return ""
 	}
 	filled := ladder.CountFilledEntries(event.Trade)
 	if filled < DeRiskMinDepth {
 		return ""
 	}
-	// Direction-blind: this is a cap on committing MORE capital at
-	// maximum ladder depth during maximum chaos, not a sale. Inverse
-	// still parks — a flush is the wrong moment to add size on either
-	// side. sellLoss stays on Smart Take Loss.
-	if ai.CrashActive {
-		return DeepHoldReason
+	if ai.FreeFall {
+		return FreeFallHoldReason
 	}
-	if TradeHasCrashArmed(event.Trade) || ai.CrashSticky {
-		if fourHourUnreclaimed(ai, event.Trade.Inverse) {
-			return "crash-guard: sticky flush, waiting for 4h reclaim"
-		}
+	if event.Params.OldPosition != "buy" {
+		return ""
 	}
-	return ""
-}
-
-// fourHourUnreclaimed is the sticky-ARM release: 4h still against the
-// trade. A CLEAR without a reclaim is the run-90 gap that let fills 5–8
-// through. A MISSING regime verdict (sophos outage, empty cache) does not
-// park: every other AI gate degrades open on a missing verdict, and failing
-// closed here parked every previously-armed deep trade indefinitely, with
-// no way back but the verdict returning.
-func fourHourUnreclaimed(ai aggragates.AIIndicators, inverse bool) bool {
-	if !ai.HasRegimeVerdict {
-		return false
+	level, ok := slowDeclineArmLevel(event.Trade, event.Params.OldPositionPrice, filled)
+	if !ok || event.Trade.PositionPrice <= level {
+		return ""
 	}
-	label := ai.Regimes["4h"]
-	if inverse {
-		return label == regime.UpPersist || regime.ShockBlocks(label, true)
-	}
-	return label == regime.DownPersist || regime.ShockBlocks(label, false)
+	return slowDeclineParkedReason(event.Trade, level)
 }

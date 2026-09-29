@@ -1,53 +1,37 @@
 package crashguard
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
 // DeRiskMinDepth is how many filled entries make a trade "deep".
-// Deep trades are the ones a flush traps: the crash guard parks further
-// capital and widens fallback rungs. It does not flatten — sellLoss is
-// Smart Take Loss only. The threshold sits just below the depth where a
-// trapped ladder starts doubling its quantity through CLEAR windows, so the
-// shallow, cheap fills still trade while the fills that carry most of the
-// quantity are the ones parked.
+// Deep trades are the ones a slow decline traps: the crash guard holds their
+// further capital. It does not flatten — sellLoss is Smart Take Loss only.
+// The threshold sits just below the depth where a trapped ladder starts
+// doubling its quantity, so the shallow, cheap fills still trade while the
+// fills that carry most of the quantity are the ones held.
 const DeRiskMinDepth = 4
 
 const (
-	// ArmedPrefix / ClearedPrefix are the trade-log prefixes engines
-	// persist on an ARM/CLEAR edge so sticky crash can survive a sophos
-	// CLEAR while the higher timeframe is still against the trade.
+	// ArmedPrefix / ClearedPrefix open the trade-log rows the engines write
+	// on the edges of the slow-decline verdict, so an operator can read on
+	// the trade when the crash guard's holds applied and when they stopped.
 	ArmedPrefix   = "Crash guard ARMED"
 	ClearedPrefix = "Crash guard CLEARED"
 )
 
-// TransitionMessage is the ARM/CLEAR log body. Engines must use this so
-// TradeHasCrashArmed can see live and backtest rows the same way.
+// TransitionMessage is the ARMED/CLEARED row body for an edge of the
+// slow-decline verdict. Every engine writes this one text, so live and
+// replayed trades read the same.
 func TransitionMessage(ai aggragates.AIIndicators) string {
-	if !ai.CrashActive {
-		return fmt.Sprintf(
-			"%s: score %.0f, back to normal flow (deep-trade rules off)",
-			ClearedPrefix, ai.CrashScore)
+	if !ai.SlowDecline {
+		return ClearedPrefix + ": slow decline over, back to normal flow (deep-trade holds off)"
 	}
-	message := fmt.Sprintf(
-		"%s: score %.0f (deep-trade rules on; ladder widening only past explicit rows)",
-		ArmedPrefix, ai.CrashScore)
-	if len(ai.CrashReasons) > 0 {
-		message += " | " + strings.Join(ai.CrashReasons, "; ")
+	message := ArmedPrefix + ": slow decline (deep-trade holds on)"
+	if len(ai.SlowDeclineReasons) > 0 {
+		message += " | " + strings.Join(ai.SlowDeclineReasons, "; ")
 	}
 	return message
-}
-
-// TradeHasCrashArmed is true once this trade has logged an ARM. CLEAR does
-// not forget it — sticky hold lasts until the higher timeframe reclaims.
-func TradeHasCrashArmed(trade aggragates.Trades) bool {
-	for _, entry := range trade.Logs {
-		if strings.HasPrefix(entry.Message, ArmedPrefix) {
-			return true
-		}
-	}
-	return false
 }

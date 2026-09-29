@@ -22,6 +22,9 @@ func TestSophosPredictionIndicatorsMapsVerdict(t *testing.T) {
 		"crashActive":true,
 		"crashScore":91,
 		"crashReasons":["breadth"],
+		"slowDecline":true,
+		"freeFall":true,
+		"slowDeclineReasons":["leg down 14.2% from its high close","leg 61h long"],
 		"smartTakeLoss":{"hasVerdict":true,"lowestBody":179.75,"lowBodyWithBarsLeft":181.2,"highestBody":195.1,"highBodyWithBarsLeft":193.4,"upperBB":193.83,"lowerBB":176.4,"resistanceFromTime":1640673000000,"resistanceFromPrice":193.25,"resistanceToTime":1640691900000,"resistanceToPrice":192.97,"supportFromTime":0,"supportFromPrice":0,"supportToTime":0,"supportToPrice":0},
 		"patternVerdict":{"name":"asc_triangle","displayName":"ascending triangle","direction":"long","score":71,"level":96000,"levelKind":"resistance","stopLoss":94000,"takeProfit":104500,"interval":"15m"},
 		"fib":{"swingLow":100,"swingHigh":110,"levels":[106.18,105,103.82,102.14]}
@@ -35,6 +38,9 @@ func TestSophosPredictionIndicatorsMapsVerdict(t *testing.T) {
 	mapped := prediction.Indicators()
 	if !mapped.CrashActive || mapped.CrashScore != 91 {
 		t.Fatalf("crash must map, got %+v", mapped)
+	}
+	if !mapped.SlowDecline || !mapped.FreeFall || len(mapped.SlowDeclineReasons) != 2 || mapped.SlowDeclineReasons[1] != "leg 61h long" {
+		t.Fatalf("the slow-decline verdict must map from slowDecline, freeFall and slowDeclineReasons, got %+v", mapped)
 	}
 	stl := mapped.SmartTakeLoss
 	if !stl.HasVerdict || stl.LowestBody != 179.75 || stl.LowBodyWithBarsLeft != 181.2 ||
@@ -132,16 +138,22 @@ func TestMergeSophosVerdictsPatternsThenML(t *testing.T) {
 func TestMergeSophosVerdictsMLOnlyCopiesRegime(t *testing.T) {
 	params := StrategyParams{UseAI: true}
 	ml := AIIndicators{
-		AIAction:         "HOLD",
-		HasRegimeVerdict: true,
-		CrashActive:      true,
-		CrashScore:       70,
+		AIAction:           "HOLD",
+		HasRegimeVerdict:   true,
+		CrashActive:        true,
+		CrashScore:         70,
+		SlowDecline:        true,
+		FreeFall:           true,
+		SlowDeclineReasons: []string{"leg 61h long"},
 		// The ML route does not serve the block; a stray one is not carried.
 		SmartTakeLoss: SmartTakeLossIndicators{HasVerdict: true, UpperBB: 1},
 	}
 	got := MergeSophosVerdicts(params, AIIndicators{}, ml, false, true)
 	if got.AIAction != "HOLD" || !got.HasRegimeVerdict || !got.CrashActive || got.CrashScore != 70 {
 		t.Fatalf("ML-only must keep attached regime/crash, got %+v", got)
+	}
+	if !got.SlowDecline || !got.FreeFall || len(got.SlowDeclineReasons) != 1 {
+		t.Fatalf("ML-only must keep the attached slow-decline verdict, got %+v", got)
 	}
 	if got.SmartTakeLoss != (SmartTakeLossIndicators{}) {
 		t.Fatalf("ML-only must not carry a smart take loss block, got %+v", got.SmartTakeLoss)
@@ -208,5 +220,37 @@ func TestStrategyParamsNeedsSophosAndEntryHold(t *testing.T) {
 	reserved := StrategyParams{PowerLawQuantiles: true}
 	if reserved.NeedsSophos() || reserved.NeedsPatternRoute() || reserved.NeedsAIRoute() || reserved.InjectsEntryHold() {
 		t.Fatal("PowerLawQuantiles is reserved: it fetches nothing and gates nothing")
+	}
+}
+
+// A sophos that predates the slow-decline keys — or serves them empty — maps
+// to no slow-decline verdict, which the crash guard reads as "nothing to
+// hold": the new keys degrade open like every other block. The crash score
+// the same payload carries holds nothing by itself.
+func TestSophosPredictionWithoutSlowDeclineIsInert(t *testing.T) {
+	for _, raw := range []string{
+		`{"action":"LONG","hasRegimeVerdict":true,"crashActive":true,"crashScore":91}`,
+		`{"hasRegimeVerdict":true,"slowDecline":false,"freeFall":false,"slowDeclineReasons":null}`,
+	} {
+		var prediction SophosPrediction
+		if err := json.Unmarshal([]byte(raw), &prediction); err != nil {
+			t.Fatalf("unmarshal %s: %v", raw, err)
+		}
+		mapped := prediction.Indicators()
+		if mapped.SlowDecline || mapped.FreeFall || len(mapped.SlowDeclineReasons) != 0 {
+			t.Fatalf("%s must map to no slow-decline verdict, got %v/%v %q", raw, mapped.SlowDecline, mapped.FreeFall, mapped.SlowDeclineReasons)
+		}
+	}
+}
+
+// Free fall travels on its own key: sophos can serve it without a slow
+// decline, and the mapping keeps the two apart for the gate to combine.
+func TestSophosPredictionMapsFreeFallApartFromSlowDecline(t *testing.T) {
+	var prediction SophosPrediction
+	if err := json.Unmarshal([]byte(`{"hasRegimeVerdict":true,"slowDecline":false,"freeFall":true}`), &prediction); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if mapped := prediction.Indicators(); mapped.SlowDecline || !mapped.FreeFall {
+		t.Fatalf("freeFall must map on its own, got slowDecline=%v freeFall=%v", mapped.SlowDecline, mapped.FreeFall)
 	}
 }

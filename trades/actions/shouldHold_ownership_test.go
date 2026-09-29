@@ -17,7 +17,7 @@ import (
 // strategy that fetched the verdict for another flag's sake).
 
 // ownershipTrade is a long, 4 fills deep on a 7-deep ladder: deep enough for
-// the crash park (4), the 15m shock hold (3), the STL arming zone (7-3=4) and
+// the crash-guard hold (4), the 15m shock hold (3), the STL arming zone (7-3=4) and
 // the profit-hold floor (4).
 func ownershipTrade(position string, fills int) aggragates.Trades {
 	trade := testutil.NewHoldTrade(position, false)
@@ -53,6 +53,8 @@ func fullHoldPayload() aggragates.AIIndicators {
 		Regimes:            map[string]string{"4h": regime.DownPersist, "1h": regime.DownPersist, "15m": regime.ShockDown},
 		CrashActive:        true,
 		CrashScore:         90,
+		SlowDecline:        true,
+		FreeFall:           true,
 		AIAction:           aggragates.ActionHold,
 		AIMarketBearish:    true,
 		PatternAction:      aggragates.ActionShort,
@@ -105,7 +107,7 @@ func TestShouldHoldOwnershipMatrixStopLoss(t *testing.T) {
 		{"nothing on", aggragates.StrategyParams{}, ""},
 		{"cooldown is inert after the first fill", aggragates.StrategyParams{Cooldown: true}, ""},
 		{"regimeHold", aggragates.StrategyParams{RegimeHold: true}, "regime: market in shock (15m shock-down, depth 4)"},
-		{"crashGuard", aggragates.StrategyParams{CrashGuard: true}, "crash-guard: deep trade, no new capital during a flush"},
+		{"crashGuard", aggragates.StrategyParams{CrashGuard: true}, crashguard.FreeFallHoldReason},
 		{"smartTakeLoss never holds: it forces exits outside ShouldHold", aggragates.StrategyParams{SmartTakeLoss: true}, ""},
 		{"useAI", aggragates.StrategyParams{UseAI: true}, "AI market is bearish"},
 		{"usePatterns", aggragates.StrategyParams{UsePatterns: true}, "pattern: ascending triangle found (resistance 96000.0000), preventing stopLoss"},
@@ -207,14 +209,14 @@ func TestShouldHoldCrashGuardOnlyProducesNoRegimeRows(t *testing.T) {
 	deep.Strategy.Params = aggragates.StrategyParams{CrashGuard: true}
 	held, err := ShouldHold(ownershipEvent(deep, fullHoldPayload(), expensiveCooldown()))
 	if err == nil {
-		t.Fatal("crashGuard must park the deep add during a flush")
+		t.Fatal("crashGuard must hold the deep add during a slow decline in free fall")
 	}
 	for _, row := range held.Trade.Logs {
 		if strings.Contains(row.Message, "regime:") {
 			t.Fatalf("a crash-guard-only strategy wrote a regime row: %q", row.Message)
 		}
 	}
-	assertOnlyFamily(t, held.Trade.Logs, "crash-guard: deep trade, no new capital during a flush")
+	assertOnlyFamily(t, held.Trade.Logs, crashguard.FreeFallHoldReason)
 }
 
 // Capitulation is the crash guard's: without CrashGuard the shock hold
@@ -263,7 +265,7 @@ func TestShouldHoldForceTrailingStatesRunTheGates(t *testing.T) {
 	sl = ownershipTrade("forceTrailingStopLoss", 4)
 	sl.Strategy.Params = aggragates.StrategyParams{CrashGuard: true}
 	held, err = ShouldHold(ownershipEvent(sl, fullHoldPayload(), expensiveCooldown()))
-	if err == nil || !strings.Contains(held.Trade.Logs[0].Message, "crash-guard: deep trade") {
+	if err == nil || !strings.Contains(held.Trade.Logs[0].Message, crashguard.FreeFallHoldReason) {
 		t.Fatalf("crashGuard must gate a force-trailing stopLoss, got %v %v", err, messages(held.Trade.Logs))
 	}
 

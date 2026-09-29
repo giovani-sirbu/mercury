@@ -116,22 +116,25 @@ func (s SophosSmartTakeLoss) Indicators() SmartTakeLossIndicators {
 // (no reader in any engine). `enterAllowed` is decoded and documented unread
 // on AIIndicators.
 type SophosPrediction struct {
-	Action           string               `json:"action"`
-	MarketBearish    bool                 `json:"marketBearish"`
-	MarketBullish    bool                 `json:"marketBullish"`
-	SignalStrength   SophosSignalStrength `json:"signalStrength"`
-	StayOutReasons   []string             `json:"stayOutReasons"`
-	HasRegimeVerdict bool                 `json:"hasRegimeVerdict"`
-	EnterAllowed     bool                 `json:"enterAllowed"`
-	AddAllowed       bool                 `json:"addAllowed"`
-	Regime           string               `json:"regime"`
-	Regimes          map[string]string    `json:"regimes"`
-	CrashActive      bool                 `json:"crashActive"`
-	CrashScore       float64              `json:"crashScore"`
-	CrashReasons     []string             `json:"crashReasons"`
-	SmartTakeLoss    SophosSmartTakeLoss  `json:"smartTakeLoss"`
-	PatternVerdict   SophosPatternVerdict `json:"patternVerdict"`
-	Fib              SophosFib            `json:"fib"`
+	Action             string               `json:"action"`
+	MarketBearish      bool                 `json:"marketBearish"`
+	MarketBullish      bool                 `json:"marketBullish"`
+	SignalStrength     SophosSignalStrength `json:"signalStrength"`
+	StayOutReasons     []string             `json:"stayOutReasons"`
+	HasRegimeVerdict   bool                 `json:"hasRegimeVerdict"`
+	EnterAllowed       bool                 `json:"enterAllowed"`
+	AddAllowed         bool                 `json:"addAllowed"`
+	Regime             string               `json:"regime"`
+	Regimes            map[string]string    `json:"regimes"`
+	CrashActive        bool                 `json:"crashActive"`
+	CrashScore         float64              `json:"crashScore"`
+	CrashReasons       []string             `json:"crashReasons"`
+	SlowDecline        bool                 `json:"slowDecline"`
+	FreeFall           bool                 `json:"freeFall"`
+	SlowDeclineReasons []string             `json:"slowDeclineReasons"`
+	SmartTakeLoss      SophosSmartTakeLoss  `json:"smartTakeLoss"`
+	PatternVerdict     SophosPatternVerdict `json:"patternVerdict"`
+	Fib                SophosFib            `json:"fib"`
 }
 
 // Indicators maps a decoded sophos payload onto AIIndicators. Strategy
@@ -152,6 +155,9 @@ func (p SophosPrediction) Indicators() AIIndicators {
 		CrashActive:        p.CrashActive,
 		CrashScore:         p.CrashScore,
 		CrashReasons:       p.CrashReasons,
+		SlowDecline:        p.SlowDecline,
+		FreeFall:           p.FreeFall,
+		SlowDeclineReasons: p.SlowDeclineReasons,
 		SmartTakeLoss:      p.SmartTakeLoss.Indicators(),
 		PatternName:        p.PatternVerdict.Name,
 		PatternDisplayName: p.PatternVerdict.DisplayName,

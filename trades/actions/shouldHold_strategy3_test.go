@@ -156,22 +156,22 @@ func TestShouldHoldStrategy3FallsBackToLegacyWithoutVerdict(t *testing.T) {
 	}
 }
 
-// A previously-armed deep trade must not stay parked forever when the regime
-// verdict is missing (sophos outage): the sticky hold degrades open like
-// every other AI gate.
-func TestShouldHoldCrashStickyFailsOpenWithoutVerdict(t *testing.T) {
+// A previously-armed deep trade must not stay held when the verdict is
+// missing (sophos outage): the crash guard degrades open like every other AI
+// gate, whatever ARMED row the trade carries.
+func TestShouldHoldCrashGuardFailsOpenWithoutVerdict(t *testing.T) {
 	event := events.Events{
 		Trade: testutil.DeepTrade(true),
 		Events: map[string]func(events.Events) (events.Events, error){
 			"updateTrade": testutil.NopUpdateTrade,
 		},
-		Params: aggragates.Params{OldPosition: "active", AIIndicators: aggragates.AIIndicators{}},
+		Params: aggragates.Params{OldPosition: "buy", OldPositionPrice: 94, AIIndicators: aggragates.AIIndicators{}},
 	}
 	event.Trade.Logs = []aggragates.TradesLogs{{
-		Message: crashguard.TransitionMessage(aggragates.AIIndicators{CrashActive: true, CrashScore: 66}),
+		Message: crashguard.TransitionMessage(aggragates.AIIndicators{SlowDecline: true, FreeFall: true}),
 	}}
 	if _, err := ShouldHold(event); err != nil {
-		t.Fatalf("missing verdict must not keep the sticky park, got %v", err)
+		t.Fatalf("a missing verdict must not hold, got %v", err)
 	}
 }
 
