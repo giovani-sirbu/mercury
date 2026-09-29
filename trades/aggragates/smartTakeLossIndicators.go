@@ -3,11 +3,11 @@ package aggragates
 // SmartTakeLossIndicators is the chart block sophos serves on
 // GET /:symbol/patterns for the SmartTakeLoss flag: the quiet slow decline's
 // reading — its indecision included — and the capital protection reading,
-// both taken on the closed window sophos' crash detectors read. Every zero
+// both taken on the closed window of sophos' smart take loss. Every zero
 // field is inert in gates/smarttakeloss.Apply.
 type SmartTakeLossIndicators struct {
 	// SlowDeclineExit is sophos' quiet slow-decline verdict, read on the
-	// closed window its crash detectors read: an early down leg, still down
+	// closed window of its slow-decline walk: an early down leg, still down
 	// sophos' SlowDeclineMinLegFallPct from its high close, on which a vote
 	// passes among the readings sophos switches into it — the recent volume,
 	// the volatility and the Bollinger band's width under their own
@@ -102,7 +102,7 @@ type SmartTakeLossIndicators struct {
 	// the first-fill hold and the indecision latch do not read it.
 	SlowDeclineFillFrom int64
 	// CapitalProtectionUpperBB is the upper Bollinger band of the last closed
-	// bar of the crash window's interval, over sophos'
+	// bar of the smart take loss window's interval, over sophos'
 	// CapitalProtectionBandPeriod and CapitalProtectionBandStdDev; zero when
 	// sophos cannot compute it, and a zero band sells nothing.
 	// CapitalProtectionSmcBearish is true when sophos' SMC trend dashboard,
@@ -112,13 +112,4 @@ type SmartTakeLossIndicators struct {
 	// depth on the first tick at or over the band while it is true.
 	CapitalProtectionUpperBB    float64
 	CapitalProtectionSmcBearish bool
-}
-
-// HasReading reports whether sophos served the block off a window it read:
-// the sell band or the capital protection band above zero. Sophos serves both
-// whenever it can compute them, whatever its verdicts say, so a block without
-// either is sophos down, a window too short, or an older sophos — nothing the
-// gate can sell on.
-func (b SmartTakeLossIndicators) HasReading() bool {
-	return b.SlowDeclineSellBand > 0 || b.CapitalProtectionUpperBB > 0
 }

@@ -6,9 +6,7 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/gates"
 	"github.com/giovani-sirbu/mercury/trades/gates/ai"
 	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
-	"github.com/giovani-sirbu/mercury/trades/gates/crashguard"
 	"github.com/giovani-sirbu/mercury/trades/gates/patterns"
-	"github.com/giovani-sirbu/mercury/trades/gates/regime"
 	"github.com/giovani-sirbu/mercury/trades/gates/smarttakeloss"
 )
 
@@ -24,10 +22,8 @@ import (
 //	                                 SmartTakeLoss → quiet slow-decline hold (long parents, while the verdict stands)
 //	                                 Cooldown      → the first-fill gate (higher-highs hold, released by price)
 //	                                 UseAI         → legacy bullish/bearish veto
-//	open position                    RegimeHold    → shock hold, add veto, profit hold
-//	                                 UsePatterns   → chart-pattern and fibonacci holds
+//	open position                    UsePatterns   → chart-pattern and fibonacci holds
 //	                                 UseAI         → legacy AI hold
-//	                                 CrashGuard    → slow-decline hold (released by price), capitulation
 //	                                 Cooldown      → the wallet reserve, then depth spacing (stopLoss only)
 //
 // SmartTakeLoss holds nothing on an open position: it forces exits after the
@@ -59,11 +55,8 @@ import (
 // With every flag off nothing holds: the ladder runs exactly as the legacy
 // engine ran it, stopped only by funds.
 //
-// RegimeHold never reaches the first fill: the regime entry veto was removed
-// because a regime read was wrong about a first fill far more often than it
-// was right; the first fill is the cooldown's. Whether the first-buy chain
-// runs this function at all is the engines' call through
-// StrategyParams.InjectsEntryHold.
+// Whether the first-buy chain runs this function at all is the engines' call
+// through StrategyParams.InjectsEntryHold.
 func ShouldHold(event events.Events) (events.Events, error) {
 	if event.Params.OldPosition == "new" {
 		return shouldHoldEntry(event)
@@ -73,7 +66,6 @@ func ShouldHold(event events.Events) (events.Events, error) {
 
 // shouldHoldEntry is the first fill: cooldown owns most of it, and the smart
 // take loss holds a long parent while its quiet slow-decline verdict stands.
-// No regime gate here.
 //
 // The gates judge the direction the entry would take, resolved once by
 // aggragates.EntrySide. They used to take event.Trade.Inverse, which is the
@@ -127,40 +119,14 @@ func shouldHoldPosition(event events.Events) (events.Events, error) {
 	indicators := event.Params.AIIndicators
 	position := gates.PositionType(event.Trade.PositionType)
 
-	// Every family answers for itself before anything is picked. Asking them
-	// in a first-non-empty chain looked equivalent and was not: capitulation
-	// bypasses a REGIME hold only (capitulationEligibleHold), so on a tick
-	// where regime spoke first the pattern and legacy-AI verdicts were never
-	// computed, and the bypass then released a trade that patterns would have
-	// held on a verdict nobody ever asked for.
-	regimeReason := ""
-	if params.RegimeHold && indicators.HasRegimeVerdict {
-		regimeReason = regime.HoldReason(event, position, indicators)
-	}
-	patternReason := ""
+	// The market families first: a pattern hold names the reason before the
+	// legacy AI hold does.
+	reason := ""
 	if params.UsePatterns {
-		patternReason = patterns.HoldReason(event, position, indicators)
+		reason = patterns.HoldReason(event, position, indicators)
 	}
-	aiReason := ""
-	if params.UseAI {
-		aiReason = ai.LegacyHoldReason(event, position, indicators)
-	}
-
-	reason := regimeReason
-	if params.CrashGuard {
-		// A slow-decline reason replaces whatever held; capitulation may then refuse
-		// or bypass a regime hold on a reclaimed dump. Both run before the
-		// other families are consulted, so a bypass releases only what the
-		// regime had to say. ApplyCapitulationOverride runs on every tick,
-		// hold or not: leaving the ladder is what ends a live episode.
-		reason = crashguard.ApplyToHold(event, position, indicators, reason)
-		event, reason = crashguard.ApplyCapitulationOverride(event, position, indicators, reason)
-	}
-	if reason == "" {
-		reason = patternReason
-	}
-	if reason == "" {
-		reason = aiReason
+	if reason == "" && params.UseAI {
+		reason = ai.LegacyHoldReason(event, position, indicators)
 	}
 
 	if reason == "" && params.Cooldown {

@@ -39,25 +39,11 @@ type (
 		// log lines with the same id.
 		CorrelationID string
 
-		// Timestamp is the tick time as a Unix value (seconds or millis).
-		// Zero is inert: mercury does not advance the in-process 5m print
-		// bucket from this field. Engines that already stamp Trade.UpdatedAt
-		// (sisyphus backtests) do not need to set it.
+		// Timestamp is the tick time as a Unix value (seconds, millis, micros
+		// or nanos), read through TickTime. Zero is inert: TickTime then falls
+		// back to Trade.UpdatedAt, so engines that already stamp it (sisyphus
+		// backtests) do not need to set this field.
 		Timestamp int64
-
-		// FiveMinOHLC is an optional injected 5m print bucket for this tick.
-		// Zero Last is inert; ShouldHold then synthesizes from Timestamp /
-		// Trade.UpdatedAt and the current print when those are present.
-		FiveMinOHLC FiveMinOHLC
-	}
-
-	// FiveMinOHLC is a 5-minute print bar synthesized from ticks the engine
-	// already has. Last==0 means unset.
-	FiveMinOHLC struct {
-		Open float64
-		High float64
-		Low  float64
-		Last float64
 	}
 )
 

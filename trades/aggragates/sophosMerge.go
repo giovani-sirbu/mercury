@@ -1,7 +1,8 @@
 package aggragates
 
 // ApplyPatternSide copies a /patterns action onto the legacy bullish/bearish
-// flags used when UsePatterns is on and there is no regime verdict.
+// flags; the merge uses it when the pattern leg stands in for the ML verdict
+// (UseAI off).
 func ApplyPatternSide(ai AIIndicators, action string) AIIndicators {
 	switch action {
 	case ActionLong:
@@ -16,6 +17,9 @@ func ApplyPatternSide(ai AIIndicators, action string) AIIndicators {
 
 // MergeSophosVerdicts folds optional /patterns and ML legs. hasPattern / hasML
 // say a fetch succeeded; a failed leg is omitted so the other still applies.
+// The ML leg carries only the AI verdict: the smart take loss and dynamic
+// params blocks are served by the pattern route alone, so an ML-only merge
+// leaves both zero, which is inert.
 func MergeSophosVerdicts(
 	params StrategyParams,
 	patternVerdict AIIndicators,
@@ -43,31 +47,9 @@ func MergeSophosVerdicts(
 		out.AIMarketBearish = mlVerdict.AIMarketBearish
 		out.AISignalStrength = mlVerdict.AISignalStrength
 		out.StayOutReasons = mlVerdict.StayOutReasons
-		if !hasPattern {
-			copyRegimeCrash(&out, mlVerdict)
-		}
 	}
 	// The strategy flags are NOT stamped on the verdict: every gate reads
 	// event.Trade.Strategy.Params, and the mirror fields the merge used to
 	// write were read by nothing.
 	return out
-}
-
-// copyRegimeCrash carries the regime and crash blocks the ML route attaches
-// when no pattern leg succeeded. The smart take loss block is served by the
-// pattern route only, so an ML-only merge leaves it zero (inert). So is the
-// dynamic params block: the pattern leg carries it through the merge, and an
-// ML-only merge leaves it not read, which raises no row.
-func copyRegimeCrash(dst *AIIndicators, src AIIndicators) {
-	dst.HasRegimeVerdict = src.HasRegimeVerdict
-	dst.EnterAllowed = src.EnterAllowed
-	dst.AddAllowed = src.AddAllowed
-	dst.Regime = src.Regime
-	dst.Regimes = src.Regimes
-	dst.CrashActive = src.CrashActive
-	dst.CrashScore = src.CrashScore
-	dst.CrashReasons = src.CrashReasons
-	dst.SlowDecline = src.SlowDecline
-	dst.FreeFall = src.FreeFall
-	dst.SlowDeclineReasons = src.SlowDeclineReasons
 }

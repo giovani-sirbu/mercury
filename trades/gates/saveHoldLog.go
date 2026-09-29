@@ -23,9 +23,9 @@ const holdRelogAfter = 24 * time.Hour
 // previous position and stops the action chain.
 //
 // Deduplication is on the FULL message, not on the "Hold <position>:" prefix:
-// with the prefix, every later stopLoss hold of a different reason (capitulation
-// after regime, shock after capitulation) was silently dropped, and a cooldown
-// entry hold hid the regime entry veto behind it. A repeat of the same reason
+// with the prefix, every later stopLoss hold of a different reason (depth
+// spacing after a pattern hold) was silently dropped, and a cooldown entry
+// hold hid the legacy AI entry veto behind it. A repeat of the same reason
 // is written again once the previous row is older than holdRelogAfter on the
 // tick clock, so the duration of a hold is on record too.
 func SaveHoldLog(event events.Events, position string, reason string) (events.Events, error) {

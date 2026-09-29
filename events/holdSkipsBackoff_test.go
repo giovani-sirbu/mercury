@@ -36,7 +36,7 @@ func runChain(tradeID uint, err error) {
 func TestHoldDoesNotExtendTheTradeLock(t *testing.T) {
 	const tradeID = uint(910001)
 
-	runChain(tradeID, fmt.Errorf("%w: stopLoss regime: add not allowed", ErrTradeHeld))
+	runChain(tradeID, fmt.Errorf("%w: stopLoss AI recommends HOLD", ErrTradeHeld))
 
 	if got := backoffDuration(tradeID); got != 0 {
 		t.Fatalf("a hold recorded a %v backoff; it must record none", got)

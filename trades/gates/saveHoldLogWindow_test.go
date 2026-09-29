@@ -11,8 +11,8 @@ import (
 // reasons writes a row on every tick.
 func TestSaveHoldLogCollapsesAlternatingReasonsWithinWindow(t *testing.T) {
 	at := time.Date(2025, 10, 10, 21, 0, 0, 0, time.UTC)
-	const reasonA = "regime: add not allowed (4h downtrend-persist)"
-	const reasonB = "capitulation: freeze, one add already taken"
+	const reasonA = patternHold
+	const reasonB = spacingHold
 	event := holdLogEvent(testutil.NewHoldTrade("stopLoss", false), at)
 
 	step := func(reason string, offset time.Duration) {

@@ -16,14 +16,3 @@ func (e Events) TickTime() time.Time {
 	}
 	return e.Trade.UpdatedAt
 }
-
-// TickMillis is the tick clock as Unix milliseconds, 0 when no clock is known.
-func (e Events) TickMillis() int64 {
-	if e.Timestamp > 0 {
-		return helpers.UnixMillis(e.Timestamp)
-	}
-	if !e.Trade.UpdatedAt.IsZero() {
-		return e.Trade.UpdatedAt.UnixMilli()
-	}
-	return 0
-}

@@ -39,7 +39,7 @@ func TestEntryHoldReasonHoldsALongParentWhileTheVerdictStands(t *testing.T) {
 	}
 
 	off := testutil.LadderTrade(false)
-	off.Strategy.Params = aggragates.StrategyParams{CrashGuard: true, RegimeHold: true}
+	off.Strategy.Params = aggragates.StrategyParams{DynamicParams: true, UsePatterns: true}
 	if got := EntryHoldReason(off, aggragates.SideLong, slowDeclineVerdict(true)); got != "" {
 		t.Fatalf("a verdict fetched for another flag holds nothing, got %q", got)
 	}

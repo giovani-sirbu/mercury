@@ -193,8 +193,8 @@ func TestShouldHoldWritesInfoLogAndCollapsesRepeats(t *testing.T) {
 
 	// Next tick holds the same position for a DIFFERENT reason: that is a new
 	// row. The old prefix dedup collapsed it and hid every reason change
-	// behind the first hold — a capitulation freeze invisible behind a regime
-	// veto, an entry veto invisible behind cooldown.
+	// behind the first hold — an AI HOLD invisible behind a bearish-market
+	// hold, an entry veto invisible behind cooldown.
 	held.Trade.PositionType = "stopLoss"
 	held.Params.AIIndicators = aggragates.AIIndicators{AIAction: aggragates.ActionHold}
 	again, err := ShouldHold(held)
@@ -255,21 +255,12 @@ func TestShouldHoldNewStatusAllowsAlignedAISignal(t *testing.T) {
 	}
 }
 
-func TestShouldHoldUseAIAloneDoesNotParkCrashDeepRebuy(t *testing.T) {
-	crash := aggragates.AIIndicators{
-		HasRegimeVerdict: true,
-		AddAllowed:       true,
-		CrashActive:      true,
-		CrashScore:       85,
+// messages lists the trade-log messages in order, for assertions that read
+// the rows a tick wrote.
+func messages(logs []aggragates.TradesLogs) []string {
+	out := make([]string, 0, len(logs))
+	for _, entry := range logs {
+		out = append(out, entry.Message)
 	}
-	event := events.Events{
-		Trade: withAI(testutil.DeepTrade(false)),
-		Events: map[string]func(events.Events) (events.Events, error){
-			"updateTrade": testutil.NopUpdateTrade,
-		},
-		Params: aggragates.Params{OldPosition: "active", AIIndicators: crash},
-	}
-	if _, err := ShouldHold(event); err != nil {
-		t.Fatalf("UseAI without CrashGuard must not park a deep rebuy, got %v", err)
-	}
+	return out
 }

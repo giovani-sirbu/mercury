@@ -47,7 +47,7 @@ func TestSaveHoldLogPersistsTheFirstHold(t *testing.T) {
 // The regression. A repeat of the same reason writes nothing and never reaches
 // updateTrade. hermes holds a 24h trade lock whose only release is agora's
 // update-trade consumer, so without this flag the second identical hold wedged
-// the trade for the whole TTL: no take profit, no cut, no crash reaction.
+// the trade for the whole TTL: no take profit, no cut, no new depth.
 func TestSaveHoldLogFlagsTheCollapsedHoldAsUnpersisted(t *testing.T) {
 	at := time.Date(2026, time.September, 5, 12, 0, 0, 0, time.UTC)
 	first := false

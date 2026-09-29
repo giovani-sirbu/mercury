@@ -70,7 +70,7 @@ type depthSpacingState struct {
 
 // DepthSpacingHoldReason is the Cooldown flag's gate on an open position:
 // the ladder gate. Empty means the chain may proceed. The caller owns the
-// flag, exactly like crashguard.ApplyToHold.
+// flag, as actions.ShouldHold does for every gate it orders.
 //
 // stopLoss only. This is a "no new capital yet" gate, and a gate must
 // never defer a profitable close: takeProfit is the capital the rest of the
@@ -109,9 +109,8 @@ func DepthSpacingHoldReason(event events.Events, position string) string {
 	// arrived fast, so on any ladder containing one real pause it lags the
 	// trade's actual depth and would under-report how many entries are being
 	// held. len(fills) is ladder.CountFilledEntries by
-	// construction (depthFillTimes mirrors it row for row), which is the
-	// number regimeHold and crash-guard print for the same trade on the same
-	// tick.
+	// construction (depthFillTimes mirrors it row for row), the trade's own
+	// depth on the same tick.
 	// The release price is in the row because it is the other half of the
 	// decision: an operator reading the parked duration alone cannot tell how
 	// far the price would have to move to lift it. It is derived from the last

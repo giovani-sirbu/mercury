@@ -10,9 +10,8 @@ import (
 // firstFillRecord is what the trade's own log rows say about its first fill:
 // whether the gate activated and at what reference, whether it armed and
 // where the anchor sits, and whether the price ran through the reference
-// instead. It is rebuilt from trade.Logs on every tick, the way
-// crashguard.rebuildCapitulationEpisode rebuilds an episode: the rows are
-// the only state. They reach the gate on all three engines (backtesting's
+// instead. It is rebuilt from trade.Logs on every tick: the rows are the
+// only state. They reach the gate on all three engines (backtesting's
 // memory trades, hermes' redis copy, live-testing's storage) and agora copies
 // them whole on update-trade. trade.PositionPrice is deliberately not one of
 // them: on a new trade it is 0 on every creation path, and sisyphus

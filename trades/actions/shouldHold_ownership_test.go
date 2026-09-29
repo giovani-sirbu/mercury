@@ -1,9 +1,7 @@
 package actions
 
 import (
-	"github.com/giovani-sirbu/mercury/trades/gates/crashguard"
 	"github.com/giovani-sirbu/mercury/trades/gates/dynamicparams"
-	"github.com/giovani-sirbu/mercury/trades/gates/regime"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 	"strings"
 	"testing"
@@ -13,13 +11,11 @@ import (
 )
 
 // The isolation matrix: one flag on at a time against a payload that could
-// trigger EVERY gate, and exactly that flag's row appears. This is the
-// contract the run-97/98 audit found broken (regime holds fired for any
-// strategy that fetched the verdict for another flag's sake).
+// trigger EVERY gate, and exactly that flag's row appears. A gate answers to
+// its own flag, never to a payload fetched for another flag's sake.
 
-// ownershipTrade is a long, 4 fills deep on a 7-deep ladder: deep enough for
-// the crash-guard hold (4), the 15m shock hold (3), the STL arming zone (7-3=4) and
-// the profit-hold floor (4).
+// ownershipTrade is a long ladder with `fills` filled entries, part-way down
+// its depths.
 func ownershipTrade(position string, fills int) aggragates.Trades {
 	trade := testutil.NewHoldTrade(position, false)
 	trade.Strategy.Params = aggragates.StrategyParams{}
@@ -51,15 +47,6 @@ func fullHoldPayload() aggragates.AIIndicators {
 	return aggragates.AIIndicators{
 		SmartTakeLoss:      aggragates.SmartTakeLossIndicators{SlowDeclineExit: true},
 		DynamicParams:      aggragates.DynamicParamsIndicators{Timeframe: "1D", Guppy: -1, BMSB: -1, Valid: true},
-		HasRegimeVerdict:   true,
-		EnterAllowed:       false,
-		AddAllowed:         false,
-		Regime:             regime.ShockDown,
-		Regimes:            map[string]string{"4h": regime.DownPersist, "1h": regime.DownPersist, "15m": regime.ShockDown},
-		CrashActive:        true,
-		CrashScore:         90,
-		SlowDecline:        true,
-		FreeFall:           true,
 		AIAction:           aggragates.ActionHold,
 		AIMarketBearish:    true,
 		PatternAction:      aggragates.ActionShort,
@@ -77,7 +64,7 @@ func expensiveCooldown() aggragates.CoolDownIndicators {
 	return aggragates.CoolDownIndicators{HasFirstFillVerdict: true, AllowLongEntry: false, AllowShortEntry: false}
 }
 
-var holdFamilyPrefixes = []string{"cooldown:", "regime:", "pattern:", "fibonacci:", "crash-guard:", "smartTakeLoss:", "AI ", "Capitulation", dynamicparams.TransitionPrefix}
+var holdFamilyPrefixes = []string{"cooldown:", "pattern:", "fibonacci:", "smartTakeLoss:", "AI ", dynamicparams.TransitionPrefix}
 
 func assertOnlyFamily(t *testing.T, logs []aggragates.TradesLogs, want string) {
 	t.Helper()
@@ -111,13 +98,10 @@ func TestShouldHoldOwnershipMatrixStopLoss(t *testing.T) {
 	}{
 		{"nothing on", aggragates.StrategyParams{}, ""},
 		{"cooldown is inert after the first fill", aggragates.StrategyParams{Cooldown: true}, ""},
-		{"regimeHold", aggragates.StrategyParams{RegimeHold: true}, "regime: market in shock (15m shock-down, depth 4)"},
-		{"crashGuard", aggragates.StrategyParams{CrashGuard: true}, crashguard.FreeFallHoldReason},
 		{"smartTakeLoss holds no open position, verdict or not: it forces exits outside ShouldHold", aggragates.StrategyParams{SmartTakeLoss: true}, ""},
 		{"useAI", aggragates.StrategyParams{UseAI: true}, "AI market is bearish"},
 		{"usePatterns", aggragates.StrategyParams{UsePatterns: true}, "pattern: ascending triangle found (resistance 96000.0000), preventing stopLoss"},
 		{"useForceTrailing", aggragates.StrategyParams{UseForceTrailing: true}, ""},
-		{"powerLawQuantiles", aggragates.StrategyParams{PowerLawQuantiles: true}, ""},
 		{"dynamicParams shapes the rows and holds no add, both reads bearish", aggragates.StrategyParams{DynamicParams: true}, ""},
 	}
 	for _, c := range cases {
@@ -133,8 +117,6 @@ func TestShouldHoldOwnershipMatrixStopLoss(t *testing.T) {
 
 func TestShouldHoldOwnershipMatrixTakeProfit(t *testing.T) {
 	ai := fullHoldPayload()
-	ai.Regimes = map[string]string{"4h": "mixed", "1h": "mixed", "15m": regime.UpPersist}
-	ai.Regime = regime.UpPersist
 	ai.AIMarketBearish = false
 	ai.AIMarketBullish = true
 
@@ -145,8 +127,6 @@ func TestShouldHoldOwnershipMatrixTakeProfit(t *testing.T) {
 	}{
 		{"nothing on", aggragates.StrategyParams{}, ""},
 		{"cooldown", aggragates.StrategyParams{Cooldown: true}, ""},
-		{"regimeHold", aggragates.StrategyParams{RegimeHold: true}, "regime: rides the trend (15m uptrend-persist)"},
-		{"crashGuard never holds an exit", aggragates.StrategyParams{CrashGuard: true}, ""},
 		{"smartTakeLoss never holds an exit, verdict or not", aggragates.StrategyParams{SmartTakeLoss: true}, ""},
 		{"useAI", aggragates.StrategyParams{UseAI: true}, "AI market is bullish"},
 		{"usePatterns", aggragates.StrategyParams{UsePatterns: true}, "pattern: ascending triangle in play, riding to target 104500.0000"},
@@ -174,39 +154,28 @@ func TestShouldHoldAllFlagsOffHoldsNothing(t *testing.T) {
 	}
 }
 
-// RegimeHold has no seat on the first fill, whatever the labels say; with
-// cooldown on, the only row is the cooldown's.
-func TestShouldHoldRegimeHoldNeverFiresOnEntry(t *testing.T) {
-	labels := []string{regime.Shock, regime.ShockDown, regime.ShockUp, regime.DownPersist, regime.UpPersist}
+// The first fill is the cooldown's: against the full payload a refused first
+// fill, long or inverse, is held and the only row is the cooldown's.
+func TestShouldHoldCooldownAloneHoldsTheRefusedFirstFill(t *testing.T) {
 	for _, inverse := range []bool{false, true} {
-		for _, label := range labels {
-			ai := fullHoldPayload()
-			ai.Regimes = map[string]string{"4h": label, "1h": label, "15m": label}
-			trade := ownershipTrade("buy", 0)
-			trade.Inverse = inverse
-			trade.Strategy.Params = aggragates.StrategyParams{RegimeHold: true}
-			event := ownershipEvent(trade, ai, expensiveCooldown())
-			event.Params.OldPosition = "new"
-			held, err := ShouldHold(event)
-			if err != nil || len(held.Trade.Logs) != 0 {
-				t.Fatalf("inverse=%v %s: RegimeHold must not touch the first fill, got %v %v", inverse, label, err, messages(held.Trade.Logs))
-			}
+		trade := ownershipTrade("buy", 0)
+		trade.Inverse = inverse
+		trade.Strategy.Params = aggragates.StrategyParams{Cooldown: true}
 
-			trade.Strategy.Params = aggragates.StrategyParams{RegimeHold: true, Cooldown: true}
-			event = ownershipEvent(trade, ai, expensiveCooldown())
-			event.Params.OldPosition = "new"
-			held, err = ShouldHold(event)
-			if err == nil {
-				t.Fatalf("inverse=%v %s: the cooldown must hold the refused first fill", inverse, label)
-			}
-			assertOnlyFamily(t, held.Trade.Logs, "cooldown: trying to get a better entry price")
+		event := ownershipEvent(trade, fullHoldPayload(), expensiveCooldown())
+		event.Params.OldPosition = "new"
+
+		held, err := ShouldHold(event)
+		if err == nil {
+			t.Fatalf("inverse=%v: the cooldown must hold the refused first fill", inverse)
 		}
+		assertOnlyFamily(t, held.Trade.Logs, "cooldown: trying to get a better entry price")
 	}
 }
 
-// DynamicParams has no seat on the first fill either: with both reads
-// bearish it holds no new ladder, long or inverse, and writes no row. It
-// sizes that first entry for the raised rows; it never refuses it.
+// DynamicParams has no seat on the first fill: with both reads bearish it
+// holds no new ladder, long or inverse, and writes no row. It sizes that
+// first entry for the raised rows; it never refuses it.
 func TestShouldHoldDynamicParamsHoldsNoFirstFill(t *testing.T) {
 	for _, inverse := range []bool{false, true} {
 		trade := ownershipTrade("buy", 0)
@@ -223,85 +192,24 @@ func TestShouldHoldDynamicParamsHoldsNoFirstFill(t *testing.T) {
 	}
 }
 
-// A crash-guard-only strategy receives the regime block on the wire and
-// must never write a regime row.
-func TestShouldHoldCrashGuardOnlyProducesNoRegimeRows(t *testing.T) {
-	shallow := ownershipTrade("stopLoss", 2)
-	shallow.Strategy.Params = aggragates.StrategyParams{CrashGuard: true}
-	if held, err := ShouldHold(ownershipEvent(shallow, fullHoldPayload(), expensiveCooldown())); err != nil {
-		t.Fatalf("crashGuard alone must not hold a shallow add, got %v", messages(held.Trade.Logs))
-	}
-	deep := ownershipTrade("stopLoss", 4)
-	deep.Strategy.Params = aggragates.StrategyParams{CrashGuard: true}
-	held, err := ShouldHold(ownershipEvent(deep, fullHoldPayload(), expensiveCooldown()))
-	if err == nil {
-		t.Fatal("crashGuard must hold the deep add during a slow decline in free fall")
-	}
-	for _, row := range held.Trade.Logs {
-		if strings.Contains(row.Message, "regime:") {
-			t.Fatalf("a crash-guard-only strategy wrote a regime row: %q", row.Message)
-		}
-	}
-	assertOnlyFamily(t, held.Trade.Logs, crashguard.FreeFallHoldReason)
-}
-
-// Capitulation is the crash guard's: without CrashGuard the shock hold
-// stands and no episode row is written.
-func TestShouldHoldCapitulationRequiresCrashGuard(t *testing.T) {
-	trade := capTrade(false, 3, 100, 79)
-	trade.Strategy.Params = aggragates.StrategyParams{RegimeHold: true}
-	held, err := ShouldHold(capEvent(trade, capShockAI(false), capReclaimBucket(false)))
-	if err == nil {
-		t.Fatal("without CrashGuard the shock hold must stand")
-	}
-	if !strings.Contains(held.Trade.Logs[0].Message, "regime: market in shock") {
-		t.Fatalf("unexpected hold %q", held.Trade.Logs[0].Message)
-	}
-	for _, prefix := range []string{crashguard.CapitulationTaggedPrefix, crashguard.CapitulationAllowedPrefix, crashguard.CapitulationFreezeOnPrefix} {
-		if hasCapitulationPrefix(held.Trade.Logs, prefix) {
-			t.Fatalf("capitulation wrote %q without CrashGuard", prefix)
-		}
-	}
-}
-
-// Capitulation can only bypass a regime hold: with CrashGuard alone there is
-// nothing to bypass and nothing is written.
-func TestShouldHoldCapitulationNeedsARegimeHold(t *testing.T) {
-	trade := capTrade(false, 3, 100, 79)
-	trade.Strategy.Params = aggragates.StrategyParams{CrashGuard: true}
-	held, err := ShouldHold(capEvent(trade, capShockAI(false), capReclaimBucket(false)))
-	if err != nil {
-		t.Fatalf("CrashGuard alone on a shallow reclaim must hold nothing, got %v", err)
-	}
-	if len(held.Trade.Logs) != 0 {
-		t.Fatalf("no row may be written, got %v", messages(held.Trade.Logs))
-	}
-}
-
-// A force-trailing re-anchor reads as the rung it re-arms: the gates have
-// power on it and the row keeps the raw position name.
+// A force-trailing re-anchor reads as the position it re-arms: the gates
+// have power on it and the row keeps the raw position name.
 func TestShouldHoldForceTrailingStatesRunTheGates(t *testing.T) {
 	sl := ownershipTrade("forceTrailingStopLoss", 4)
-	sl.Strategy.Params = aggragates.StrategyParams{RegimeHold: true}
+	sl.Strategy.Params = aggragates.StrategyParams{UseAI: true}
 	held, err := ShouldHold(ownershipEvent(sl, fullHoldPayload(), expensiveCooldown()))
-	if err == nil || held.Trade.Logs[0].Message != "Hold forceTrailingStopLoss: regime: market in shock (15m shock-down, depth 4)" {
-		t.Fatalf("regimeHold must gate a force-trailing stopLoss, got %v %v", err, messages(held.Trade.Logs))
-	}
-
-	sl = ownershipTrade("forceTrailingStopLoss", 4)
-	sl.Strategy.Params = aggragates.StrategyParams{CrashGuard: true}
-	held, err = ShouldHold(ownershipEvent(sl, fullHoldPayload(), expensiveCooldown()))
-	if err == nil || !strings.Contains(held.Trade.Logs[0].Message, crashguard.FreeFallHoldReason) {
-		t.Fatalf("crashGuard must gate a force-trailing stopLoss, got %v %v", err, messages(held.Trade.Logs))
+	if err == nil || held.Trade.Logs[0].Message != "Hold forceTrailingStopLoss: AI market is bearish" {
+		t.Fatalf("useAI must gate a force-trailing stopLoss, got %v %v", err, messages(held.Trade.Logs))
 	}
 
 	ai := fullHoldPayload()
-	ai.Regimes = map[string]string{"4h": "mixed", "1h": "mixed", "15m": regime.UpPersist}
+	ai.AIMarketBearish = false
+	ai.AIMarketBullish = true
 	tp := ownershipTrade("forceTrailingTakeProfit", 4)
-	tp.Strategy.Params = aggragates.StrategyParams{RegimeHold: true}
+	tp.Strategy.Params = aggragates.StrategyParams{UseAI: true}
 	held, err = ShouldHold(ownershipEvent(tp, ai, expensiveCooldown()))
-	if err == nil || held.Trade.Logs[0].Message != "Hold forceTrailingTakeProfit: regime: rides the trend (15m uptrend-persist)" {
-		t.Fatalf("regimeHold must gate a force-trailing takeProfit, got %v %v", err, messages(held.Trade.Logs))
+	if err == nil || held.Trade.Logs[0].Message != "Hold forceTrailingTakeProfit: AI market is bullish" {
+		t.Fatalf("useAI must gate a force-trailing takeProfit, got %v %v", err, messages(held.Trade.Logs))
 	}
 
 	tp = ownershipTrade("forceTrailingTakeProfit", 4)

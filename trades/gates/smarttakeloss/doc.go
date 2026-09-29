@@ -1,5 +1,5 @@
 // Package smarttakeloss is the SmartTakeLoss flag: three rules read off the
-// closed window sophos' crash detectors read, each behind its own switch. Two
+// closed window of sophos' smart take loss, each behind its own switch. Two
 // turn a long ladder into a seller instead of a buyer; the third moves where
 // it takes profit.
 //

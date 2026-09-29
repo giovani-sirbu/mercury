@@ -57,8 +57,9 @@ type (
 		// The 15m chart-pattern verdict from GET /:symbol/patterns. Zero
 		// values mean "no pattern" (older sophos, no detection). Direction is
 		// the detector set that fired ("long" | "short"), independent of the
-		// regime veto applied to Action; Level/LevelKind is the structure the
-		// pattern is built on (resistance, support, neckline, breakout).
+		// sophos regime veto that turns Action into HOLD on a shock headline;
+		// Level/LevelKind is the structure the pattern is built on
+		// (resistance, support, neckline, breakout).
 		PatternName        string
 		PatternDisplayName string
 		PatternDirection   string
@@ -73,45 +74,10 @@ type (
 		FibSwingLow  float64
 		FibSwingHigh float64
 		FibLevels    []float64
-		// Multi-timeframe regime verdict, served by sophos when it has enough
-		// closed candles. HasRegimeVerdict is the degrade-open switch: while
-		// false (older sophos, or a cache entry written before the field
-		// existed) the RegimeHold gates read nothing below. It is never a
-		// switch-on: the gates answer to StrategyParams.RegimeHold first.
-		HasRegimeVerdict bool
-		// EnterAllowed is served by sophos and deliberately UNREAD by the
-		// engine: the regime lens has no seat on the first fill (Cooldown
-		// owns it), so sophos' long-only enterAllowed and the
-		// regimeEntryRequires1h / regimeEntryShockAnyVeto knobs folded into
-		// it have no effect here. Kept on the wire for older readers.
-		EnterAllowed bool
-		// AddAllowed IS read, for long adds only: false when 4h or 1h reads
-		// downtrend-persist (sophos regime/set.go). Inverse adds mirror the
-		// rule locally from Regimes.
-		AddAllowed bool
-		Regime     string
-		Regimes    map[string]string
-		// Crash score: a market-wide flush is in progress; distinct from a
-		// single-symbol volatility shock, which travels as the "shock-*"
-		// labels in Regimes. It holds nothing by itself: the capitulation
-		// override reads it as "a flush was seen during this episode".
-		// CrashReasons names the components that carried the score.
-		CrashActive  bool
-		CrashScore   float64
-		CrashReasons []string
-		// Slow decline: the symbol's own down leg has fallen far and long
-		// enough without a rally large enough to end it, and not mostly in a
-		// flush. FreeFall: the price is under every low of the support window
-		// behind the current fall. The CrashGuard flag holds deep entries on
-		// these two (gates/crashguard.ApplyToHold); SlowDeclineReasons only
-		// ever reaches the ARMED trade log row.
-		SlowDecline        bool
-		FreeFall           bool
-		SlowDeclineReasons []string
 		// Smart take loss: the chart block from GET /:symbol/patterns — the
 		// quiet slow-decline verdict with its sell band, and the capital
 		// protection band with its SMC trend reading, both read on the closed
-		// window sophos' crash detectors read. Every zero field is inert; the
+		// window of sophos' smart take loss. Every zero field is inert; the
 		// engines hand it to gates/smarttakeloss.Apply after the ladder has
 		// decided, and ShouldHold reads the slow-decline verdict on the first
 		// fill.
@@ -146,11 +112,6 @@ type (
 		InverseUsedAmount  []UsedAmountResult
 		CoolDownIndicators CoolDownIndicators
 		AIIndicators       AIIndicators
-		// PortfolioBlocked: another trade of this wallet is funds-blocked.
-		// A profitable close is then the capital the ladder waits for, so
-		// the regime profit hold stands down. Set by the engines on a
-		// takeProfit tick; zero elsewhere.
-		PortfolioBlocked bool
 		// WalletLadders is every active parent trade of this wallet, the
 		// managed one included while it is active; a ladder blocked on its
 		// next entry is left out, since it cannot take that entry and the

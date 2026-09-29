@@ -4,11 +4,9 @@ import "testing"
 
 // The first-buy gate injection is a product rule: cooldown, UseAI,
 // UsePatterns and SmartTakeLoss own it — the last for its quiet slow-decline
-// hold; CrashGuard and RegimeHold fetch the verdict for adds and exits only,
-// DynamicParams fetches its reads to shape the rows and holds nothing, and
-// PowerLawQuantiles does nothing yet. Pinned so the difference between
-// "fetches the verdict" and "gates the first buy" stays deliberate rather than
-// accidental.
+// hold; DynamicParams fetches its reads to shape the rows and holds nothing.
+// Pinned so the difference between "fetches the verdict" and "gates the
+// first buy" stays deliberate rather than accidental.
 func TestInjectsEntryHoldIsOwnedByEntryFlags(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -19,15 +17,9 @@ func TestInjectsEntryHoldIsOwnedByEntryFlags(t *testing.T) {
 		{"cooldown only", StrategyParams{Cooldown: true}, true},
 		{"useAI only", StrategyParams{UseAI: true}, true},
 		{"usePatterns only", StrategyParams{UsePatterns: true}, true},
-		{"crashGuard only", StrategyParams{CrashGuard: true}, false},
 		{"smartTakeLoss only", StrategyParams{SmartTakeLoss: true}, true},
-		{"regimeHold only", StrategyParams{RegimeHold: true}, false},
-		{"powerLawQuantiles only", StrategyParams{PowerLawQuantiles: true}, false},
 		{"dynamicParams only", StrategyParams{DynamicParams: true}, false},
-		{"crashGuard with usePatterns", StrategyParams{CrashGuard: true, UsePatterns: true}, true},
-		{"crashGuard with regimeHold", StrategyParams{CrashGuard: true, RegimeHold: true}, false},
-		{"smartTakeLoss with crashGuard and regimeHold", StrategyParams{SmartTakeLoss: true, CrashGuard: true, RegimeHold: true}, true},
-		{"dynamicParams with crashGuard and regimeHold", StrategyParams{DynamicParams: true, CrashGuard: true, RegimeHold: true}, false},
+		{"smartTakeLoss with dynamicParams", StrategyParams{SmartTakeLoss: true, DynamicParams: true}, true},
 		{"dynamicParams with cooldown", StrategyParams{DynamicParams: true, Cooldown: true}, true},
 	}
 	for _, tc := range cases {

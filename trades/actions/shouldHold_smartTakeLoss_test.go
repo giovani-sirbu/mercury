@@ -77,10 +77,10 @@ func TestShouldHoldEntrySmartTakeLossHoldsALongFirstFill(t *testing.T) {
 	}
 }
 
-// FETCH IS NOT GATE: the verdict rides /patterns for CrashGuard and
-// RegimeHold too, and holds nothing without SmartTakeLoss.
+// FETCH IS NOT GATE: the verdict rides /patterns for DynamicParams too, and
+// holds nothing without SmartTakeLoss.
 func TestShouldHoldEntrySmartTakeLossNeedsItsFlag(t *testing.T) {
-	assertNotHeld(t, "crashGuard and regimeHold", stlEntryEvent(aggragates.StrategyParams{CrashGuard: true, RegimeHold: true}, slowDeclinePayload(true)))
+	assertNotHeld(t, "dynamicParams", stlEntryEvent(aggragates.StrategyParams{DynamicParams: true}, slowDeclinePayload(true)))
 	assertNotHeld(t, "no flag", stlEntryEvent(aggragates.StrategyParams{}, slowDeclinePayload(true)))
 }
 

@@ -40,7 +40,7 @@ type SophosFib struct {
 // sit in for the ladder to go pending, and slowDeclineIndecision its vote
 // read one short of the need, which the indecision direction reads — and the
 // capitalProtection* keys the capital protection exit, all read on the
-// closed window sophos' crash detectors read. A sophos without the object —
+// closed window of sophos' smart take loss. A sophos without the object —
 // or one still serving the retired pattern-window keys of the trend-reversal
 // rule, or the retired `slowDeclineMiddleBB` key — decodes to no verdict, no
 // quiet leg, no smooth bar, no bar a fill has to precede, no sell band, no
@@ -116,30 +116,17 @@ func (d SophosDynamicParams) Indicators() DynamicParamsIndicators {
 // ignored; missing ones stay at the zero value and stay inert.
 //
 // Served but deliberately NOT decoded: `usePrediction` (ML route,
-// informational), `profitExitAction`, `exitPreferred` and `regimeConfidence`
-// (no reader in any engine). `enterAllowed` is decoded and documented unread
-// on AIIndicators.
+// informational; no reader in any engine).
 type SophosPrediction struct {
-	Action             string               `json:"action"`
-	MarketBearish      bool                 `json:"marketBearish"`
-	MarketBullish      bool                 `json:"marketBullish"`
-	SignalStrength     SophosSignalStrength `json:"signalStrength"`
-	StayOutReasons     []string             `json:"stayOutReasons"`
-	HasRegimeVerdict   bool                 `json:"hasRegimeVerdict"`
-	EnterAllowed       bool                 `json:"enterAllowed"`
-	AddAllowed         bool                 `json:"addAllowed"`
-	Regime             string               `json:"regime"`
-	Regimes            map[string]string    `json:"regimes"`
-	CrashActive        bool                 `json:"crashActive"`
-	CrashScore         float64              `json:"crashScore"`
-	CrashReasons       []string             `json:"crashReasons"`
-	SlowDecline        bool                 `json:"slowDecline"`
-	FreeFall           bool                 `json:"freeFall"`
-	SlowDeclineReasons []string             `json:"slowDeclineReasons"`
-	SmartTakeLoss      SophosSmartTakeLoss  `json:"smartTakeLoss"`
-	DynamicParams      SophosDynamicParams  `json:"dynamicParams"`
-	PatternVerdict     SophosPatternVerdict `json:"patternVerdict"`
-	Fib                SophosFib            `json:"fib"`
+	Action         string               `json:"action"`
+	MarketBearish  bool                 `json:"marketBearish"`
+	MarketBullish  bool                 `json:"marketBullish"`
+	SignalStrength SophosSignalStrength `json:"signalStrength"`
+	StayOutReasons []string             `json:"stayOutReasons"`
+	SmartTakeLoss  SophosSmartTakeLoss  `json:"smartTakeLoss"`
+	DynamicParams  SophosDynamicParams  `json:"dynamicParams"`
+	PatternVerdict SophosPatternVerdict `json:"patternVerdict"`
+	Fib            SophosFib            `json:"fib"`
 }
 
 // Indicators maps a decoded sophos payload onto AIIndicators. Strategy
@@ -152,17 +139,6 @@ func (p SophosPrediction) Indicators() AIIndicators {
 		AIAction:           p.Action,
 		AISignalStrength:   p.SignalStrength.Overall,
 		StayOutReasons:     p.StayOutReasons,
-		HasRegimeVerdict:   p.HasRegimeVerdict,
-		EnterAllowed:       p.EnterAllowed,
-		AddAllowed:         p.AddAllowed,
-		Regime:             p.Regime,
-		Regimes:            p.Regimes,
-		CrashActive:        p.CrashActive,
-		CrashScore:         p.CrashScore,
-		CrashReasons:       p.CrashReasons,
-		SlowDecline:        p.SlowDecline,
-		FreeFall:           p.FreeFall,
-		SlowDeclineReasons: p.SlowDeclineReasons,
 		SmartTakeLoss:      p.SmartTakeLoss.Indicators(),
 		DynamicParams:      p.DynamicParams.Indicators(),
 		PatternName:        p.PatternVerdict.Name,

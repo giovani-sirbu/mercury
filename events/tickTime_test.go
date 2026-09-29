@@ -14,9 +14,6 @@ func TestTickTimeReadsTimestampInAnyUnit(t *testing.T) {
 		if got := event.TickTime(); !got.Equal(want) {
 			t.Errorf("Timestamp %d: TickTime() = %s, want %s", ts, got, want)
 		}
-		if got := event.TickMillis(); got != 1_700_000_000_000 {
-			t.Errorf("Timestamp %d: TickMillis() = %d, want 1700000000000", ts, got)
-		}
 	}
 }
 
@@ -27,9 +24,6 @@ func TestTickTimeFallsBackToTheTradeStamp(t *testing.T) {
 	if got := event.TickTime(); !got.Equal(updatedAt) {
 		t.Errorf("TickTime() = %s, want %s", got, updatedAt)
 	}
-	if got := event.TickMillis(); got != updatedAt.UnixMilli() {
-		t.Errorf("TickMillis() = %d, want %d", got, updatedAt.UnixMilli())
-	}
 }
 
 func TestTickTimeIsZeroWithoutAnyClock(t *testing.T) {
@@ -37,8 +31,5 @@ func TestTickTimeIsZeroWithoutAnyClock(t *testing.T) {
 
 	if got := event.TickTime(); !got.IsZero() {
 		t.Errorf("TickTime() = %s, want zero", got)
-	}
-	if got := event.TickMillis(); got != 0 {
-		t.Errorf("TickMillis() = %d, want 0", got)
 	}
 }

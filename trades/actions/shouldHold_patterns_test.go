@@ -1,7 +1,6 @@
 package actions
 
 import (
-	"github.com/giovani-sirbu/mercury/trades/gates/regime"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 	"strings"
 	"testing"
@@ -12,9 +11,6 @@ import (
 
 func patternAI(direction string, score float64) aggragates.AIIndicators {
 	return aggragates.AIIndicators{
-		HasRegimeVerdict:   true,
-		AddAllowed:         true,
-		Regimes:            map[string]string{"4h": "mixed", "1h": "mixed", "15m": "mixed"},
 		PatternName:        "asc_triangle",
 		PatternDisplayName: "ascending triangle",
 		PatternDirection:   direction,
@@ -65,7 +61,7 @@ func TestPatternHoldStopLossPasses(t *testing.T) {
 		{"score under the floor", false, patternAI("long", 59.9)},
 		{"pattern against the trade", false, patternAI("short", 90)},
 		{"long pattern on an inverse trade", true, patternAI("long", 90)},
-		{"no pattern", false, aggragates.AIIndicators{HasRegimeVerdict: true, AddAllowed: true}},
+		{"no pattern", false, aggragates.AIIndicators{}},
 	}
 	for _, c := range cases {
 		if held, err := ShouldHold(patternEvent("stopLoss", c.inverse, 100000, c.ai)); err != nil {
@@ -136,20 +132,19 @@ func TestPatternHoldIsOwnedByUsePatterns(t *testing.T) {
 	}
 }
 
-// The regime lens runs first: when both would hold, the regime wording is
-// the one on record.
-func TestPatternHoldYieldsToRegime(t *testing.T) {
+// The pattern hold speaks before the legacy AI hold: when both would hold,
+// the pattern wording is the one on record.
+func TestPatternHoldSpeaksBeforeTheLegacyAIHold(t *testing.T) {
 	ai := patternAI("long", 90)
-	ai.AddAllowed = false
-	ai.Regimes = map[string]string{"4h": regime.DownPersist, "1h": "mixed", "15m": "mixed"}
+	ai.AIMarketBearish = true
 	event := patternEvent("stopLoss", false, 100000, ai)
-	event.Trade.Strategy.Params.RegimeHold = true
+	event.Trade.Strategy.Params.UseAI = true
 	held, err := ShouldHold(event)
 	if err == nil {
 		t.Fatal("expected a hold")
 	}
-	if !strings.HasPrefix(held.Trade.Logs[0].Message, "Hold stopLoss: regime: add not allowed") {
-		t.Errorf("regime must keep its wording over the pattern, got %q", held.Trade.Logs[0].Message)
+	if !strings.HasPrefix(held.Trade.Logs[0].Message, "Hold stopLoss: pattern: ") {
+		t.Errorf("the pattern must keep its wording over the legacy AI hold, got %q", held.Trade.Logs[0].Message)
 	}
 }
 

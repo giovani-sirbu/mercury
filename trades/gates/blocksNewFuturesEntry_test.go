@@ -16,7 +16,7 @@ func TestBlocksNewFuturesEntryWithoutADirection(t *testing.T) {
 		if !BlocksNewFuturesEntry(aggragates.StrategyParams{}, verdict) {
 			t.Errorf("action %q carries no direction and must block a no-flag strategy", action)
 		}
-		if !BlocksNewFuturesEntry(aggragates.StrategyParams{CrashGuard: true}, verdict) {
+		if !BlocksNewFuturesEntry(aggragates.StrategyParams{SmartTakeLoss: true}, verdict) {
 			t.Errorf("action %q must block whatever other flags are on", action)
 		}
 	}

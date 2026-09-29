@@ -1,8 +1,6 @@
 package actions
 
 import (
-	"github.com/giovani-sirbu/mercury/trades/gates/crashguard"
-	"github.com/giovani-sirbu/mercury/trades/gates/regime"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 	"github.com/giovani-sirbu/mercury/trades/quantities"
 	"math"
@@ -11,19 +9,18 @@ import (
 
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/gates/patterns"
+	"github.com/giovani-sirbu/mercury/trades/gates/smarttakeloss"
 )
 
-// strategy3Params is the configuration runs 90/93/94 actually ran, plus
-// RegimeHold: after the ownership refactor the add/exit gates those runs
-// exercised answer to that flag and to nothing else.
+// strategy3Params is strategy 3's configuration: the cooldown gates and the
+// legacy ML gate, with patterns and the smart take loss off.
 func strategy3Params() aggragates.StrategyParams {
 	return aggragates.StrategyParams{
 		Cooldown:      true,
 		UseAI:         true,
 		UsePatterns:   false,
-		CrashGuard:    true,
 		SmartTakeLoss: false,
-		RegimeHold:    true,
 	}
 }
 
@@ -52,18 +49,6 @@ func strategy3Event(position string, fills int, ai aggragates.AIIndicators) even
 	}
 }
 
-// regimeVerdict builds the served set with the long add-veto pair (4h+2h);
-// the 1h lens is fetched only for the crash detector and never names an add
-// veto, so it is pinned to "mixed" here.
-func regimeVerdict(fourHour, twoHour, fifteen string, addAllowed bool) aggragates.AIIndicators {
-	return aggragates.AIIndicators{
-		HasRegimeVerdict: true,
-		AddAllowed:       addAllowed,
-		EnterAllowed:     fourHour != regime.DownPersist,
-		Regimes:          map[string]string{"4h": fourHour, "2h": twoHour, "1h": "mixed", "15m": fifteen},
-	}
-}
-
 func lastHold(t *testing.T, event events.Events) (string, bool) {
 	t.Helper()
 	held, err := ShouldHold(event)
@@ -76,127 +61,63 @@ func lastHold(t *testing.T, event events.Events) (string, bool) {
 	return held.Trade.Logs[len(held.Trade.Logs)-1].Message, true
 }
 
-// The whole regime hold family on an open position must be reachable for
-// strategy 3 through RegimeHold, with usePatterns OFF.
-func TestShouldHoldStrategy3RegimeGatesAreLive(t *testing.T) {
-	cases := []struct {
-		name     string
-		event    events.Events
-		wantHold string
-	}{
-		{
-			name:     "add veto when sophos refuses the add",
-			event:    strategy3Event("stopLoss", 2, regimeVerdict("mixed", regime.DownPersist, "mixed", false)),
-			wantHold: "regime: add not allowed (2h downtrend-persist)",
+// Under strategy 3's flags only the cooldown gates and the legacy AI veto read
+// the first fill. With both clear — a first-fill verdict that allows the long,
+// no sibling ladder keeping the wallet, and an AI verdict that does not refuse
+// the long — a payload carrying every other family's signal still lets the
+// first fill through: a long pattern verdict scored over HoldMinScore with its
+// target ahead, a quiet slow-decline verdict with its sell band, and a bearish
+// dynamic params block. The same payload holds the fill once the smart take
+// loss flag is on, so its slow-decline reading is one that flag's gate acts
+// on; and a cooldown verdict that refuses the long holds the fill at the tick
+// price with the cooldown row alone. The next test holds it on the AI veto.
+func TestShouldHoldStrategy3FirstFillReadsOnlyCooldownAndTheAIVeto(t *testing.T) {
+	payload := aggragates.AIIndicators{
+		AIMarketBullish:    true,
+		PatternName:        "asc_triangle",
+		PatternDisplayName: "ascending triangle",
+		PatternDirection:   aggragates.SideLong,
+		PatternScore:       patterns.HoldMinScore + 10,
+		PatternLevel:       96,
+		PatternLevelKind:   "resistance",
+		PatternTakeProfit:  110,
+		SmartTakeLoss: aggragates.SmartTakeLossIndicators{
+			SlowDeclineExit:     true,
+			SlowDeclineLegQuiet: true,
+			SlowDeclineSellBand: 104,
 		},
-		{
-			name:     "depth-aware 15m shock hold",
-			event:    strategy3Event("stopLoss", regime.ShockHoldMinDepth, regimeVerdict("mixed", "mixed", regime.ShockDown, true)),
-			wantHold: "regime: market in shock (15m shock-down, depth 3)",
-		},
-		{
-			name:     "legacy ML HOLD still gates the add on top of the regime lens",
-			event:    withAIAction(strategy3Event("stopLoss", 2, regimeVerdict("mixed", "mixed", "mixed", true)), aggragates.ActionHold),
-			wantHold: "AI recommends HOLD",
-		},
+		DynamicParams: aggragates.DynamicParamsIndicators{Timeframe: "1D", Guppy: -1, BMSB: -1, Valid: true},
 	}
-	for _, c := range cases {
-		msg, held := lastHold(t, c.event)
-		if !held {
-			t.Fatalf("%s: expected a hold", c.name)
-		}
-		if !strings.Contains(msg, c.wantHold) {
-			t.Errorf("%s: hold %q does not contain %q", c.name, msg, c.wantHold)
-		}
-	}
+	allowed := aggragates.CoolDownIndicators{HasFirstFillVerdict: true, AllowLongEntry: true}
 
-	// And the gates must let the chain through when the verdict agrees.
-	clear := strategy3Event("stopLoss", 2, regimeVerdict("mixed", "mixed", "mixed", true))
-	if _, held := lastHold(t, clear); held {
-		t.Fatal("a permissive verdict must not hold the add")
-	}
-	entry := strategy3Event("buy", 0, regimeVerdict(regime.UpPersist, "mixed", "mixed", true))
-	if _, held := lastHold(t, entry); held {
-		t.Fatal("a 4h uptrend must not veto the first fill")
-	}
-}
-
-// The first fill answers to the cooldown gate only: a 4h downtrend with no
-// cooldown verdict passes, and a refused first fill holds at the tick price
-// without a word of regime in the row.
-func TestShouldHoldStrategy3EntryIsCooldownOnly(t *testing.T) {
-	entry := strategy3Event("buy", 0, regimeVerdict(regime.DownPersist, regime.DownPersist, regime.ShockDown, false))
+	entry := strategy3Event("buy", 0, payload)
+	entry.Params.CoolDownIndicators = allowed
 	if msg, held := lastHold(t, entry); held {
-		t.Fatalf("a 4h downtrend must not veto the first fill any more, got %q", msg)
+		t.Fatalf("with the cooldown gates and the AI veto clear the first fill must pass, got %q", msg)
 	}
 
-	expensive := strategy3Event("buy", 0, regimeVerdict(regime.DownPersist, "mixed", "mixed", false))
+	withExit := strategy3Event("buy", 0, payload)
+	withExit.Trade.Strategy.Params.SmartTakeLoss = true
+	withExit.Params.CoolDownIndicators = allowed
+	if msg, held := lastHold(t, withExit); !held || !strings.Contains(msg, smarttakeloss.SlowDeclineEntryHoldReason) {
+		t.Fatalf("the smart take loss flag must hold the same payload on its slow-decline verdict, got held=%v msg=%q", held, msg)
+	}
+
+	expensive := strategy3Event("buy", 0, payload)
 	expensive.Params.CoolDownIndicators = aggragates.CoolDownIndicators{HasFirstFillVerdict: true, AllowLongEntry: false}
 	msg, held := lastHold(t, expensive)
 	if !held || msg != "Hold entry: cooldown: trying to get a better entry price: reference 100.0000, enters above 102.0408 or below 97.7995 after a bounce" {
 		t.Fatalf("expected the cooldown hold alone, got held=%v msg=%q", held, msg)
 	}
-	if strings.Contains(msg, "regime") {
-		t.Fatalf("no regime text may appear on a first fill, got %q", msg)
-	}
 }
 
-func withAIAction(event events.Events, action string) events.Events {
-	event.Params.AIIndicators.AIAction = action
-	return event
-}
-
-// Without a verdict (older sophos, failed pattern leg) the legacy ML gate is
-// the only entry gate for a UseAI strategy — no regime strings may appear.
+// Without a cooldown verdict the legacy ML gate holds the first fill of a
+// UseAI strategy on its own.
 func TestShouldHoldStrategy3FallsBackToLegacyWithoutVerdict(t *testing.T) {
 	entry := strategy3Event("buy", 0, aggragates.AIIndicators{AIMarketBearish: true})
 	msg, held := lastHold(t, entry)
-	if !held || !strings.Contains(msg, "AI market is bearish") || strings.Contains(msg, "regime") {
+	if !held || !strings.Contains(msg, "AI market is bearish") {
 		t.Fatalf("expected legacy bearish hold, got held=%v msg=%q", held, msg)
-	}
-}
-
-// A previously-armed deep trade must not stay held when the verdict is
-// missing (sophos outage): the crash guard degrades open like every other AI
-// gate, whatever ARMED row the trade carries.
-func TestShouldHoldCrashGuardFailsOpenWithoutVerdict(t *testing.T) {
-	event := events.Events{
-		Trade: testutil.DeepTrade(true),
-		Events: map[string]func(events.Events) (events.Events, error){
-			"updateTrade": testutil.NopUpdateTrade,
-		},
-		Params: aggragates.Params{OldPosition: "buy", OldPositionPrice: 94, AIIndicators: aggragates.AIIndicators{}},
-	}
-	event.Trade.Logs = []aggragates.TradesLogs{{
-		Message: crashguard.TransitionMessage(aggragates.AIIndicators{SlowDecline: true, FreeFall: true}),
-	}}
-	if _, err := ShouldHold(event); err != nil {
-		t.Fatalf("a missing verdict must not hold, got %v", err)
-	}
-}
-
-// A capitulation tag whose reclaim never fired granted no add: a later
-// gate-approved fill must not freeze the ladder, and a tick the gates already
-// approved is never turned into a hold by the override.
-func TestShouldHoldCapitulationTaggedWithoutGrantNeverInventsHold(t *testing.T) {
-	falling := capEvent(capTrade(false, 3, 100, 79), capShockAI(false), capFallingBucket())
-	held, err := ShouldHold(falling)
-	if err == nil {
-		t.Fatal("falling 5m bar must keep the shock hold")
-	}
-	if !hasCapitulationPrefix(held.Trade.Logs, crashguard.CapitulationTaggedPrefix) || hasCapitulationPrefix(held.Trade.Logs, crashguard.CapitulationAllowedPrefix) {
-		t.Fatalf("expected a tagged-but-not-allowed episode, got %#v", messages(held.Trade.Logs))
-	}
-
-	// A regime-approved add fills at depth 4 later on (no hold to bypass).
-	later := capTrade(false, 4, 79, 78)
-	later.Logs = held.Trade.Logs
-	approved := capEvent(later, regimeVerdict("mixed", "mixed", "mixed", true), capReclaimBucket(false))
-	if _, err := ShouldHold(approved); err != nil {
-		t.Fatalf("a gate-approved add must never be frozen by a stale tag, got %v", err)
-	}
-	if hasCapitulationPrefix(approved.Trade.Logs, crashguard.CapitulationFreezeOnPrefix) {
-		t.Fatal("no freeze row may be written without a granted capitulation add")
 	}
 }
 

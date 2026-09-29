@@ -13,19 +13,7 @@ func TestSophosPredictionIndicatorsMapsVerdict(t *testing.T) {
 		"marketBullish":false,
 		"signalStrength":{"overall":42},
 		"stayOutReasons":["low"],
-		"hasRegimeVerdict":true,
-		"enterAllowed":true,
-		"addAllowed":false,
 		"unknownFutureKey":true,
-		"regime":"downtrend-persist",
-		"regimes":{"15m":"flat","4h":"downtrend-persist"},
-		"regimeConfidence":0.8,
-		"crashActive":true,
-		"crashScore":91,
-		"crashReasons":["breadth"],
-		"slowDecline":true,
-		"freeFall":true,
-		"slowDeclineReasons":["leg down 14.2% from its high close","leg 61h long"],
 		"smartTakeLoss":{"slowDeclineExit":true,"slowDeclineSellBand":186.4,"slowDeclineRecentAt":1640646000000,"slowDeclineRecentFrom":1640563200000,"slowDeclineRecentReasons":["read on the 1h bar opening 2021-12-27 23:00 UTC, one of the last 24 closed bars"],"slowDeclineFillFrom":1640563200000,"capitalProtectionUpperBB":193.83,"capitalProtectionSmcBearish":true},
 		"patternVerdict":{"name":"asc_triangle","displayName":"ascending triangle","direction":"long","score":71,"level":96000,"levelKind":"resistance","stopLoss":94000,"takeProfit":104500,"interval":"15m"},
 		"fib":{"swingLow":100,"swingHigh":110,"levels":[106.18,105,103.82,102.14]}
@@ -37,12 +25,6 @@ func TestSophosPredictionIndicatorsMapsVerdict(t *testing.T) {
 	}
 
 	mapped := prediction.Indicators()
-	if !mapped.CrashActive || mapped.CrashScore != 91 {
-		t.Fatalf("crash must map, got %+v", mapped)
-	}
-	if !mapped.SlowDecline || !mapped.FreeFall || len(mapped.SlowDeclineReasons) != 2 || mapped.SlowDeclineReasons[1] != "leg 61h long" {
-		t.Fatalf("the slow-decline verdict must map from slowDecline, freeFall and slowDeclineReasons, got %+v", mapped)
-	}
 	stl := mapped.SmartTakeLoss
 	if !stl.SlowDeclineExit || stl.SlowDeclineSellBand != 186.4 || stl.CapitalProtectionUpperBB != 193.83 || !stl.CapitalProtectionSmcBearish {
 		t.Fatalf("the smart take loss block must map field for field, got %+v", stl)
@@ -68,7 +50,7 @@ func TestSophosPredictionIndicatorsMapsVerdict(t *testing.T) {
 // which every pattern gate treats as "no pattern".
 func TestSophosPredictionWithoutPatternVerdictIsInert(t *testing.T) {
 	var prediction SophosPrediction
-	if err := json.Unmarshal([]byte(`{"action":"LONG","hasRegimeVerdict":true}`), &prediction); err != nil {
+	if err := json.Unmarshal([]byte(`{"action":"LONG"}`), &prediction); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	mapped := prediction.Indicators()
@@ -86,7 +68,7 @@ func TestSophosPredictionWithoutPatternVerdictIsInert(t *testing.T) {
 // treats as "nothing to read": no verdict, no band, no bearish trend.
 func TestSophosPredictionWithoutSmartTakeLossIsInert(t *testing.T) {
 	for name, raw := range map[string]string{
-		"no object":             `{"action":"LONG","hasRegimeVerdict":true,"crashActive":true}`,
+		"no object":             `{"action":"LONG"}`,
 		"every key zero":        `{"smartTakeLoss":{"slowDeclineExit":false,"slowDeclineLegQuiet":false,"slowDeclineSmoothFrom":0,"slowDeclineFillBefore":0,"slowDeclineSellBand":0,"slowDeclineExitReasons":null,"slowDeclineBreakReasons":null,"slowDeclineIndecision":false,"slowDeclineRecentAt":0,"slowDeclineRecentFrom":0,"slowDeclineRecentReasons":null,"slowDeclineFillFrom":0,"capitalProtectionUpperBB":0,"capitalProtectionSmcBearish":false}}`,
 		"the retired keys only": `{"smartTakeLoss":{"hasVerdict":true,"lowestBody":179.75,"upperBB":193.83,"lowerBB":176.4,"supportBarsUnder":3}}`,
 	} {
@@ -95,7 +77,7 @@ func TestSophosPredictionWithoutSmartTakeLossIsInert(t *testing.T) {
 			t.Fatalf("%s: unmarshal: %v", name, err)
 		}
 		got := prediction.Indicators().SmartTakeLoss
-		if !reflect.DeepEqual(got, SmartTakeLossIndicators{}) || got.HasReading() {
+		if !reflect.DeepEqual(got, SmartTakeLossIndicators{}) {
 			t.Fatalf("%s must map to the zero block, got %+v", name, got)
 		}
 	}
@@ -103,7 +85,7 @@ func TestSophosPredictionWithoutSmartTakeLossIsInert(t *testing.T) {
 
 // The capital protection keys map onto the block field for field and apart
 // from the slow decline's: the band arrives with the SMC trend bearish or
-// not, and a band alone is a reading.
+// not, and the SMC trend arrives without the band.
 func TestSophosPredictionMapsTheCapitalProtection(t *testing.T) {
 	for raw, want := range map[string]SmartTakeLossIndicators{
 		`{"smartTakeLoss":{"capitalProtectionUpperBB":193.83,"capitalProtectionSmcBearish":true}}`:  {CapitalProtectionUpperBB: 193.83, CapitalProtectionSmcBearish: true},
@@ -118,30 +100,6 @@ func TestSophosPredictionMapsTheCapitalProtection(t *testing.T) {
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("%s: got %+v, want %+v", raw, got, want)
 		}
-		if got.HasReading() != (want.CapitalProtectionUpperBB > 0) {
-			t.Fatalf("%s: a reading is a band above zero, got %v", raw, got.HasReading())
-		}
-	}
-}
-
-// A block has a reading when either band sophos serves is above zero; the
-// verdicts and the SMC trend alone are none.
-func TestSmartTakeLossIndicatorsHasReading(t *testing.T) {
-	for name, tc := range map[string]struct {
-		block SmartTakeLossIndicators
-		want  bool
-	}{
-		"the zero block":              {SmartTakeLossIndicators{}, false},
-		"the sell band":               {SmartTakeLossIndicators{SlowDeclineSellBand: 186.4}, true},
-		"the capital protection band": {SmartTakeLossIndicators{CapitalProtectionUpperBB: 193.83}, true},
-		"both bands":                  {SmartTakeLossIndicators{SlowDeclineSellBand: 186.4, CapitalProtectionUpperBB: 193.83}, true},
-		"a verdict without a band":    {SmartTakeLossIndicators{SlowDeclineExit: true, SlowDeclineLegQuiet: true}, false},
-		"the SMC trend alone":         {SmartTakeLossIndicators{CapitalProtectionSmcBearish: true}, false},
-		"bands that are not prices":   {SmartTakeLossIndicators{SlowDeclineSellBand: -1, CapitalProtectionUpperBB: -1}, false},
-	} {
-		if got := tc.block.HasReading(); got != tc.want {
-			t.Errorf("%s: HasReading %v, want %v", name, got, tc.want)
-		}
 	}
 }
 
@@ -149,9 +107,6 @@ func TestMergeSophosVerdictsPatternsThenML(t *testing.T) {
 	params := StrategyParams{UseAI: true, UsePatterns: true}
 	pattern := AIIndicators{
 		AIAction:         "SHORT",
-		HasRegimeVerdict: true,
-		CrashActive:      true,
-		Regimes:          map[string]string{"4h": "downtrend-persist"},
 		PatternName:      "desc_triangle",
 		PatternDirection: "short",
 		PatternScore:     66,
@@ -165,9 +120,6 @@ func TestMergeSophosVerdictsPatternsThenML(t *testing.T) {
 	got := MergeSophosVerdicts(params, pattern, ml, true, true)
 	if got.PatternAction != "SHORT" || got.AIAction != "LONG" || !got.AIMarketBullish {
 		t.Fatalf("both legs must keep their actions, got %+v", got)
-	}
-	if !got.CrashActive || got.Regimes["4h"] != "downtrend-persist" {
-		t.Fatalf("regime/crash stay on the patterns leg, got %+v", got)
 	}
 	if got.PatternName != "desc_triangle" || got.PatternDirection != "short" || got.PatternScore != 66 || len(got.FibLevels) != 2 {
 		t.Fatalf("the pattern verdict must survive the ML merge, got %+v", got)
@@ -207,25 +159,17 @@ func TestMergeSophosVerdictsKeepsTheSlowDeclineExit(t *testing.T) {
 	}
 }
 
-func TestMergeSophosVerdictsMLOnlyCopiesRegime(t *testing.T) {
+// The ML route does not serve the smart take loss block: an ML-only merge
+// keeps the ML verdict and carries no block, even a stray one on the ML leg.
+func TestMergeSophosVerdictsMLOnlyCarriesNoSmartTakeLoss(t *testing.T) {
 	params := StrategyParams{UseAI: true}
 	ml := AIIndicators{
-		AIAction:           "HOLD",
-		HasRegimeVerdict:   true,
-		CrashActive:        true,
-		CrashScore:         70,
-		SlowDecline:        true,
-		FreeFall:           true,
-		SlowDeclineReasons: []string{"leg 61h long"},
-		// The ML route does not serve the block; a stray one is not carried.
+		AIAction:      "HOLD",
 		SmartTakeLoss: SmartTakeLossIndicators{CapitalProtectionUpperBB: 1, CapitalProtectionSmcBearish: true},
 	}
 	got := MergeSophosVerdicts(params, AIIndicators{}, ml, false, true)
-	if got.AIAction != "HOLD" || !got.HasRegimeVerdict || !got.CrashActive || got.CrashScore != 70 {
-		t.Fatalf("ML-only must keep attached regime/crash, got %+v", got)
-	}
-	if !got.SlowDecline || !got.FreeFall || len(got.SlowDeclineReasons) != 1 {
-		t.Fatalf("ML-only must keep the attached slow-decline verdict, got %+v", got)
+	if got.AIAction != "HOLD" {
+		t.Fatalf("ML-only must keep the ML action, got %+v", got)
 	}
 	if !reflect.DeepEqual(got.SmartTakeLoss, SmartTakeLossIndicators{}) {
 		t.Fatalf("ML-only must not carry a smart take loss block, got %+v", got.SmartTakeLoss)
@@ -233,10 +177,10 @@ func TestMergeSophosVerdictsMLOnlyCopiesRegime(t *testing.T) {
 }
 
 // Data flows, the flag owns the gate: the pattern fields are carried even
-// when UsePatterns is off, exactly like crash and the smart take loss block.
+// when UsePatterns is off, exactly like the smart take loss block.
 func TestMergeSophosVerdictsKeepsPatternFieldsWhenUsePatternsOff(t *testing.T) {
-	pattern := AIIndicators{AIAction: "LONG", HasRegimeVerdict: true, PatternName: "bull_flag", PatternDirection: "long", PatternScore: 80}
-	got := MergeSophosVerdicts(StrategyParams{CrashGuard: true}, pattern, AIIndicators{}, true, false)
+	pattern := AIIndicators{AIAction: "LONG", PatternName: "bull_flag", PatternDirection: "long", PatternScore: 80}
+	got := MergeSophosVerdicts(StrategyParams{SmartTakeLoss: true}, pattern, AIIndicators{}, true, false)
 	if got.PatternName != "bull_flag" || got.PatternDirection != "long" || got.PatternScore != 80 {
 		t.Fatalf("pattern fields must not be zeroed by the flag, got %+v", got)
 	}
@@ -258,17 +202,9 @@ func TestStrategyParamsNeedsSophosAndEntryHold(t *testing.T) {
 		t.Fatal("UsePatterns must fetch /patterns and inject entry hold")
 	}
 
-	crash := StrategyParams{CrashGuard: true}
-	if !crash.NeedsSophos() || !crash.NeedsPatternRoute() {
-		t.Fatal("CrashGuard must fetch /patterns")
-	}
-	if crash.InjectsEntryHold() {
-		t.Fatal("CrashGuard alone must not inject first-buy shouldHold")
-	}
-
 	stl := StrategyParams{SmartTakeLoss: true}
-	if !stl.NeedsSophos() || !stl.InjectsEntryHold() {
-		t.Fatal("SmartTakeLoss fetches sophos and injects the entry hold its slow-decline verdict owns")
+	if !stl.NeedsSophos() || !stl.NeedsPatternRoute() || stl.NeedsAIRoute() || !stl.InjectsEntryHold() {
+		t.Fatal("SmartTakeLoss fetches /patterns and injects the entry hold its slow-decline verdict owns")
 	}
 
 	cool := StrategyParams{Cooldown: true}
@@ -279,38 +215,16 @@ func TestStrategyParamsNeedsSophosAndEntryHold(t *testing.T) {
 		t.Fatal("Cooldown must inject first-buy shouldHold")
 	}
 
-	// The regime block rides /patterns: RegimeHold fetches it and gates
-	// only adds and exits.
-	regime := StrategyParams{RegimeHold: true}
-	if !regime.NeedsSophos() || !regime.NeedsPatternRoute() || regime.NeedsAIRoute() {
-		t.Fatal("RegimeHold must fetch /patterns and nothing else")
-	}
-	if regime.InjectsEntryHold() {
-		t.Fatal("RegimeHold never gates the first buy")
-	}
-
-	reserved := StrategyParams{PowerLawQuantiles: true}
-	if reserved.NeedsSophos() || reserved.NeedsPatternRoute() || reserved.NeedsAIRoute() || reserved.InjectsEntryHold() {
-		t.Fatal("PowerLawQuantiles is reserved: it fetches nothing and gates nothing")
-	}
-}
-
-// A sophos that predates the slow-decline keys — or serves them empty — maps
-// to no slow-decline verdict, which the crash guard reads as "nothing to
-// hold": the new keys degrade open like every other block. The crash score
-// the same payload carries holds nothing by itself.
-func TestSophosPredictionWithoutSlowDeclineIsInert(t *testing.T) {
-	for _, raw := range []string{
-		`{"action":"LONG","hasRegimeVerdict":true,"crashActive":true,"crashScore":91}`,
-		`{"hasRegimeVerdict":true,"slowDecline":false,"freeFall":false,"slowDeclineReasons":null}`,
+	// Flags that read no sophos verdict: each must fetch no route and inject no
+	// entry hold on its own.
+	for name, params := range map[string]StrategyParams{
+		"Impasse":          {Impasse: true},
+		"UseForceTrailing": {UseForceTrailing: true},
+		"Pairs":            {Pairs: 3},
 	} {
-		var prediction SophosPrediction
-		if err := json.Unmarshal([]byte(raw), &prediction); err != nil {
-			t.Fatalf("unmarshal %s: %v", raw, err)
-		}
-		mapped := prediction.Indicators()
-		if mapped.SlowDecline || mapped.FreeFall || len(mapped.SlowDeclineReasons) != 0 {
-			t.Fatalf("%s must map to no slow-decline verdict, got %v/%v %q", raw, mapped.SlowDecline, mapped.FreeFall, mapped.SlowDeclineReasons)
+		if params.NeedsSophos() || params.NeedsPatternRoute() || params.NeedsAIRoute() || params.InjectsEntryHold() {
+			t.Errorf("%s must fetch nothing and inject no entry hold, got sophos=%v patterns=%v ai=%v entryHold=%v",
+				name, params.NeedsSophos(), params.NeedsPatternRoute(), params.NeedsAIRoute(), params.InjectsEntryHold())
 		}
 	}
 }
@@ -400,7 +314,6 @@ func TestSophosPredictionMapsTheBreakReasons(t *testing.T) {
 // The indecision reading maps onto the block apart from the verdict and the
 // leg on and quiet: a vote read one short of the need arrives with its band
 // and what broke, and a sophos without the key decodes to no indecision.
-// Indecision alone is no reading: only a band is.
 func TestSophosPredictionMapsTheIndecision(t *testing.T) {
 	broken := []string{"base volume of the last 24 bars 1.09x the median of the 720 before, over 0.90x", "2 of 4 readings hold with a smooth ladder, 3 needed"}
 	var undecided SophosPrediction
@@ -419,9 +332,6 @@ func TestSophosPredictionMapsTheIndecision(t *testing.T) {
 	}
 	if block := older.Indicators().SmartTakeLoss; block.SlowDeclineIndecision || len(block.SlowDeclineBreakReasons) != 1 {
 		t.Fatalf("a sophos without the key decodes to no indecision beside its break reasons, got %+v", block)
-	}
-	if (SmartTakeLossIndicators{SlowDeclineIndecision: true}).HasReading() {
-		t.Fatal("indecision without a band is no reading")
 	}
 }
 
@@ -446,7 +356,7 @@ func TestSophosPredictionMapsTheDynamicParams(t *testing.T) {
 // them.
 func TestSophosPredictionWithoutDynamicParamsIsInert(t *testing.T) {
 	for name, raw := range map[string]string{
-		"no object":      `{"action":"LONG","hasRegimeVerdict":true,"crashActive":true}`,
+		"no object":      `{"action":"LONG"}`,
 		"every key zero": `{"dynamicParams":{"timeframe":"","guppy":0,"bmsb":0,"valid":false}}`,
 	} {
 		var prediction SophosPrediction
@@ -484,17 +394,5 @@ func TestSophosDynamicParamsWireKeys(t *testing.T) {
 	field, found := reflect.TypeOf(SophosPrediction{}).FieldByName("DynamicParams")
 	if !found || field.Tag.Get("json") != "dynamicParams" {
 		t.Fatalf("SophosPrediction must carry the block under dynamicParams, got %q", field.Tag.Get("json"))
-	}
-}
-
-// Free fall travels on its own key: sophos can serve it without a slow
-// decline, and the mapping keeps the two apart for the gate to combine.
-func TestSophosPredictionMapsFreeFallApartFromSlowDecline(t *testing.T) {
-	var prediction SophosPrediction
-	if err := json.Unmarshal([]byte(`{"hasRegimeVerdict":true,"slowDecline":false,"freeFall":true}`), &prediction); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if mapped := prediction.Indicators(); mapped.SlowDecline || !mapped.FreeFall {
-		t.Fatalf("freeFall must map on its own, got slowDecline=%v freeFall=%v", mapped.SlowDecline, mapped.FreeFall)
 	}
 }

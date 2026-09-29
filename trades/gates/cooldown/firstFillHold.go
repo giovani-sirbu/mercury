@@ -16,8 +16,7 @@ import (
 // FirstFillHold is the Cooldown flag's whole first-fill gate. Empty means the
 // chain may proceed. The event comes back because on the tick the gate lets
 // an entry through above its reference it has written a row on the trade;
-// the caller must carry that event on, the way crashguard.ApplyCapitulationOverride's
-// caller does, or the row never reaches updateTrade.
+// the caller must carry that event on, or the row never reaches updateTrade.
 //
 // SPOT. The verdict only starts the hold; price ends it. sophos /cooldown
 // reports whether the last closed bar of its location interval is a local top

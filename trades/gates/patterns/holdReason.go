@@ -13,7 +13,7 @@ import (
 )
 
 // HoldMinScore is the detector score a chart pattern needs before it
-// may hold a rung. Detector scores average three parts, one of which is a
+// may hold a depth. Detector scores average three parts, one of which is a
 // constant 1, so 60 means the two real geometry parts sum to at least 0.8.
 const HoldMinScore = 60.0
 
@@ -23,14 +23,12 @@ const HoldMinScore = 60.0
 //	stopLoss   a pattern IN the trade's direction (bullish for a long) says
 //	           "price should bounce": do not average down into it. When no
 //	           pattern holds, the fibonacci retracement may still ask for a
-//	           better rung price.
+//	           better price for the depth.
 //	takeProfit the same pattern with its measured target still ahead keeps
 //	           the exit deferred; anything else — and any pattern AGAINST
 //	           the trade — releases the close, which is the sell.
 //
-// Never on the first fill: that is the cooldown's. A pattern is never
-// bypassed by capitulation (its reasons carry no regime prefix): "price
-// should bounce" and "take one extra fill on the reclaim" contradict.
+// Never on the first fill: that is the cooldown's.
 func HoldReason(event events.Events, position string, ai aggragates.AIIndicators) string {
 	if event.Params.OldPosition == "new" {
 		return ""
