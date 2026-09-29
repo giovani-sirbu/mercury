@@ -4,7 +4,9 @@ import "github.com/giovani-sirbu/mercury/trades/aggragates"
 
 // DepthOf is the wallet view of one trade: what it is, how deep its ladder
 // has filled, how deep it may fill, and what the depths it has left still
-// cost in the asset it spends.
+// cost in the asset it spends — priced from its position, which is what the
+// wallet is kept for, and from its last fill, which is what level ladders are
+// ranked on.
 //
 // Every surface that builds that view maps through this one helper — both
 // sisyphus engines from their own memory, agora from the database for hermes
@@ -13,7 +15,7 @@ import "github.com/giovani-sirbu/mercury/trades/aggragates"
 // entries its own way, is how a gate that holds on one engine silently lets
 // the same ladder through on another.
 func DepthOf(trade aggragates.Trades) aggragates.LadderDepth {
-	// Counted and read once, then handed to the cost: the wallet view is
+	// Counted and read once, then handed to both costs: the wallet view is
 	// built for every ladder of a wallet on every gated tick, and folding the
 	// same history once per field is the kind of cost that only shows up as a
 	// slow engine.
@@ -23,11 +25,12 @@ func DepthOf(trade aggragates.Trades) aggragates.LadderDepth {
 	asset, remainingCost := remainingCostAt(trade, filled, ceiling)
 
 	return aggragates.LadderDepth{
-		TradeID:       trade.ID,
-		Symbol:        trade.Symbol,
-		Depth:         filled,
-		MaxDepth:      ceiling,
-		Asset:         asset,
-		RemainingCost: remainingCost,
+		TradeID:              trade.ID,
+		Symbol:               trade.Symbol,
+		Depth:                filled,
+		MaxDepth:             ceiling,
+		Asset:                asset,
+		RemainingCost:        remainingCost,
+		PlannedRemainingCost: plannedRemainingCostAt(trade, filled, ceiling),
 	}
 }

@@ -55,23 +55,29 @@ func RemainingCost(trade aggragates.Trades) (string, float64) {
 // surface builds its whole wallet view through DepthOf — folding the same
 // history again per ladder is work the tick path pays for nothing.
 func remainingCostAt(trade aggragates.Trades, filled, ceiling int) (string, float64) {
-	asset := SpendingAsset(trade)
+	return SpendingAsset(trade), remainingCostFrom(trade, filled, ceiling, trade.PositionPrice)
+}
 
+// remainingCostFrom is the walk itself, down the grid from price. Both
+// readings of the remaining depths take it — RemainingCost from the position
+// price, the planned one from the ladder's last fill — so they can differ in
+// where the walk starts and nowhere else. A long walk with no price to start
+// from names no amount.
+func remainingCostFrom(trade aggragates.Trades, filled, ceiling int, price float64) float64 {
 	settings := trade.StrategyPair.StrategySettings
 	if len(settings) == 0 {
-		return asset, 0
+		return 0
 	}
 
 	if filled == 0 || ceiling <= 0 || filled >= ceiling {
-		return asset, 0
+		return 0
 	}
 
-	if !trade.Inverse && trade.PositionPrice <= 0 {
-		return asset, 0
+	if !trade.Inverse && price <= 0 {
+		return 0
 	}
 
 	quantity := plannedQuantityAtDepth(trade, filled)
-	price := trade.PositionPrice
 	cost := 0.0
 
 	for depth := filled; depth < ceiling; depth++ {
@@ -91,7 +97,7 @@ func remainingCostAt(trade aggragates.Trades, filled, ceiling int) (string, floa
 		cost += quantity * price
 	}
 
-	return asset, cost
+	return cost
 }
 
 // SpendingAsset is the side of the pair a ladder's entries spend: the quote

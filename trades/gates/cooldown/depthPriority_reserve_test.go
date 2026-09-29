@@ -18,8 +18,9 @@ import (
 // the one with the smallest remainder — so a gate that picked the CHEAPEST
 // candidate, or the dearest, would pass every such test. Writing the
 // remainders out separates the two questions the rule really asks: which
-// ladder the wallet is kept for (a depth, then a trade id), and how much is
-// kept for it (that ladder's own amount, whatever any other ladder needs).
+// ladder the wallet is kept for (a depth, then a planned cost, then a trade
+// id), and how much is kept for it (that ladder's own amount, whatever any
+// other ladder needs).
 
 // ruleDepths is the grid the managed trades of this file are configured for.
 const ruleDepths = 9
@@ -58,6 +59,14 @@ func ruleLadder(id uint, symbol string, depth, maxDepth int, asset string, remai
 	}
 }
 
+// rulePlanned is what the managed trade's remaining depths were planned to
+// cost from its last fill: the key two ladders at the same depth are split on
+// before their trade ids. A written-out row given the same one is level with
+// the trade on everything but the id.
+func rulePlanned(trade aggragates.Trades) float64 {
+	return ladder.DepthOf(trade).PlannedRemainingCost
+}
+
 // ruleKeeps is the fragment of the hold row that names the ladder the wallet
 // is being kept for.
 func ruleKeeps(keeper aggragates.LadderDepth) string {
@@ -92,19 +101,23 @@ func TestDepthPriorityRuleKeepsTheDeepestLaddersOwnRemainder(t *testing.T) {
 	}
 }
 
-// Two ladders at the same depth are both worth finishing, so the tie is
-// broken by the lowest trade id — and the loser is one of the others, held
-// for the WINNER's remainder. The two remainders are far apart here, so a
-// gate that named one ladder and reserved the other's amount would show.
+// Two ladders at the same depth and the same planned cost are both worth
+// finishing, so the tie is broken by the lowest trade id — and the loser is
+// one of the others, held for the WINNER's remainder. The two remainders are
+// far apart here, so a gate that named one ladder and reserved the other's
+// amount would show.
 func TestDepthPriorityRuleBreaksTiesOnTheLowestTradeIDAndHoldsTheLoser(t *testing.T) {
 	requireDepthPriority(t)
 
 	winner := ruleLadder(9, "DOT/USDT", 6, ruleDepths, ruleAsset, 1000)
 	loser := ruleLadder(14, "LINK/USDT", 6, ruleDepths, ruleAsset, 80000)
-	view := []aggragates.LadderDepth{loser, winner}
 
 	own := ruleTrade(loser.TradeID, loser.Symbol, loser.Depth)
 	ownCost := ruleCost(t, own)
+
+	winner.PlannedRemainingCost = rulePlanned(own)
+	loser.PlannedRemainingCost = rulePlanned(own)
+	view := []aggragates.LadderDepth{loser, winner}
 
 	reason := DepthPriorityHoldReason(priorityEvent(own, "buy", view, winner.RemainingCost+ownCost-1), "stopLoss")
 	if !strings.Contains(reason, ruleKeeps(winner)) {
@@ -207,8 +220,9 @@ func TestDepthPriorityRuleKeepsAFullLadderInFrontUntilItCloses(t *testing.T) {
 }
 
 // The managed trade is ranked with the rest, by the same ordering, so a
-// ladder level with the view's best is split from it on the trade id — and
-// when the split goes the managed trade's way it waits for nobody.
+// ladder level with the view's best — the same depth and the same planned
+// cost — is split from it on the trade id, and when the split goes the
+// managed trade's way it waits for nobody.
 //
 // It matters because a ladder is NOT in the view while it is blocked on its
 // next entry, and the tick it is re-admitted on is the tick it competes
@@ -229,6 +243,7 @@ func TestDepthPriorityRuleSplitsALevelManagedTradeOnTheTradeID(t *testing.T) {
 		ownCost := ruleCost(t, own)
 
 		keeper := ruleLadder(ids.view, "LINK/USDT", level, ruleDepths, ruleAsset, 100000)
+		keeper.PlannedRemainingCost = rulePlanned(own)
 		view := []aggragates.LadderDepth{keeper}
 
 		// A wallet far under both the reserve and the entry, so nothing but

@@ -175,8 +175,10 @@ func TestDepthPriorityRanksTheManagedTradeAgainstTheView(t *testing.T) {
 		t.Fatalf("the deepest ladder must not wait for a shallower one, got %q", reason)
 	}
 
-	// Level with the view's best: the lower trade id is in front, so the one
-	// below it buys and the one above it waits on a wallet that is short.
+	// Level with the view's best — the same depth, and the same planned cost
+	// since every ladder here is the one fixture — the lower trade id is in
+	// front, so the one below it buys and the one above it waits on a wallet
+	// that is short.
 	level := []aggragates.LadderDepth{walletLadder(12, "ETH/USDT", 4)}
 	lower := testutil.LadderDepthTrade(9, "DOT/USDT", 4, walletDepths)
 	higher := testutil.LadderDepthTrade(21, "ADA/USDT", 4, walletDepths)
@@ -277,11 +279,13 @@ func TestDepthPriorityNeverHoldsTheReservedLadder(t *testing.T) {
 	}
 }
 
-// Two ladders at the same depth are both worth finishing, so the wallet is
-// reserved for the lower trade id and the other one is simply one of the
-// others: equal depth is no exemption. Any deterministic choice would do;
-// what matters is that every engine makes the same one, and that the row does
-// not change its mind tick to tick.
+// Two ladders at the same depth and planned alike — the one fixture under two
+// ids — are both worth finishing, so the wallet is reserved for the lower
+// trade id and the other one is simply one of the others: equal depth is no
+// exemption. Any deterministic choice would do; what matters is that every
+// engine makes the same one, and that the row does not change its mind tick
+// to tick. Level ladders that planned differently are split on the plan
+// first (depthPriority_nextInLine_test.go).
 func TestDepthPriorityBreaksTiesOnTheLowestTradeID(t *testing.T) {
 	requireDepthPriority(t)
 

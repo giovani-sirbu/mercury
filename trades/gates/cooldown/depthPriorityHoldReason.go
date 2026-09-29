@@ -37,38 +37,18 @@ import (
 // a reserve at all. Measuring the money instead means the gate arms exactly
 // when the sums stop fitting and stays out of the way while they do.
 //
-// The reservation ends when the priority LEAVES the wallet view: it closes,
-// or it blocks on the very entry the wallet was being kept for and the
-// engines drop it. Filling its last depth does not end it. A full ladder
-// needs nothing more, so its reserve falls to nothing and every sibling the
-// wallet can pay for buys — that IS the release at the ceiling — but the
-// ladder stays in front until it closes, and a sibling the wallet cannot pay
-// for keeps waiting instead.
-//
-// Which is the whole reason a full ladder stays in front. Ending its
-// candidacy there releases every waiting sibling in the same instant, into a
-// wallet the priority has just spent down to its last depth: each one reaches
-// the funds gate and is BLOCKED rather than held. A blocked ladder leaves the
-// view, so by the time the priority closes and refills the wallet the deepest
-// siblings are no longer in it, and the shallowest ladder still active
-// inherits the wallet and holds the re-admitted deeper ones behind it — the
-// ranking inverted by an accident of timing. Held, a sibling stays active,
-// stays in the view, keeps its rank, and resumes on the tick the close
-// refills the wallet.
-//
-// A ladder the engine still lets add past its ceiling is its own priority
-// under this rule, so nothing here holds it; whether that entry is placed is
-// the funds gate's call alone, exactly as it was before this gate existed.
-//
-// A ladder blocked on its next entry never reserves the wallet. It cannot
-// take the entry it is blocked on, so the others would wait for a retry that
-// only a close could fund, and the wallet would starve with money in it — the
-// situation this gate exists to prevent. The engines keep such a ladder out of
-// the view they build, so membership is theirs. It costs the blocked ladder
-// nothing but the reservation — once the wallet can afford its entry it
-// competes again, and while a deeper active ladder stands it is held like any
-// other, because the managed trade's own depth and cost are read from the
-// trade it is asked about, never from the view.
+// Which ladder the wallet is kept for is the ranking's call, set out beside
+// it in depthPriorityFor.go. The deepest ladder is in front, and of two at the
+// same depth the one planned cheaper to finish from its last fill, then the
+// lower trade id — a key that stands still between fills, where the reserve's
+// own amount moves with the position price. A FULL ladder keeps its place in
+// front until it closes but keeps nothing, so while it stands there the
+// wallet is kept for the next ladder in line that still has depths left; with
+// no such ladder ahead, every entry the wallet can pay for buys — that IS the
+// release at the ceiling — and one it cannot pay for waits. A ladder blocked
+// on its next entry reserves the wallet only once the wallet can re-admit it,
+// and the managed trade's own depth and costs are always read from the trade
+// it is asked about, never from the view.
 //
 // Ladders are compared only against the ones spending the same asset: a long
 // ladder spends the quote side of its pair and an inverse one the base side,
@@ -110,6 +90,11 @@ func DepthPriorityApplies(params aggragates.StrategyParams, oldPosition, positio
 
 	return oldPosition == "new" || gates.PositionType(position) == "stopLoss"
 }
+
+// DepthPriorityHoldMarker opens every depth priority hold reason
+// (depthPriorityHoldMessage). The smart take loss finds the gate's rows by it
+// anywhere in the message (strings.Contains), so it must stay byte-stable.
+const DepthPriorityHoldMarker = "cooldown: depth priority"
 
 // DepthPriorityHoldReason is the gate. Empty means the chain may proceed.
 // The caller owns the flag, exactly like DepthSpacingHoldReason.
@@ -166,13 +151,13 @@ func DepthPriorityHoldReason(event events.Events, position string) string {
 func depthPriorityHoldMessage(priority, own aggragates.LadderDepth) string {
 	if priority.Depth >= priority.MaxDepth {
 		return fmt.Sprintf(
-			"cooldown: depth priority, %s at depth %d of %d holds the wallet until it closes, this ladder waits at depth %d of %d",
+			DepthPriorityHoldMarker+", %s at depth %d of %d holds the wallet until it closes, this ladder waits at depth %d of %d",
 			priority.Symbol, priority.Depth, priority.MaxDepth, own.Depth, own.MaxDepth,
 		)
 	}
 
 	return fmt.Sprintf(
-		"cooldown: depth priority, %s at depth %d of %d keeps the wallet for its remaining depths, this ladder waits at depth %d of %d",
+		DepthPriorityHoldMarker+", %s at depth %d of %d keeps the wallet for its remaining depths, this ladder waits at depth %d of %d",
 		priority.Symbol, priority.Depth, priority.MaxDepth, own.Depth, own.MaxDepth,
 	)
 }
@@ -204,89 +189,10 @@ func walletFreeFor(event events.Events, asset string) (float64, bool) {
 	return 0, false
 }
 
-// depthPriorityFor names the ladder the wallet is in front of, as far as own
-// is concerned: the best candidate of the view spending the same asset, but
-// only when own does not outrank it. Pure, so the rule can be exercised
-// without an event.
-//
-// own takes part in the ranking like any other ladder, and that is deliberate
-// even though a blocked own is NOT in the view. The view is what the OTHER
-// ladders of the wallet see; the trade being ticked knows its own depth
-// first-hand, and a ladder that is out of the view only because it could not
-// afford its entry has not stopped being the deepest one. Judging it against
-// the view alone would park it behind a shallower ladder the moment the
-// wallet could pay for it again, which is the inversion this gate exists to
-// avoid.
-//
-// It also makes "a ladder never waits for itself" a consequence rather than a
-// rule: an active own IS in the view, so it meets itself as the best
-// candidate, ties on its own id, and outranks it.
-func depthPriorityFor(own aggragates.LadderDepth, ladders []aggragates.LadderDepth) (aggragates.LadderDepth, bool) {
-	priority, found := deepestDepthPriorityCandidate(ladders, own.Asset)
-	if !found {
-		return aggragates.LadderDepth{}, false
-	}
-
-	if isDepthPriorityCandidate(own) && !outranksDepthPriority(priority, own) {
-		return aggragates.LadderDepth{}, false
-	}
-
-	return priority, true
-}
-
-// outranksDepthPriority is the one ordering every part of this gate ranks
-// by: the deeper ladder is in front, and ladders at the same depth are split
-// by the lower trade id so every engine names the same one and the hold row
-// stays stable while two of them sit level.
-func outranksDepthPriority(candidate, against aggragates.LadderDepth) bool {
-	if candidate.Depth != against.Depth {
-		return candidate.Depth > against.Depth
-	}
-
-	return candidate.TradeID < against.TradeID
-}
-
 // depthPriorityHolds is the reserve itself: the entry waits when placing it
 // would leave the wallet under what the reserved ladder still needs. Level
 // with it is not under it — a wallet that covers both lets everybody buy,
 // which is what keeps the reserve from being a queue.
 func depthPriorityHolds(ownCost, free, reserve float64) bool {
 	return free-ownCost < reserve
-}
-
-// deepestDepthPriorityCandidate picks the ladder of the view the wallet is in
-// front of: the best candidate spending the same asset, by the one ordering
-// above.
-func deepestDepthPriorityCandidate(ladders []aggragates.LadderDepth, asset string) (aggragates.LadderDepth, bool) {
-	var priority aggragates.LadderDepth
-	found := false
-
-	for _, candidate := range ladders {
-		if candidate.Asset != asset || !isDepthPriorityCandidate(candidate) {
-			continue
-		}
-		if !found || outranksDepthPriority(candidate, priority) {
-			priority, found = candidate, true
-		}
-	}
-
-	return priority, found
-}
-
-// isDepthPriorityCandidate is the ladder worth putting in front of the
-// wallet: one that has filled at least one entry, on a pair whose configured
-// depths are known. A ladder with no fills has no position to finish, and one
-// whose pair carries no settings row has no ladder to speak of at all.
-//
-// A FULL ladder is still a candidate. It needs nothing more — its remaining
-// cost is nothing, so it holds only what the wallet cannot pay for anyway —
-// but it keeps its place until it closes, because that close is what refills
-// the wallet, and a sibling released before it lands is a sibling the funds
-// gate blocks out of the view entirely.
-func isDepthPriorityCandidate(candidate aggragates.LadderDepth) bool {
-	if candidate.MaxDepth <= 0 {
-		return false
-	}
-
-	return candidate.Depth >= 1
 }
