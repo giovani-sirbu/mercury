@@ -32,18 +32,32 @@
 // opened without an opened row trades its configured rows until it closes.
 // The next ladder consults the reads again when it opens.
 //
-// The raised rows reach exactly two places, both handed over per tick by the
-// engines from RaisedSettings: the strategies.Strategy.Settings the position
-// is computed from, and aggragates.Params.EntrySettings, which the first entry
-// of a ladder that opens raised is sized with (aggragates.Params.SizingTrade).
-// The extra depths therefore exist only for such a ladder: a running one
-// gains no funding. Every other reader keeps the rows the trade stores — the
-// depth priority's own depth and its view of the wallet's ladders, the smart
-// take loss's last depth, regulatePriceChange, the minimum profit, the hold
-// levels, the backtest's skip gates and every entry after the first. RaiseBy
-// returns a copy and never touches the stored rows, which the backtest shares
-// with its run's snapshot and writes back to memory after every tick, so a
-// raise cannot compound from one tick to the next.
+// The raised rows reach two kinds of reader. The engines hand them per tick
+// from RaisedSettings to the strategies.Strategy.Settings the position is
+// computed from and to aggragates.Params.EntrySettings, which the first entry
+// of a ladder that opens raised is sized with (aggragates.Params.SizingTrade):
+// the extra depths therefore exist only for such a ladder, a running one
+// gains no funding. And the readers of the ladder's DEPTHS take them off the
+// trade's own logs, by calling RaisedSettings themselves:
+// ladder.ConfiguredDepths is the ceiling of the raised rows, ladder.RemainingCost
+// walks the depths the row added at the raised percentage, and ladder.DepthOf
+// carries both into the wallet view of the cooldown depth priority, which every
+// surface builds with it — the managed trade's own reading, sisyphus's
+// backtest and live-testing engines, agora for hermes.
+//
+// A ladder that opened raised is therefore full only at its raised ceiling and
+// keeps the wallet for the depths its row added, on whichever surface asks.
+// Measured against the stored rows it would read as full at the depth its own
+// first entry was sized to go past, reserve nothing for its largest entries,
+// and be funds-blocked on them once its siblings have spent the wallet. The
+// smart take loss's last depth reads the ceiling through ladder.ConfiguredDepths
+// and follows it. Every other reader keeps the rows the trade stores: the cost
+// of an add (ladder.NextEntryCost), which only the multiplier shapes,
+// regulatePriceChange, the minimum profit, the hold levels, the backtest's skip
+// gates and every entry after the first. RaiseBy returns a copy and never
+// touches the stored rows, which the backtest shares with its run's snapshot
+// and writes back to memory after every tick, so a raise cannot compound from
+// one tick to the next.
 //
 // The flag applies to long spot parent ladders only (Applies). It holds
 // nothing and gates no entry; it only fetches the /smc-trend route its reads

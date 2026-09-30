@@ -22,12 +22,16 @@ import "github.com/giovani-sirbu/mercury/trades/aggragates"
 // without a position price included: both describe the same remaining depths,
 // and a ladder the view says reserves nothing ranks as one with nothing left
 // to pay for.
-func plannedRemainingCostAt(trade aggragates.Trades, filled, ceiling int) float64 {
+//
+// settings are the rows the ladder trades (tradedSettings), the ones the
+// ceiling was read from, so a ladder that opened raised is ranked on the cost
+// of the raised depths it still has to fill.
+func plannedRemainingCostAt(trade aggragates.Trades, settings []aggragates.StrategySettings, filled, ceiling int) float64 {
 	if !trade.Inverse && trade.PositionPrice <= 0 {
 		return 0
 	}
 
-	return remainingCostFrom(trade, filled, ceiling, lastEntryPrice(trade))
+	return remainingCostFrom(trade, settings, filled, ceiling, lastEntryPrice(trade))
 }
 
 // lastEntryPrice is the price of the ladder's latest entry, read in history

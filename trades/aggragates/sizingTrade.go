@@ -8,6 +8,11 @@ package aggragates
 // copy is the sizing reader's alone — it never reaches a chain, a log row or
 // storage. A trade with fills comes back as it is, so an add read through it
 // stays on the trade's rows.
+//
+// It is the first entry's rows alone. The ceiling a ladder is measured
+// against — its depths and what they cost — is read on the rows it trades by
+// the depth readers themselves (ladder.ConfiguredDepths, ladder.DepthOf), off
+// the trade's own logs, and never through here.
 func (p Params) SizingTrade(trade Trades) Trades {
 	if len(p.EntrySettings) == 0 || len(trade.History) > 0 {
 		return trade

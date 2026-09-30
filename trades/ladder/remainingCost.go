@@ -7,8 +7,15 @@ import (
 )
 
 // RemainingCost is the ladder's remaining PLANNED budget: what the entries
-// from its next depth through its last configured one were sized to cost,
-// together with the asset it spends them in.
+// from its next depth through its own ceiling (ConfiguredDepths) were sized to
+// cost, together with the asset it spends them in.
+//
+// The rows it walks are the ones the ladder trades (tradedSettings): a ladder
+// that opened raised walks the raised rows, so the depths its opened row added
+// are reserved for at the raised percentage and multiplier — the depths its
+// first entry was sized for. Read on the stored rows it would report nothing
+// left to pay for at the stored ceiling, and the wallet would be spent from
+// under the largest entries the grid places.
 //
 // It is the amount the cooldown depth-priority gate reserves the wallet for.
 // A depth alone says nothing about money — a ladder can be one entry from its
@@ -47,24 +54,28 @@ import (
 // multiply), one whose pair carries no settings row, one with no configured
 // ceiling or already at it, and a long one without a position price.
 func RemainingCost(trade aggragates.Trades) (string, float64) {
-	return remainingCostAt(trade, CountFilledEntries(trade), ConfiguredDepths(trade))
+	settings := tradedSettings(trade)
+	filled := CountFilledEntries(trade)
+
+	return remainingCostAt(trade, settings, filled, ceilingOf(settings, filled))
 }
 
-// remainingCostAt is RemainingCost for a caller that has already counted the
-// ladder's filled entries and read its ceiling. DepthOf holds both, and every
-// surface builds its whole wallet view through DepthOf — folding the same
-// history again per ladder is work the tick path pays for nothing.
-func remainingCostAt(trade aggragates.Trades, filled, ceiling int) (string, float64) {
-	return SpendingAsset(trade), remainingCostFrom(trade, filled, ceiling, trade.PositionPrice)
+// remainingCostAt is RemainingCost for a caller that already holds the rows the
+// ladder trades, has counted its filled entries and has read its ceiling.
+// DepthOf holds all three, and every surface builds its whole wallet view
+// through DepthOf — folding the same history, or the same logs, again per
+// ladder is work the tick path pays for nothing.
+func remainingCostAt(trade aggragates.Trades, settings []aggragates.StrategySettings, filled, ceiling int) (string, float64) {
+	return SpendingAsset(trade), remainingCostFrom(trade, settings, filled, ceiling, trade.PositionPrice)
 }
 
 // remainingCostFrom is the walk itself, down the grid from price. Both
 // readings of the remaining depths take it — RemainingCost from the position
 // price, the planned one from the ladder's last fill — so they can differ in
-// where the walk starts and nowhere else. A long walk with no price to start
-// from names no amount.
-func remainingCostFrom(trade aggragates.Trades, filled, ceiling int, price float64) float64 {
-	settings := trade.StrategyPair.StrategySettings
+// where the walk starts and nowhere else. settings are the rows the ladder
+// trades (tradedSettings), read once by the caller. A long walk with no price
+// to start from names no amount.
+func remainingCostFrom(trade aggragates.Trades, settings []aggragates.StrategySettings, filled, ceiling int, price float64) float64 {
 	if len(settings) == 0 {
 		return 0
 	}
@@ -77,7 +88,7 @@ func remainingCostFrom(trade aggragates.Trades, filled, ceiling int, price float
 		return 0
 	}
 
-	quantity := plannedQuantityAtDepth(trade, filled)
+	quantity := plannedQuantityAtDepth(trade, settings, filled)
 	cost := 0.0
 
 	for depth := filled; depth < ceiling; depth++ {
@@ -124,10 +135,10 @@ func SpendingAsset(trade aggragates.Trades) string {
 // plannedQuantityAtDepth is what the ladder's entry at the given depth was
 // laid out to be: the first entry's quantity — the initial bid the whole grid
 // is built from — taken through the multiplier of every row the entries after
-// it read. It is the quantity the grid commits to, so it does not move while
-// an entry is settling.
-func plannedQuantityAtDepth(trade aggragates.Trades, depth int) float64 {
-	settings := trade.StrategyPair.StrategySettings
+// it read, out of settings — the rows the ladder trades (tradedSettings). It is
+// the quantity the grid commits to, so it does not move while an entry is
+// settling.
+func plannedQuantityAtDepth(trade aggragates.Trades, settings []aggragates.StrategySettings, depth int) float64 {
 	quantity := firstEntryQuantity(trade)
 
 	// Entry k+1 reads row k, the row-selection contract every ladder read

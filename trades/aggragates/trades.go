@@ -121,7 +121,9 @@ type (
 		// cooldown depth-priority gate reads it to find the deepest ladder
 		// that has filled at least one entry, and then what that ladder says
 		// its remaining entries cost — the amount the wallet is kept for. A
-		// full ladder keeps its place at a reserve of zero until it closes.
+		// full ladder keeps its place at a reserve of zero until it closes; full
+		// means full at the ceiling of the rows the ladder trades, which a
+		// ladder that opened raised has read off its own logs (ladder.DepthOf).
 		// Set by the engines only on the ticks
 		// cooldown.DepthPriorityApplies says can consume it; nil elsewhere,
 		// and a nil slice holds nothing.
@@ -143,8 +145,10 @@ type (
 		// with when set; nil leaves it on the trade's own rows. The engines
 		// set it to the rows dynamicparams.RaisedSettings raises, on the
 		// ticks it raises them. Only the first-entry sizing reads it, through
-		// SizingTrade: the adds, the gates and everything written keep the
-		// trade's rows. Never persisted.
+		// SizingTrade: the adds and everything written keep the trade's rows.
+		// The readers of the ladder's depths do not take the raise from here —
+		// they read it off the trade's own logs, so a wallet view built from
+		// a trade alone agrees with the engine that ticks it. Never persisted.
 		EntrySettings []StrategySettings
 	}
 )
