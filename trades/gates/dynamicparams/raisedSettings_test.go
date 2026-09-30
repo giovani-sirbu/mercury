@@ -10,30 +10,51 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
-// A trade the flag does not apply to, and reads that raise nothing, hand back
-// the stored rows themselves and false: the engine then changes nothing.
+// openedRaised is the flagged ladder carrying the opened row the shipped
+// constants write for both reads bearish.
+func openedRaised() aggragates.Trades {
+	return withRows(flaggedTrade(), dynamicparams.OpenedMessage(dynamicparams.BearPercentagePoints, dynamicparams.BearDepths))
+}
+
+// raisedByTheConstants is the three-row ladder raised by both amounts the
+// constants name, each row once.
+func raisedByTheConstants() []aggragates.StrategySettings {
+	rows := threeRowLadder()
+	for index := range rows {
+		rows[index].Percentage += dynamicparams.BearPercentagePoints
+		rows[index].Depths += float64(dynamicparams.BearDepths)
+	}
+	return rows
+}
+
+// A trade without an opened row, a trade the flag does not shape whatever
+// row it carries, and a row whose amounts raise nothing hand back the stored
+// rows themselves and false: the engine then changes nothing.
 func TestRaisedSettingsLeavesTheStoredRowsWhenNothingIsRaised(t *testing.T) {
 	cases := []struct {
 		name   string
 		change func(*aggragates.Trades)
-		reads  aggragates.DynamicParamsIndicators
 	}{
-		{"the flag off", func(trade *aggragates.Trades) { trade.Strategy.Params.DynamicParams = false }, bothBearish},
-		{"an inverse ladder", func(trade *aggragates.Trades) { trade.Inverse = true }, bothBearish},
-		{"a futures strategy", func(trade *aggragates.Trades) { trade.Strategy.TradeType = aggragates.Futures }, bothBearish},
-		{"an impasse child", func(trade *aggragates.Trades) { trade.ParentID = 7 }, bothBearish},
-		{"reads not bearish", func(*aggragates.Trades) {}, notBearish},
-		{"reads not read", func(*aggragates.Trades) {}, notRead},
-		{"the zero read", func(*aggragates.Trades) {}, aggragates.DynamicParamsIndicators{}},
+		{"no opened row", func(trade *aggragates.Trades) { trade.Logs = nil }},
+		{"only the per-tick rows an earlier release wrote", func(trade *aggragates.Trades) {
+			*trade = withRows(*trade, "dynamic params: 1D Super Guppy bearish, BMSB bearish: both bearish, percentage +0.5 and depths +1 on every row")
+		}},
+		{"an opened row raising nothing", func(trade *aggragates.Trades) {
+			*trade = withRows(*trade, "dynamic params: opened raised, on every row")
+		}},
+		{"the flag off", func(trade *aggragates.Trades) { trade.Strategy.Params.DynamicParams = false }},
+		{"an inverse ladder", func(trade *aggragates.Trades) { trade.Inverse = true }},
+		{"a futures strategy", func(trade *aggragates.Trades) { trade.Strategy.TradeType = aggragates.Futures }},
+		{"an impasse child", func(trade *aggragates.Trades) { trade.ParentID = 7 }},
 	}
 
 	for _, c := range cases {
-		trade := flaggedTrade()
+		trade := openedRaised()
 		c.change(&trade)
 		stored := trade.StrategyPair.StrategySettings
 		before := cloneRows(stored)
 
-		got, raised := dynamicparams.RaisedSettings(trade, c.reads)
+		got, raised := dynamicparams.RaisedSettings(trade)
 		if raised {
 			t.Errorf("%s: RaisedSettings reported a raise", c.name)
 		}
@@ -45,89 +66,62 @@ func TestRaisedSettingsLeavesTheStoredRowsWhenNothingIsRaised(t *testing.T) {
 		}
 	}
 
-	noRows := flaggedTrade()
+	noRows := openedRaised()
 	noRows.StrategyPair.StrategySettings = nil
-	if got, raised := dynamicparams.RaisedSettings(noRows, bothBearish); raised || got != nil {
+	if got, raised := dynamicparams.RaisedSettings(noRows); raised || got != nil {
 		t.Errorf("a trade without rows: RaisedSettings = %v, %v, want nil and false", got, raised)
 	}
 }
 
-// Bearish reads on a trade the flag applies to raise a copy of every row,
-// and the stored rows stay exactly as they were.
-func TestRaisedSettingsRaisesACopyOfEveryRow(t *testing.T) {
-	mixedPercentage, mixedDepths := mixedRaises()
-
-	cases := []struct {
-		name       string
-		reads      aggragates.DynamicParamsIndicators
-		percentage bool
-		depths     bool
-	}{
-		{"both bearish", bothBearish, true, true},
-		{"mixed", mixedRead, mixedPercentage, mixedDepths},
-	}
-
-	for _, c := range cases {
-		if !c.percentage && !c.depths {
-			continue
-		}
-
-		trade := flaggedTrade()
+// An opened row raises a copy of every row by the amounts it carries, only
+// the parts it names, and the stored rows stay exactly as they were.
+func TestRaisedSettingsRaisesACopyOfEveryRowByTheRowsAmounts(t *testing.T) {
+	for name, amounts := range raiseAmounts {
+		trade := withRows(flaggedTrade(), dynamicparams.OpenedMessage(amounts.points, amounts.depths))
 		stored := trade.StrategyPair.StrategySettings
 		before := cloneRows(stored)
 
-		got, raised := dynamicparams.RaisedSettings(trade, c.reads)
+		got, raised := dynamicparams.RaisedSettings(trade)
 		if !raised {
-			t.Fatalf("%s: RaisedSettings must report the raise", c.name)
+			t.Fatalf("%s: RaisedSettings must report the raise", name)
 		}
 		if &got[0] == &stored[0] {
-			t.Fatalf("%s: the raised rows must be a copy", c.name)
+			t.Fatalf("%s: the raised rows must be a copy", name)
 		}
 		if !reflect.DeepEqual(stored, before) {
-			t.Fatalf("%s: the stored rows moved: %+v, want %+v", c.name, stored, before)
+			t.Fatalf("%s: the stored rows moved: %+v, want %+v", name, stored, before)
 		}
 
 		for index := range before {
-			wantPercentage := before[index].Percentage
-			if c.percentage {
-				wantPercentage += dynamicparams.BearPercentagePoints
-			}
-			wantDepths := before[index].Depths
-			if c.depths {
-				wantDepths += float64(dynamicparams.BearDepths)
-			}
+			wantPercentage := before[index].Percentage + amounts.points
+			wantDepths := before[index].Depths + float64(amounts.depths)
 			if got[index].Percentage != wantPercentage || got[index].Depths != wantDepths {
-				t.Errorf("%s row %d: %v%% over %v depths, want %v%% over %v", c.name, index,
+				t.Errorf("%s row %d: %v%% over %v depths, want %v%% over %v", name, index,
 					got[index].Percentage, got[index].Depths, wantPercentage, wantDepths)
 			}
 		}
 	}
 }
 
-// Every tick raises the configured rows afresh: two ticks under the same
-// bearish reads, off the one stored trade, read the configured rows plus the
-// amounts both times — never twice the amounts — because the raise is never
-// written back for a later tick to raise again.
+// Every tick raises the configured rows afresh: two ticks off the one stored
+// trade read the configured rows plus the row's amounts both times — never
+// twice the amounts — because the raise is never written back for a later
+// tick to raise again.
 func TestRaisedSettingsNeverCompounds(t *testing.T) {
-	trade := flaggedTrade()
-	configured := cloneRows(trade.StrategyPair.StrategySettings)
+	trade := openedRaised()
+	want := raisedByTheConstants()
 
-	first, _ := dynamicparams.RaisedSettings(trade, bothBearish)
-	second, _ := dynamicparams.RaisedSettings(trade, bothBearish)
+	first, _ := dynamicparams.RaisedSettings(trade)
+	second, _ := dynamicparams.RaisedSettings(trade)
 
 	for tick, rows := range [][]aggragates.StrategySettings{first, second} {
-		for index := range configured {
-			wantPercentage := configured[index].Percentage + dynamicparams.BearPercentagePoints
-			wantDepths := configured[index].Depths + float64(dynamicparams.BearDepths)
-			if rows[index].Percentage != wantPercentage || rows[index].Depths != wantDepths {
-				t.Errorf("tick %d row %d: %v%% over %v depths, want %v%% over %v", tick+1, index,
-					rows[index].Percentage, rows[index].Depths, wantPercentage, wantDepths)
-			}
+		if !reflect.DeepEqual(rows, want) {
+			t.Errorf("tick %d: %+v, want the configured rows raised once %+v", tick+1, rows, want)
 		}
 	}
 }
 
-// The first entry of a ladder that opens while raised is sized for the extra
+// The first entry of a ladder that opens raised is sized for the extra
 // depth: ladder.CalculateInitialBid on the sizing copy the chain's
 // EntrySettings make sizes the raised row — its depths plus BearDepths at its
 // percentage plus BearPercentagePoints — a smaller first entry than the
@@ -135,13 +129,13 @@ func TestRaisedSettingsNeverCompounds(t *testing.T) {
 func TestRaisedSettingsSizeTheFirstEntryForTheExtraDepth(t *testing.T) {
 	const budget = 10000.0
 
-	trade := flaggedTrade()
+	trade := openedRaised()
 	stored := trade.StrategyPair.StrategySettings
 	configured := cloneRows(stored)
 
-	rows, raised := dynamicparams.RaisedSettings(trade, bothBearish)
+	rows, raised := dynamicparams.RaisedSettings(trade)
 	if !raised {
-		t.Fatal("both bearish reads must raise the rows")
+		t.Fatal("the opened row must raise the rows")
 	}
 
 	sizing := aggragates.Params{EntrySettings: rows}.SizingTrade(trade)

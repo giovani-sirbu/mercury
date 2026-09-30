@@ -2,7 +2,6 @@ package dynamicparams
 
 import (
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -11,21 +10,36 @@ import (
 
 // scenarioReads is a run of ticks whose reads flip the way the forming daily
 // bar can flip them on any close of the chart bar: nothing read, both bearish
-// and staying so, the bearish read passing from one row to the other, a
-// neutral read, a bull turn, both bearish again, an outage over stale bearish
-// reads, and both bearish once more.
+// and staying so, mixed, a bull turn, an outage over stale bearish reads, a
+// neutral read, mixed on the other row, both bearish again, mixed, a bull
+// turn and both bearish once more.
 var scenarioReads = []aggragates.DynamicParamsIndicators{
 	{},
 	{Timeframe: "1D", Guppy: -1, BMSB: -1, Valid: true},
 	{Timeframe: "1D", Guppy: -1, BMSB: -1, Valid: true},
 	{Timeframe: "1D", Guppy: -1, BMSB: 0, Valid: true},
-	{Timeframe: "1D", Guppy: 1, BMSB: -1, Valid: true},
+	{Timeframe: "1D", Guppy: 1, BMSB: 1, Valid: true},
+	{Timeframe: "1D", Guppy: -1, BMSB: -1},
 	{Timeframe: "1D", Guppy: 0, BMSB: 0, Valid: true},
+	{Timeframe: "1D", Guppy: 1, BMSB: -1, Valid: true},
+	{Timeframe: "1D", Guppy: -1, BMSB: -1, Valid: true},
 	{Timeframe: "1D", Guppy: -1, BMSB: 1, Valid: true},
 	{Timeframe: "1D", Guppy: 1, BMSB: 1, Valid: true},
 	{Timeframe: "1D", Guppy: -1, BMSB: -1, Valid: true},
-	{Timeframe: "1D", Guppy: -1, BMSB: -1},
-	{Timeframe: "1D", Guppy: -1, BMSB: -1, Valid: true},
+}
+
+// scenarioLadders are the ladders of the run, one after the other: each is
+// judged from its first tick, its first entry fills at the end of the tick
+// fillsAt names, and it closes after its last tick, when the next opens.
+var scenarioLadders = []struct {
+	name    string
+	first   int
+	fillsAt int
+	last    int
+}{
+	{"a ladder whose first entry is held until the reads turn", 0, 2, 5},
+	{"a ladder that opens on its configured rows", 6, 6, 8},
+	{"the next ladder, opening on the then-current reads", 9, 9, 11},
 }
 
 // scenarioBearish counts a block's bearish reads the way the flag's rule is
@@ -44,18 +58,28 @@ func scenarioBearish(reads aggragates.DynamicParamsIndicators) int {
 	return count
 }
 
-// scenarioRaises is what the rule raises for a count of bearish reads, apart
-// from raiseFor: both raise the percentage and the depths, one raises what the
-// mixed increase names, none raises nothing.
-func scenarioRaises(bearish int, mixed Increase) (percentage bool, depths bool) {
+// scenarioAmounts is what the rule adds for a count of bearish reads, apart
+// from raiseFor and increaseAmounts: both raise the percentage and the
+// depths, one raises what the mixed increase names, none raises nothing.
+func scenarioAmounts(bearish int, mixed Increase) (float64, int) {
+	percentage, depths := false, false
 	switch bearish {
 	case 2:
-		return true, true
+		percentage, depths = true, true
 	case 1:
-		return mixed == IncreasePercentage || mixed == IncreaseBoth, mixed == IncreaseDepths || mixed == IncreaseBoth
-	default:
-		return false, false
+		percentage = mixed == IncreasePercentage || mixed == IncreaseBoth
+		depths = mixed == IncreaseDepths || mixed == IncreaseBoth
 	}
+
+	var points float64
+	if percentage {
+		points = BearPercentagePoints
+	}
+	var added int
+	if depths {
+		added = BearDepths
+	}
+	return points, added
 }
 
 // scenarioLadder is a row-per-depth ladder whose rows differ in every field a
@@ -68,87 +92,118 @@ func scenarioLadder() []aggragates.StrategySettings {
 	}
 }
 
-// Tick by tick over a run of flipping reads, under every increase the mixed
-// tier can name: each tick trades the configured rows plus exactly the amounts
-// its own reads name — on every row, in the named fields only — and never the
-// rows a tick before it raised; a tick that raises nothing trades the very
-// configured slice, and one that raises trades a copy. The configured rows
-// never move. An edge falls on exactly the ticks whose effective increase
-// differs from the tick before — a tier change that keeps it is none — and
-// its row names what that tick raises. Under the shipped MixedIncrease the
-// calls the engines make (RaisedSettings, Adjust, Changed, TransitionMessage)
-// answer the same run the same way.
-func TestScenarioEveryTickRaisesTheConfiguredRowsAfresh(t *testing.T) {
-	points := "percentage +" + strconv.FormatFloat(BearPercentagePoints, 'f', -1, 64)
-	depths := "depths +" + strconv.Itoa(BearDepths)
+// scenarioTrade is a flagged long spot parent before its first entry, on the
+// stored rows.
+func scenarioTrade(stored []aggragates.StrategySettings) aggragates.Trades {
+	trade := aggragates.Trades{PositionType: "new"}
+	trade.Strategy.TradeType = aggragates.Spot
+	trade.Strategy.Params.DynamicParams = true
+	trade.StrategyPair.StrategySettings = stored
+	return trade
+}
 
+// Tick by tick over a run of flipping reads, under every increase the mixed
+// tier can name, ladder after ladder: a ladder consults the reads only until
+// its first entry fills, and writes its opened row on the first of those
+// ticks whose reads raise something, naming the amounts the constants give
+// them. From then on — through bull turns, outages, mixed and both-bearish
+// reads — it trades the configured rows raised by exactly those amounts and
+// writes nothing more; a ladder that opened on reads raising nothing trades
+// the very configured slice for life. The next ladder opens on the reads of
+// its own first tick. The configured rows never move. Under the shipped
+// MixedIncrease the calls the engines make (Opening, RaisedSettings,
+// OpenedRaise) answer the same run the same way.
+func TestScenarioALadderTradesTheRaiseItOpenedWith(t *testing.T) {
 	for _, mixed := range []Increase{IncreasePercentage, IncreaseDepths, IncreaseBoth, IncreaseNone} {
 		stored := scenarioLadder()
 		configured := scenarioLadder()
-		trade := aggragates.Trades{PositionType: "buy", PositionPrice: 100}
-		trade.Strategy.TradeType = aggragates.Spot
-		trade.Strategy.Params.DynamicParams = true
-		trade.StrategyPair.StrategySettings = stored
+		raisedLadders, configuredLadders := 0, 0
 
-		var previous aggragates.DynamicParamsIndicators
-		edges := 0
-		for tick, reads := range scenarioReads {
-			raisesPercentage, raisesDepths := scenarioRaises(scenarioBearish(reads), mixed)
-			changes := (raisesPercentage && BearPercentagePoints != 0) || (raisesDepths && BearDepths != 0)
+		for _, plan := range scenarioLadders {
+			trade := scenarioTrade(stored)
+			openedAt := -1
+			var points float64
+			var depths int
 
-			rows := raiseRows(stored, raiseFor(TierOf(reads), mixed))
-			if sameSlice := &rows[0] == &stored[0]; sameSlice == changes {
-				t.Fatalf("mixed %q tick %d: raising %v, handed the configured slice itself %v", mixed, tick, changes, sameSlice)
-			}
-			for index, row := range configured {
-				if raisesPercentage {
-					row.Percentage += BearPercentagePoints
+			for tick := plan.first; tick <= plan.last; tick++ {
+				reads := scenarioReads[tick]
+				if openedAt < 0 && tick <= plan.fillsAt {
+					if tickPoints, tickDepths := scenarioAmounts(scenarioBearish(reads), mixed); tickPoints != 0 || tickDepths != 0 {
+						openedAt, points, depths = tick, tickPoints, tickDepths
+					}
 				}
-				if raisesDepths {
-					row.Depths += float64(BearDepths)
+
+				message, ok := openingFor(trade, reads, mixed)
+				if ok != (tick == openedAt) {
+					t.Fatalf("mixed %q, %s, tick %d: the ladder was handed a row %v, want %v", mixed, plan.name, tick, ok, tick == openedAt)
 				}
-				if !reflect.DeepEqual(rows[index], row) {
-					t.Fatalf("mixed %q tick %d row %d: %+v, want the configured row raised once %+v", mixed, tick, index, rows[index], row)
+				if mixed == MixedIncrease {
+					if engineMessage, engineOK := Opening(trade, reads); engineMessage != message || engineOK != ok {
+						t.Fatalf("tick %d: Opening = %q, %v, want %q, %v", tick, engineMessage, engineOK, message, ok)
+					}
 				}
-			}
-			if !reflect.DeepEqual(stored, configured) {
-				t.Fatalf("mixed %q tick %d: the configured rows moved: %+v", mixed, tick, stored)
+				if ok {
+					if message != OpenedMessage(points, depths) {
+						t.Fatalf("mixed %q, %s, tick %d: the row %q does not name the amounts %v and %d", mixed, plan.name, tick, message, points, depths)
+					}
+					trade.Logs = append(trade.Logs, aggragates.TradesLogs{Message: message, Type: aggragates.LOG_INFO})
+				}
+
+				rows, raised := RaisedSettings(trade)
+				opened := openedAt >= 0 && tick >= openedAt
+				if raised != opened {
+					t.Fatalf("mixed %q, %s, tick %d: RaisedSettings raised %v, want %v", mixed, plan.name, tick, raised, opened)
+				}
+				if !opened && &rows[0] != &stored[0] {
+					t.Fatalf("mixed %q, %s, tick %d: a ladder on its configured rows must trade the very configured slice", mixed, plan.name, tick)
+				}
+				for index, row := range configured {
+					if opened {
+						row.Percentage += points
+						row.Depths += float64(depths)
+					}
+					if !reflect.DeepEqual(rows[index], row) {
+						t.Fatalf("mixed %q, %s, tick %d row %d: %+v, want %+v", mixed, plan.name, tick, index, rows[index], row)
+					}
+				}
+				wantPoints, wantDepths := 0.0, 0
+				if opened {
+					wantPoints, wantDepths = points, depths
+				}
+				if gotPoints, gotDepths, gotOpened := OpenedRaise(trade); gotOpened != opened || gotPoints != wantPoints || gotDepths != wantDepths {
+					t.Fatalf("mixed %q, %s, tick %d: OpenedRaise = %v, %d, %v, want %v, %d, %v", mixed, plan.name, tick, gotPoints, gotDepths, gotOpened, wantPoints, wantDepths, opened)
+				}
+				if !reflect.DeepEqual(stored, configured) {
+					t.Fatalf("mixed %q, %s, tick %d: the configured rows moved: %+v", mixed, plan.name, tick, stored)
+				}
+
+				if tick == plan.fillsAt {
+					trade.History = append(trade.History, aggragates.TradesHistory{Type: "BUY", Quantity: 1, Price: 100, OrderId: int64(tick + 1)})
+					trade.PositionType = "buy"
+					trade.PositionPrice = 100
+				}
 			}
 
-			wasPercentage, wasDepths := scenarioRaises(scenarioBearish(previous), mixed)
-			edge := wasPercentage != raisesPercentage || wasDepths != raisesDepths
-			if got := changedFor(previous, reads, mixed); got != edge {
-				t.Fatalf("mixed %q tick %d: changedFor = %v, want %v", mixed, tick, got, edge)
-			}
-			message := transitionMessageFor(reads, mixed)
-			if edge {
-				edges++
-				named := strings.Contains(message, points) == (raisesPercentage && BearPercentagePoints != 0) &&
-					strings.Contains(message, depths) == (raisesDepths && BearDepths != 0) &&
-					strings.HasSuffix(message, "configured rows") == !changes
-				if !named || !strings.HasPrefix(message, TransitionPrefix) {
-					t.Fatalf("mixed %q tick %d: the edge row %q does not name what the tick raises", mixed, tick, message)
+			rowCount := 0
+			for _, row := range trade.Logs {
+				if strings.HasPrefix(row.Message, RowPrefix) {
+					rowCount++
 				}
 			}
-
-			if mixed == MixedIncrease {
-				engineRows, raised := RaisedSettings(trade, reads)
-				if raised != changes || !reflect.DeepEqual(engineRows, rows) {
-					t.Fatalf("tick %d: RaisedSettings = %+v, %v, want %+v, %v", tick, engineRows, raised, rows, changes)
-				}
-				if adjusted := Adjust(stored, reads); !reflect.DeepEqual(adjusted, rows) {
-					t.Fatalf("tick %d: Adjust = %+v, want %+v", tick, adjusted, rows)
-				}
-				if Changed(previous, reads) != edge || TransitionMessage(reads) != message {
-					t.Fatalf("tick %d: Changed or TransitionMessage part from the run under the shipped MixedIncrease", tick)
-				}
+			wantRows := 0
+			if openedAt >= 0 {
+				wantRows = 1
+				raisedLadders++
+			} else {
+				configuredLadders++
 			}
-
-			previous = reads
+			if rowCount != wantRows {
+				t.Fatalf("mixed %q, %s: %d rows written, want %d", mixed, plan.name, rowCount, wantRows)
+			}
 		}
 
-		if edges < 4 {
-			t.Fatalf("fixture drifted: the run under mixed %q has %d edges, want the raise to open and close at least twice", mixed, edges)
+		if mixed == MixedIncrease && (raisedLadders == 0 || configuredLadders == 0) {
+			t.Fatalf("fixture drifted: the run under the shipped MixedIncrease must open a ladder raised and one on its configured rows, got %d and %d", raisedLadders, configuredLadders)
 		}
 	}
 }

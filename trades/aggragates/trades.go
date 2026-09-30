@@ -83,12 +83,14 @@ type (
 		// fill.
 		SmartTakeLoss SmartTakeLossIndicators
 		// Dynamic params: the Super Guppy and Bull Market Support Band reads
-		// of sophos' SMC trend dashboard on the timeframe the DynamicParams
-		// flag watches, from GET /:symbol/patterns. The zero block is not
-		// read and raises nothing. The engines shape rows from it only
-		// through dynamicparams.RaisedSettings — dynamicparams.Changed and
-		// TransitionMessage name its edges on the trade — and no gate holds
-		// on it.
+		// of the chart row of sophos' SMC trend dashboard, from
+		// GET /:symbol/smc-trend at dynamicparams.Interval
+		// (SophosSmcTrend.DynamicParams), set by the engines after the merge.
+		// The zero block is not read and raises nothing. The engines consult
+		// it only when a ladder opens: dynamicparams.Opening turns it into the
+		// ladder's opened row, and from then on every tick rebuilds the
+		// ladder's rows from that row (dynamicparams.RaisedSettings), never
+		// from these reads. No gate holds on it.
 		DynamicParams DynamicParamsIndicators
 	}
 

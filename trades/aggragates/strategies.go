@@ -15,13 +15,17 @@ type (
 		UsePatterns      bool  `form:"usePatterns" bson:"usePatterns" json:"usePatterns"`
 		UseForceTrailing bool  `form:"useForceTrailing" bson:"useForceTrailing" json:"useForceTrailing"`
 		SmartTakeLoss    bool  `form:"smartTakeLoss" bson:"smartTakeLoss" json:"smartTakeLoss"`
-		// DynamicParams raises a long spot parent ladder's rows while sophos'
-		// Super Guppy and Bull Market Support Band reads on one timeframe are
-		// bearish: gates/dynamicparams adds BearPercentagePoints to every
-		// row's percentage and BearDepths to its depths while both are, and
-		// what MixedIncrease names while exactly one is. The raised rows are a
-		// per-tick copy the position is computed from and a new ladder's first
-		// entry is sized from; nothing is stored, and the flag holds nothing.
+		// DynamicParams decides a long spot parent ladder's rows once, as it
+		// opens, on sophos' Super Guppy and Bull Market Support Band reads
+		// (NeedsSmcTrendRoute). On each tick that judges the ladder before its
+		// first entry fills, reads that raise something have
+		// dynamicparams.Opening write the ladder's opened row, naming the
+		// amounts it adds to every row's percentage and depths — both bearish
+		// raise both (dynamicparams.IncreaseBoth), exactly one what
+		// dynamicparams.MixedIncrease names. From then on every tick trades
+		// the stored rows raised by the amounts that row carries
+		// (dynamicparams.RaisedSettings), whatever the reads say, until the
+		// ladder closes. The flag holds nothing.
 		DynamicParams bool `form:"dynamicParams" bson:"dynamicParams" json:"dynamicParams"`
 	}
 )
@@ -33,18 +37,31 @@ type (
 // /patterns, which carries the pattern verdict, yet only UsePatterns may run
 // a pattern hold. Every gate in ShouldHold keys on its own flag first and
 // treats payload presence only as a degrade-open check. DynamicParams
-// fetches /patterns for its two reads and gains no gate either: it shapes the
-// rows the engines hand the position and the first entry's sizing
+// fetches /smc-trend for its two reads and gains no gate either: it decides
+// the rows a ladder opens with (dynamicparams.Opening), which the engines
+// hand the position and the first entry's sizing
 // (dynamicparams.RaisedSettings), and holds nothing.
 func (p StrategyParams) NeedsSophos() bool {
 	return p.UseAI || p.UsePatterns || p.SmartTakeLoss || p.DynamicParams
 }
 
 // NeedsPatternRoute is the GET /:symbol/patterns fetch: the pattern verdict,
-// plus the smart take loss block (SmartTakeLoss) and the dynamic params reads
-// (DynamicParams), which all live on that payload.
+// plus the smart take loss block (SmartTakeLoss), which lives on that
+// payload.
 func (p StrategyParams) NeedsPatternRoute() bool {
-	return p.UsePatterns || p.SmartTakeLoss || p.DynamicParams
+	return p.UsePatterns || p.SmartTakeLoss
+}
+
+// NeedsSmcTrendRoute is the GET /:symbol/smc-trend fetch at
+// dynamicparams.Interval: the SMC trend dashboard whose chart row carries the
+// DynamicParams reads (SophosSmcTrend.DynamicParams). No other flag reads
+// that route, and neither the pattern nor the ML route carries the reads.
+//
+// FETCH IS NOT GATE here either: the fetch arms no hold, and the reads decide
+// nothing on their own — the engines hand them to dynamicparams.Opening for a
+// `new` ladder alone, and a ladder past its opening never reads them again.
+func (p StrategyParams) NeedsSmcTrendRoute() bool {
+	return p.DynamicParams
 }
 
 // NeedsAIRoute is the GET /:symbol ML fetch.

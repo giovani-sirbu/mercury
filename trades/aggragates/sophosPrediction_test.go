@@ -193,22 +193,22 @@ func TestStrategyParamsNeedsSophosAndEntryHold(t *testing.T) {
 	}
 
 	ai := StrategyParams{UseAI: true}
-	if !ai.NeedsSophos() || !ai.NeedsAIRoute() || ai.NeedsPatternRoute() || !ai.InjectsEntryHold() {
+	if !ai.NeedsSophos() || !ai.NeedsAIRoute() || ai.NeedsPatternRoute() || ai.NeedsSmcTrendRoute() || !ai.InjectsEntryHold() {
 		t.Fatal("UseAI must fetch the ML route and inject entry hold")
 	}
 
 	patterns := StrategyParams{UsePatterns: true}
-	if !patterns.NeedsSophos() || !patterns.NeedsPatternRoute() || patterns.NeedsAIRoute() || !patterns.InjectsEntryHold() {
+	if !patterns.NeedsSophos() || !patterns.NeedsPatternRoute() || patterns.NeedsAIRoute() || patterns.NeedsSmcTrendRoute() || !patterns.InjectsEntryHold() {
 		t.Fatal("UsePatterns must fetch /patterns and inject entry hold")
 	}
 
 	stl := StrategyParams{SmartTakeLoss: true}
-	if !stl.NeedsSophos() || !stl.NeedsPatternRoute() || stl.NeedsAIRoute() || !stl.InjectsEntryHold() {
+	if !stl.NeedsSophos() || !stl.NeedsPatternRoute() || stl.NeedsAIRoute() || stl.NeedsSmcTrendRoute() || !stl.InjectsEntryHold() {
 		t.Fatal("SmartTakeLoss fetches /patterns and injects the entry hold its slow-decline verdict owns")
 	}
 
 	cool := StrategyParams{Cooldown: true}
-	if cool.NeedsSophos() {
+	if cool.NeedsSophos() || cool.NeedsSmcTrendRoute() {
 		t.Fatal("Cooldown uses markers, not sophos")
 	}
 	if !cool.InjectsEntryHold() {
@@ -222,9 +222,9 @@ func TestStrategyParamsNeedsSophosAndEntryHold(t *testing.T) {
 		"UseForceTrailing": {UseForceTrailing: true},
 		"Pairs":            {Pairs: 3},
 	} {
-		if params.NeedsSophos() || params.NeedsPatternRoute() || params.NeedsAIRoute() || params.InjectsEntryHold() {
-			t.Errorf("%s must fetch nothing and inject no entry hold, got sophos=%v patterns=%v ai=%v entryHold=%v",
-				name, params.NeedsSophos(), params.NeedsPatternRoute(), params.NeedsAIRoute(), params.InjectsEntryHold())
+		if params.NeedsSophos() || params.NeedsPatternRoute() || params.NeedsAIRoute() || params.NeedsSmcTrendRoute() || params.InjectsEntryHold() {
+			t.Errorf("%s must fetch nothing and inject no entry hold, got sophos=%v patterns=%v ai=%v smcTrend=%v entryHold=%v",
+				name, params.NeedsSophos(), params.NeedsPatternRoute(), params.NeedsAIRoute(), params.NeedsSmcTrendRoute(), params.InjectsEntryHold())
 		}
 	}
 }
@@ -335,64 +335,17 @@ func TestSophosPredictionMapsTheIndecision(t *testing.T) {
 	}
 }
 
-// The dynamic params block maps onto the reads field for field: the
-// dashboard row sophos read and the two reads in their wire values.
-func TestSophosPredictionMapsTheDynamicParams(t *testing.T) {
+// The pattern and ML routes carry no DynamicParams reads: a body still
+// serving the dynamicParams block an earlier sophos build put on /patterns
+// decodes to no reads, so no verdict merged off those legs can open a ladder
+// raised. The reads are the smc-trend leg's alone (SophosSmcTrend).
+func TestSophosPredictionCarriesNoDynamicParams(t *testing.T) {
 	var prediction SophosPrediction
-	raw := `{"action":"LONG","dynamicParams":{"timeframe":"1D","guppy":-1,"bmsb":1,"valid":true}}`
+	raw := `{"action":"LONG","dynamicParams":{"timeframe":"1D","guppy":-1,"bmsb":-1,"valid":true}}`
 	if err := json.Unmarshal([]byte(raw), &prediction); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-
-	want := DynamicParamsIndicators{Timeframe: "1D", Guppy: -1, BMSB: 1, Valid: true}
-	if got := prediction.Indicators().DynamicParams; got != want {
-		t.Fatalf("the dynamic params block must map field for field, got %+v want %+v", got, want)
-	}
-}
-
-// A sophos without the object, or one serving it with every key zero,
-// decodes to the zero block — not read, which raises no row. A block served
-// as not read keeps its reads beside Valid false, and the gate reads none of
-// them.
-func TestSophosPredictionWithoutDynamicParamsIsInert(t *testing.T) {
-	for name, raw := range map[string]string{
-		"no object":      `{"action":"LONG"}`,
-		"every key zero": `{"dynamicParams":{"timeframe":"","guppy":0,"bmsb":0,"valid":false}}`,
-	} {
-		var prediction SophosPrediction
-		if err := json.Unmarshal([]byte(raw), &prediction); err != nil {
-			t.Fatalf("%s: unmarshal: %v", name, err)
-		}
-		if got := prediction.Indicators().DynamicParams; got != (DynamicParamsIndicators{}) {
-			t.Fatalf("%s must map to the zero block, got %+v", name, got)
-		}
-	}
-
-	var unread SophosPrediction
-	if err := json.Unmarshal([]byte(`{"dynamicParams":{"timeframe":"1D","guppy":-1,"bmsb":-1,"valid":false}}`), &unread); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if got := unread.Indicators().DynamicParams; got.Valid || got.Timeframe != "1D" {
-		t.Fatalf("a block served unread must map unread with its timeframe, got %+v", got)
-	}
-}
-
-// The wire keys the block travels under, which sophos pins its own side
-// against.
-func TestSophosDynamicParamsWireKeys(t *testing.T) {
-	block := reflect.TypeOf(SophosDynamicParams{})
-	want := []string{"timeframe", "guppy", "bmsb", "valid"}
-	if block.NumField() != len(want) {
-		t.Fatalf("SophosDynamicParams has %d fields, want %d", block.NumField(), len(want))
-	}
-	for index, key := range want {
-		if got := block.Field(index).Tag.Get("json"); got != key {
-			t.Errorf("field %s: json key %q, want %q", block.Field(index).Name, got, key)
-		}
-	}
-
-	field, found := reflect.TypeOf(SophosPrediction{}).FieldByName("DynamicParams")
-	if !found || field.Tag.Get("json") != "dynamicParams" {
-		t.Fatalf("SophosPrediction must carry the block under dynamicParams, got %q", field.Tag.Get("json"))
+	if got := prediction.Indicators().DynamicParams; got != (DynamicParamsIndicators{}) {
+		t.Fatalf("the pattern leg must carry no reads, got %+v", got)
 	}
 }

@@ -64,7 +64,7 @@ func expensiveCooldown() aggragates.CoolDownIndicators {
 	return aggragates.CoolDownIndicators{HasFirstFillVerdict: true, AllowLongEntry: false, AllowShortEntry: false}
 }
 
-var holdFamilyPrefixes = []string{"cooldown:", "pattern:", "fibonacci:", "smartTakeLoss:", "AI ", dynamicparams.TransitionPrefix}
+var holdFamilyPrefixes = []string{"cooldown:", "pattern:", "fibonacci:", "smartTakeLoss:", "AI ", dynamicparams.RowPrefix}
 
 func assertOnlyFamily(t *testing.T, logs []aggragates.TradesLogs, want string) {
 	t.Helper()

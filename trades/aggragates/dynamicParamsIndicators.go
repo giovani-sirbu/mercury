@@ -1,17 +1,19 @@
 package aggragates
 
-// DynamicParamsIndicators is the block sophos serves on GET /:symbol/patterns
-// for the DynamicParams flag: two rows of its SMC trend dashboard read on the
-// one timeframe sophos' dynamicparams.Timeframe names. Guppy is the Super
-// Guppy read and BMSB the Bull Market Support Band read, each bullish (+1),
-// neutral (0) or bearish (−1), the encoding of sophos' smctypes.Direction.
-// Timeframe is the dashboard row they were read on, and Valid whether sophos
-// read that row at all.
+// DynamicParamsIndicators is the DynamicParams flag's two reads: the chart row
+// of the SMC trend dashboard sophos serves on GET /:symbol/smc-trend at
+// dynamicparams.Interval, read on that interval's last closed bar
+// (SophosSmcTrend.DynamicParams). Guppy is the Super Guppy read and BMSB the
+// Bull Market Support Band read, each bullish (+1), neutral (0) or bearish
+// (−1), the encoding of sophos' smctypes.Direction. Timeframe is the label of
+// the row they were read on, and Valid whether sophos read that row at all.
 //
-// The zero value is "not read" — an older sophos, a failed fetch, a window
-// too short for the row — and gates/dynamicparams treats a block that is not
-// Valid as the configured rows, whatever its reads say. The engines shape
-// rows from it only through dynamicparams.RaisedSettings; it holds nothing.
+// The zero value is "not read" — a failed fetch, a body without the chart
+// row — and gates/dynamicparams treats a block that is not Valid as the
+// configured rows, whatever its reads say. The engines consult it only when
+// a ladder opens (dynamicparams.Opening), which turns it into the ladder's
+// opened row; every later tick rebuilds the rows from that row
+// (dynamicparams.RaisedSettings), never from the block. It holds nothing.
 type DynamicParamsIndicators struct {
 	Timeframe string
 	Guppy     int
