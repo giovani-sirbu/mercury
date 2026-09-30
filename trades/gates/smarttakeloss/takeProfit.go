@@ -47,12 +47,17 @@ import (
 // would skip the prints after it.
 //
 // Only the arming moves. hasProfit in the takeProfit chain still refuses a
-// close under the minimum profit, and the trade then stays in `buy`. Between
-// break even and the price the fees and the minimum profit clear, that
-// refusal remains: the take profit is proposed and refused there, the exits
-// above go unread on those ticks, and sisyphus backtesting's profit block
-// skips the trade's prints between its next depth and that price until the
-// block lifts — a known window, accepted. The newest fill is the one
+// close under the minimum profit, and the trade then stays in `buy`; the
+// trailing take profit's sale runs hasProfit as well, latched or not, so a
+// close it refuses leaves the trade in `takeProfit` to retry on the next
+// print. Between break even and the price the fees and the minimum profit
+// clear, that refusal remains: the take profit is proposed and refused there,
+// and a `sell` hasProfit refuses leaves the trade in `takeProfit`, a
+// protected position too (protectedPosition) that Apply never replaces. The
+// exits above go unread on those ticks, and sisyphus backtesting's profit
+// block skips the trade's prints between its next depth and that price (the
+// trail anchor, for a `sell`) until the block lifts — a known window,
+// accepted. The newest fill is the one
 // rebuildState folds (entryFills, in history slice order), never
 // Position.Price, which a re-anchor moves; the latched rule reads the
 // position price on purpose, re-anchor and all, as the `buy` row's own
@@ -100,18 +105,6 @@ func carriesTakeProfitMarker(trade aggragates.Trades) bool {
 			return true
 		}
 		if indecisionDirection && strings.Contains(row.Message, IndecisionMarker) {
-			return true
-		}
-	}
-	return false
-}
-
-// carriesMarker is the same cheap test for one marker, whatever the switches
-// say: whether a row that carries a price names marker. SaleActions asks it
-// for IndecisionMarker before its fold, for the same reason.
-func carriesMarker(trade aggragates.Trades, marker string) bool {
-	for _, row := range trade.Logs {
-		if row.Price > 0 && strings.Contains(row.Message, marker) {
 			return true
 		}
 	}

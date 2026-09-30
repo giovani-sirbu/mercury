@@ -25,12 +25,10 @@ const (
 	// hold (EntryHoldReason) reads the verdict alone and does not wait for it.
 	SlowDeclineArmDepth = 2
 	// IndecisionDirection switches the indecision direction as a whole: its
-	// watch (indecisionWatched), its row, the take profit a latched ladder
-	// reads from its position price (TakeProfitPercentage) and the sale its
-	// trailing take profit may close under the minimum profit (SaleActions).
-	// Switched off it watches no ladder: no row is written, the take profit
-	// reads the average entry price alone, the sale keeps its profit gate,
-	// and the rows it wrote earlier are ignored.
+	// watch (indecisionWatched), its row and the take profit a latched ladder
+	// reads from its position price (TakeProfitPercentage). Switched off it
+	// watches no ladder: no row is written, the take profit reads the average
+	// entry price alone, and the rows it wrote earlier are ignored.
 	IndecisionDirection = true
 	// IndecisionArmDepth is the least number of filled entries
 	// (ladder.CountFilledEntries) a long spot ladder holds before the

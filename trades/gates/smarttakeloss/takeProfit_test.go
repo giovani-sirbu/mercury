@@ -235,7 +235,7 @@ func TestTakeProfitPercentageLeavesTheOtherTradesAlone(t *testing.T) {
 func TestTakeProfitPercentageReadsTheInputOnACancelledTrade(t *testing.T) {
 	cancelled := pendingTrade()
 	cancelled.Logs = append(cancelled.Logs, aggragates.TradesLogs{Message: SlowDeclineCancelMessage("buy", slowDeclineBreakReasons), Price: slowDeclineLastFill})
-	if st := rebuildState(cancelled); st.slowDeclinePending || !carriesMarker(cancelled, SlowDeclineMarker) {
+	if st := rebuildState(cancelled); st.slowDeclinePending || !carriesTakeProfitMarker(cancelled) {
 		t.Fatal("fixture drifted: the cancelled trade must carry the marker and read not pending")
 	}
 	breakEven := ladder.AverageEntryPrice(cancelled)
@@ -274,11 +274,11 @@ func TestTakeProfitPercentageReadsTheInputWhileSwitchedOff(t *testing.T) {
 	}
 }
 
-// The scans asked before the fold never turn a pending or a latched trade
+// The scan asked before the fold never turns a pending or a latched trade
 // away: every fixture rebuildState reads as pending or latched carries a row
-// the take profit's scan (carriesTakeProfitMarker) finds, and every latched
-// one an indecision row SaleActions' scan (carriesMarker) finds. A row without
-// a price is found by neither, as rebuildState folds none.
+// the take profit's scan (carriesTakeProfitMarker) finds, an indecision row
+// included. A row without a price is found by neither the scan nor the fold,
+// as rebuildState folds none.
 func TestTakeProfitMarkerScanAgreesWithRebuildState(t *testing.T) {
 	framed := watchedTrade()
 	framed.Logs = []aggragates.TradesLogs{
@@ -295,7 +295,7 @@ func TestTakeProfitMarkerScanAgreesWithRebuildState(t *testing.T) {
 			t.Errorf("%s: the take profit's scan must find the row rebuildState folds", name)
 		}
 	}
-	if carriesTakeProfitMarker(watchedTrade()) || carriesMarker(watchedTrade(), IndecisionMarker) {
+	if carriesTakeProfitMarker(watchedTrade()) {
 		t.Error("a ladder without the rows carries no marker")
 	}
 
@@ -309,13 +309,13 @@ func TestTakeProfitMarkerScanAgreesWithRebuildState(t *testing.T) {
 		if !rebuildState(trade).indecision {
 			t.Fatalf("%s: fixture drifted: rebuildState must read it as latched", name)
 		}
-		if !carriesTakeProfitMarker(trade) || !carriesMarker(trade, IndecisionMarker) {
-			t.Errorf("%s: both scans must find the indecision row rebuildState folds", name)
+		if !carriesTakeProfitMarker(trade) {
+			t.Errorf("%s: the take profit's scan must find the indecision row rebuildState folds", name)
 		}
 	}
 	unpriced := watchedTrade()
 	unpriced.Logs = []aggragates.TradesLogs{{Message: IndecisionMessage("buy", nil)}, {Message: SlowDeclineMessage("buy", nil)}}
-	if carriesTakeProfitMarker(unpriced) || carriesMarker(unpriced, IndecisionMarker) || rebuildState(unpriced).indecision || rebuildState(unpriced).slowDeclinePending {
+	if carriesTakeProfitMarker(unpriced) || rebuildState(unpriced).indecision || rebuildState(unpriced).slowDeclinePending {
 		t.Error("a row without a price is found by neither the scan nor the fold")
 	}
 }

@@ -153,8 +153,7 @@ func TestApplyCancelsAndLatchesOnOneTick(t *testing.T) {
 
 // While the depth priority holds a ladder no latch starts on it, and a latch
 // set before the hold keeps its row while its effects wait for the next
-// fill: the take profit reads the move it is handed, and the trailing take
-// profit's sale keeps the engine's own chain.
+// fill: the take profit reads the move it is handed.
 func TestADepthPriorityHoldSuspendsTheIndecisionDirection(t *testing.T) {
 	trade := testutil.LadderTrade(false, fills(IndecisionArmDepth, "17:38:00")...)
 	if got := Apply(trade, "", underTheBand, indecisionReading()); got.Indecision == nil {
@@ -174,8 +173,5 @@ func TestADepthPriorityHoldSuspendsTheIndecisionDirection(t *testing.T) {
 	}
 	if got := TakeProfitPercentage(held, price, plain); got != plain {
 		t.Fatalf("held, the take profit reads the move it is handed, got %v want %v", got, plain)
-	}
-	if chain := sellChain(); !sameSlice(SaleActions(held, "sell", chain), chain) {
-		t.Fatal("held, the sale keeps the engine's own chain")
 	}
 }

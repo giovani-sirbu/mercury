@@ -76,8 +76,8 @@ type SmartTakeLossIndicators struct {
 	// entries) on the first tick it is served, from the flag alone: one row
 	// naming SlowDeclineBreakReasons, and from then until the trade closes its
 	// take profit is measured from the position price as well
-	// (TakeProfitPercentage) and its trailing take profit's sale may close under
-	// the minimum profit (SaleActions). The latch needs no pending: a ladder
+	// (TakeProfitPercentage); its trailing take profit's sale runs hasProfit, as
+	// on every ladder. The latch needs no pending: a ladder
 	// whose own smoothness fails, or whose newest fill is outside the fill
 	// window (SlowDeclineFillFrom), still latches.
 	SlowDeclineIndecision bool

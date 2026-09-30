@@ -26,8 +26,8 @@ func SlowDeclineResetMessage(positionType string) string {
 }
 
 // depthPriorityHeld is whether a depth priority holds the ladder, which
-// pauses the smart take loss on it (Apply, TakeProfitPercentage,
-// SaleActions): DepthPriorityHoldPausesSmartTakeLoss on, and the trade
+// pauses the smart take loss on it (Apply, TakeProfitPercentage):
+// DepthPriorityHoldPausesSmartTakeLoss on, and the trade
 // carries a row naming cooldown.DepthPriorityHoldMarker stamped strictly
 // after its newest entry fill — newest in slice order, as rebuildState folds
 // the fills.

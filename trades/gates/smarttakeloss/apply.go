@@ -47,8 +47,7 @@ type Result struct {
 // verdict arrives is pending all the same, a new fill on it is judged all the
 // same (slowDeclineRow), and it is latched all the same (indecisionRow).
 // Neither row changes the sale: the indecision direction sells nothing of its
-// own, it moves the take profit (TakeProfitPercentage) and the chain of its
-// trailing sale (SaleActions).
+// own, it moves the take profit (TakeProfitPercentage) and nothing else.
 //
 // The ladder's own closes are never replaced: a proposal in the protected set
 // (protectedPosition) passes through, and so does every tick of a trade whose

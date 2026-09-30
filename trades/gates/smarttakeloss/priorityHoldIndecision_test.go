@@ -1,7 +1,6 @@
 package smarttakeloss
 
 import (
-	"slices"
 	"strings"
 	"testing"
 
@@ -24,9 +23,6 @@ func overBreakEven(trade aggragates.Trades) (price, fromAverage, fromPosition fl
 	price = ladder.AverageEntryPrice(trade) + 1
 	return price, moveAgainst(price, ladder.AverageEntryPrice(trade)), moveAgainst(price, trade.PositionPrice)
 }
-
-// acceptLossChain is the `sell` chain a latched ladder's sale runs.
-var acceptLossChain = []string{"cancelPendingOrder", "acceptLoss", "sell", "updateTrade"}
 
 // No latch starts while the depth priority holds a ladder: the indecision
 // reading latches the watched ladder without the gate's row, and with it no
@@ -54,10 +50,9 @@ func TestNoLatchStartsWhileTheDepthPriorityHolds(t *testing.T) {
 
 // A latch taken before the hold keeps its row: the ladder reads latched and
 // held, its take profit reads the move it is handed instead of the position
-// price's, the trailing take profit's sale keeps the engine's own chain, and
-// no second row goes out. The next fill ends the hold and the latch's effects
-// resume from it: the take profit reads the position price — the new fill —
-// and the sale runs acceptLoss, on the one row still.
+// price's, and no second row goes out. The next fill ends the hold and the
+// latch's effects resume from it: the take profit reads the position price —
+// the new fill — on the one row still.
 func TestALatchTakenBeforeTheHoldResumesAfterTheNextFill(t *testing.T) {
 	latched := latchedBy(indecisionLadder())
 	held := heldBy(latched, testutil.At("22:00:00"))
@@ -71,12 +66,6 @@ func TestALatchTakenBeforeTheHoldResumesAfterTheNextFill(t *testing.T) {
 	if got := TakeProfitPercentage(held, price, fromAverage); got != fromAverage {
 		t.Fatalf("held, the take profit reads the move it is handed %v, got %v", fromAverage, got)
 	}
-	if !slices.Equal(SaleActions(latched, "sell", sellChain()), acceptLossChain) {
-		t.Fatal("control: a latched ladder's sale runs acceptLoss")
-	}
-	if chain := sellChain(); !sameSlice(SaleActions(held, "sell", chain), chain) || !slices.Equal(chain, sellChain()) {
-		t.Fatal("held, the sale keeps the engine's own chain")
-	}
 	assertUntouched(t, Apply(held, "", underTheBand, indecisionReading()), "")
 
 	resumed := withFill(held, w3sPrice(IndecisionArmDepth+1), testutil.At("22:30:00"))
@@ -86,9 +75,6 @@ func TestALatchTakenBeforeTheHoldResumesAfterTheNextFill(t *testing.T) {
 	price, fromAverage, fromPosition = overBreakEven(resumed)
 	if got := TakeProfitPercentage(resumed, price, fromAverage); got != fromPosition || !(fromAverage < fromPosition) {
 		t.Fatalf("resumed, the take profit reads the new fill %v, got %v", fromPosition, got)
-	}
-	if got := SaleActions(resumed, "sell", sellChain()); !slices.Equal(got, acceptLossChain) {
-		t.Fatalf("resumed, the sale runs acceptLoss, got %q", got)
 	}
 	if got := Apply(resumed, "", underTheBand, indecisionReading()); got.Indecision != nil || carriedRows(resumed, IndecisionMarker) != 1 {
 		t.Fatalf("one indecision row, before the hold and after it, got %+v on %+v", got, resumed.Logs)
@@ -109,8 +95,7 @@ func carriedRows(trade aggragates.Trades, marker string) int {
 // Switched off, the gate's rows are ignored by every rule: a held pending
 // ladder sells at the band with no reset row, a held watched ladder goes
 // pending on the verdict and is latched on the indecision, and a held latched
-// one reads its position price and runs acceptLoss, as a held pending one
-// reads its newest fill.
+// one reads its position price, as a held pending one reads its newest fill.
 func TestSwitchedOffTheDepthPriorityRowsAreIgnored(t *testing.T) {
 	withDepthPriorityPause(t, false)
 	held := heldBy(pendingTrade(), testutil.At("18:05:00"))
@@ -128,8 +113,8 @@ func TestSwitchedOffTheDepthPriorityRowsAreIgnored(t *testing.T) {
 	}
 	latched := heldBy(latchedBy(indecisionLadder()), testutil.At("22:00:00"))
 	price, fromAverage, fromPosition := overBreakEven(latched)
-	if TakeProfitPercentage(latched, price, fromAverage) != fromPosition || !slices.Equal(SaleActions(latched, "sell", sellChain()), acceptLossChain) {
-		t.Fatal("switched off, a held latched ladder reads its position price and runs acceptLoss")
+	if TakeProfitPercentage(latched, price, fromAverage) != fromPosition {
+		t.Fatal("switched off, a held latched ladder reads its position price")
 	}
 }
 

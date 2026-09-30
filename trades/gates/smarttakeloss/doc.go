@@ -104,10 +104,10 @@
 // strategies.GetPosition the larger of the moves (TakeProfitPercentage), so
 // the take profit arms once the profit is zero or more instead of waiting for
 // the average's take profit, and hasProfit still gates that arming. The
-// trailing take profit's sale then runs acceptLoss in place of hasProfit
-// (SaleActions), so it may close under the minimum profit when the price
-// falls back after arming. Under break even nothing changes, and the rule
-// sells nothing of its own.
+// trailing take profit's sale runs the engines' own `sell` chain, hasProfit
+// included, as on every ladder: a close under the minimum profit is refused,
+// and the trade stays in takeProfit and retries on the next print. Under
+// break even nothing changes, and the rule sells nothing of its own.
 //
 // DepthPriorityHoldPausesSmartTakeLoss switches the pause a depth priority
 // hold puts on all three rules. A ladder is HELD while it carries a row of
@@ -120,7 +120,7 @@
 // rebuildState folds like a cancel row, so the ladder goes pending again only
 // as above once the hold has ended. A latch set before the hold keeps its
 // row, but while the hold lasts the take profit reads the average entry price
-// alone and the trailing take profit's sale keeps hasProfit.
+// alone.
 //
 // The two exits' sales — at the sell band and at the upper band — are the
 // engines' existing sellLoss chain (cancelPendingOrder, acceptLoss, sell,
@@ -129,10 +129,10 @@
 // read first, so it names a sale both rules reach on one tick. Neither ever
 // replaces a close the ladder proposes or a close the trade rests in
 // (protectedPosition), so the take profit — the trailing take profit
-// included — is never replaced; only the indecision direction's latch
-// changes the chain of the trailing take profit's own sale. A rule switched
-// off watches no ladder: it writes no row, sells nothing, holds nothing, and
-// the rows it wrote earlier are ignored.
+// included — is never replaced, and no rule changes a chain: the trailing
+// take profit's sale runs the engines' own `sell` chain on every ladder. A
+// rule switched off watches no ladder: it writes no row, sells nothing, holds
+// nothing, and the rows it wrote earlier are ignored.
 //
 // State lives in the trade's own rows only — trade.Logs for the slow-decline
 // marker, cancel and reset rows and for the indecision row, folded in order,
@@ -145,14 +145,13 @@
 // Apply is the single entry point for the exits; hermes, sisyphus backtesting
 // and sisyphus live-testing call it identically after the ladder has chosen a
 // position and write the rows it hands back with their own clock (LogRow,
-// ExitMessage), and they run every spot chain through SaleActions, so the one
-// change a rule makes to a chain lives here too. Armed tells hermes and
-// live-testing which trades keep their tick when the ladder proposes
-// nothing, and ExitReached tells sisyphus backtesting which prints of a
-// blocked trade can sell: any print under a funds block, and under a profit
-// block the prints at or under the block's price, past which the ladder
-// proposes the close hasProfit refused. In ShouldHold the flag holds nothing
-// on an open position: its one hold there is the slow decline's first fill.
+// ExitMessage). Armed tells hermes and live-testing which trades keep their
+// tick when the ladder proposes nothing, and ExitReached tells sisyphus
+// backtesting which prints of a blocked trade can sell: any print under a
+// funds block, and under a profit block the prints at or under the block's
+// price, past which the ladder proposes the close hasProfit refused. In
+// ShouldHold the flag holds nothing on an open position: its one hold there
+// is the slow decline's first fill.
 //
 // Vocabulary: depth, fill, filled entries, last depth, tolerance, take
 // profit, stop loss, held, verdict, band, watched, pending, judged,
