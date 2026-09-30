@@ -97,7 +97,7 @@ func TestRemainingCostIsTheLaddersRemainingPlannedBudget(t *testing.T) {
 		term *= ratio
 		want += term
 	}
-	want *= plannedQuantityAtDepth(trade, filled) * price
+	want *= plannedQuantityAtDepth(trade, tradedSettings(trade), filled) * price
 
 	_, cost := RemainingCost(trade)
 	testutil.AssertFloatEqual(t, cost, want, costEpsilon, "remaining planned budget")
@@ -105,7 +105,7 @@ func TestRemainingCostIsTheLaddersRemainingPlannedBudget(t *testing.T) {
 	// And it is strictly under what the same tail would come to at today's
 	// price, which is what made one ladder's remainder outgrow the wallet.
 	atTodaysPrice := 0.0
-	quantity := plannedQuantityAtDepth(trade, filled)
+	quantity := plannedQuantityAtDepth(trade, tradedSettings(trade), filled)
 	for remaining := 0; remaining < ceiling-filled; remaining++ {
 		quantity *= multiplier
 		atTodaysPrice += quantity * price

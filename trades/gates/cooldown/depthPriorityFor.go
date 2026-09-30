@@ -41,6 +41,13 @@ import "github.com/giovani-sirbu/mercury/trades/aggragates"
 // wallet can pay for buys — that IS the release at the ceiling — and one it
 // cannot pay for waits rather than being blocked.
 //
+// Full means full at the ceiling of the rows the ladder trades (ladder.DepthOf
+// reads them): a ladder that opened with a raise has more depths to fill than
+// its stored rows say, so standing at the stored ceiling it still ranks by its
+// depth and its planned cost and keeps the wallet for what it has left, and
+// the ladder being asked about is read the same way as every ladder of the
+// view.
+//
 // A ladder the engine still lets add past its ceiling is its own priority
 // under this rule, so nothing here holds it; whether that entry is placed is
 // the funds gate's call alone, exactly as it was before this gate existed.
@@ -64,10 +71,11 @@ import "github.com/giovani-sirbu/mercury/trades/aggragates"
 //
 // own takes part in the ranking whether or not the view carries it. The view
 // is what the OTHER ladders see, built on the engine's own schedule, while
-// the trade being ticked knows its own depth and costs first-hand. Judged
-// against the view alone it would be parked behind a shallower ladder the
-// moment the wallet could pay for it again, which is the inversion this gate
-// exists to avoid.
+// the trade being ticked knows its own depth and costs first-hand — read off
+// its own events and rows, a raise included, by the helper that builds the
+// view. Judged against the view alone it would be parked behind a shallower
+// ladder the moment the wallet could pay for it again, which is the inversion
+// this gate exists to avoid.
 //
 // own's own row is skipped by its trade id, explicitly. With the depth as the
 // only key it did not have to be — an active own met itself as the best

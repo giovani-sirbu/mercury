@@ -2,8 +2,10 @@ package ladder
 
 import (
 	"testing"
+	"time"
 
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/gates/dynamicparams"
 )
 
 // depthTrade is a long whose ladder has filled the given number of entries,
@@ -25,6 +27,28 @@ func depthTrade(filled int, settings ...aggragates.StrategySettings) aggragates.
 	}
 
 	return trade
+}
+
+// The amounts the opened events below carry. They are this suite's own, apart
+// from the shipped constants, so a retune of BearPercentagePoints or
+// BearDepths moves no expectation here: the ladder trades whatever its own
+// event says.
+const (
+	raisePoints = 0.5
+	raiseDepths = 2
+)
+
+// withOpenedEvent is the trade as the engine leaves it once its ladder opened
+// raised: the DynamicParams flag on for a long spot parent, and the opened pair
+// appended with the writer the engine uses (dynamicparams.Opened.Rows) — the
+// event every reader takes the amounts from, beside the row an operator reads.
+// The rows the trade stores are untouched.
+func withOpenedEvent(trade aggragates.Trades, points float64, depths int) aggragates.Trades {
+	trade.Strategy.Params.DynamicParams = true
+	trade.Strategy.TradeType = aggragates.Spot
+	row, event := dynamicparams.Opened{Points: points, Depths: depths}.Rows(trade, trade.PositionPrice, time.Time{})
+
+	return aggragates.AppendStrategyRow(trade, row, event)
 }
 
 // A single configured row governs every depth, so the ceiling it carries is
@@ -73,5 +97,75 @@ func TestConfiguredDepthsFloorsAFractionalRow(t *testing.T) {
 func TestConfiguredDepthsIsZeroWithoutSettings(t *testing.T) {
 	if got := ConfiguredDepths(depthTrade(3)); got != 0 {
 		t.Errorf("ConfiguredDepths = %d, want 0 without a settings row", got)
+	}
+}
+
+// A ladder that opened raised is allowed the depths its opened event added:
+// the ceiling is the row of the next fill raised by the event's depths, at
+// every depth the ladder can stand at — the stored ceiling included, where the
+// same ladder without the opened event is full. A fraction is floored after
+// the raise, and an opened event that raises only the percentage moves no
+// ceiling.
+func TestConfiguredDepthsOfARaisedLadderAddsTheOpenedEventsDepths(t *testing.T) {
+	cases := []struct {
+		name   string
+		stored float64
+		points float64
+		depths int
+		want   int
+	}{
+		{"depths", 8, 0, raiseDepths, 8 + raiseDepths},
+		{"percentage and depths", 8, raisePoints, raiseDepths, 8 + raiseDepths},
+		{"a fractional stored row", 8.7, 0, raiseDepths, 8 + raiseDepths},
+		{"percentage only", 8, raisePoints, 0, 8},
+	}
+
+	for _, c := range cases {
+		settings := aggragates.StrategySettings{Percentage: 2.5, Depths: c.stored}
+
+		for _, filled := range []int{0, 1, 5, 8, 20} {
+			plain := depthTrade(filled, settings)
+			raised := withOpenedEvent(plain, c.points, c.depths)
+
+			if got := ConfiguredDepths(raised); got != c.want {
+				t.Errorf("%s, %d entries filled: ConfiguredDepths = %d, want %d", c.name, filled, got, c.want)
+			}
+			if got, want := ConfiguredDepths(plain), int(c.stored); got != want {
+				t.Errorf("%s, %d entries filled: the same ladder without the opened event = %d, want the stored %d", c.name, filled, got, want)
+			}
+		}
+	}
+}
+
+// With a row per depth the raise reaches every row, so the ceiling still moves
+// with the ladder: the row of the next fill, raised — and past the last row
+// the base row, raised.
+func TestConfiguredDepthsOfARaisedLadderFlipsOnTheRaisedRows(t *testing.T) {
+	rows := []float64{9, 5, 6, 7}
+
+	for _, filled := range []int{0, 1, 2, 3, len(rows), len(rows) + 3} {
+		plain := rowPerDepthTrade(filled, rows...)
+		raised := withOpenedEvent(plain, 0, raiseDepths)
+
+		want := int(rows[SettingsIndexOrBase(plain.StrategyPair.StrategySettings, filled)]) + raiseDepths
+		if got := ConfiguredDepths(raised); got != want {
+			t.Errorf("%d entries filled: ConfiguredDepths = %d, want the raised row of the next fill (%d)", filled, got, want)
+		}
+	}
+}
+
+// The opened event is the raise and the opened row beside it is only text: a
+// ladder whose logs carry the row but whose strategy events carry no opened
+// event trades its stored rows, however many entries it has filled.
+func TestConfiguredDepthsReadsTheOpenedEventNeverTheRow(t *testing.T) {
+	plain := depthTrade(8, aggragates.StrategySettings{Percentage: 2.5, Depths: 8})
+	textOnly := withOpenedEvent(plain, raisePoints, raiseDepths)
+	textOnly.StrategyEvents = nil
+
+	if len(textOnly.Logs) != 1 {
+		t.Fatalf("fixture drifted: the trade carries %d rows, want the opened row", len(textOnly.Logs))
+	}
+	if got := ConfiguredDepths(textOnly); got != 8 {
+		t.Errorf("ConfiguredDepths = %d, want the stored 8: a row without its event opens nothing", got)
 	}
 }

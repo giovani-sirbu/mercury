@@ -48,6 +48,13 @@ import (
 // and the managed trade's own depth and costs are always read from the trade
 // it is asked about, never from the view.
 //
+// Every ladder's depth, ceiling and costs are read on the rows it TRADES
+// (ladder.DepthOf): a ladder that opened with a raise — its opened event, read
+// off its own strategy events — is full only at its raised ceiling and keeps
+// the wallet for the depths that event added, on the managed trade's side of
+// the gate and in every surface's view alike. The rows the chain hands the gate
+// are the stored ones; the raise reaches it through the trade's events.
+//
 // Ladders are compared only against the ones spending the same asset: a long
 // ladder spends the quote side of its pair and an inverse one the base side,
 // and two ladders funded from different currencies never take money from each
@@ -131,7 +138,9 @@ func DepthPriorityHold(event events.Events, position string) gates.Hold {
 
 	// The entry is priced as Buy will place it: a first entry on the rows the
 	// engine named for it (Params.EntrySettings, through SizingTrade), an add
-	// on the trade's own rows. The depth above stays on the trade's own rows.
+	// on the trade's own rows — an add's cost is the last entry times its
+	// row's multiplier, which a raise does not move. The depth above is read
+	// on the rows the ladder trades, a raise included.
 	_, ownCost := ladder.NextEntryCost(event.Params.SizingTrade(event.Trade), free)
 	if !depthPriorityHolds(ownCost, free, priority.RemainingCost) {
 		return gates.Hold{}

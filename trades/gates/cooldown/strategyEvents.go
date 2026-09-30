@@ -64,6 +64,11 @@ type DepthPriorityEvent struct {
 // depth, the escalation Step and the Hold that step earned, and the price that
 // lifts the hold early, zero when the ladder's rows could not price one. Its
 // only kind is gates.EventHeld.
+//
+// The fold reads Depth and the event's stamp alone: the first event of a depth
+// is the gate's activation at that depth (depthSpacingActivations), and the
+// step and the hold are derived again from the activations, never read back.
+// They are in the document because the row's message is formatted from it.
 type DepthSpacingEvent struct {
 	Event   string        `json:"event"`
 	Depth   int           `json:"depth"`
