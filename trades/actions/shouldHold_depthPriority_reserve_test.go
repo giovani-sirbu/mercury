@@ -470,8 +470,9 @@ func TestReserveWritesOneRowWhileTheHoldStands(t *testing.T) {
 		if err == nil {
 			t.Fatalf("tick %d: the ladder must still be held", tick)
 		}
-		if len(held.Trade.Logs) != 1 {
-			t.Fatalf("tick %d: a standing hold must not write a row per tick, got %v", tick, messages(held.Trade.Logs))
+		if len(held.Trade.Logs) != 1 || len(held.Trade.StrategyEvents) != 1 {
+			t.Fatalf("tick %d: a standing hold must not write a row or an event per tick, got %v and %d events",
+				tick, messages(held.Trade.Logs), len(held.Trade.StrategyEvents))
 		}
 		if tick == 0 {
 			first = held.Trade.Logs[0].Message

@@ -440,8 +440,8 @@ func TestFallenWalletWritesOneRowWhileTheHoldStands(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected the shallow ladder to be held")
 	}
-	if len(held.Trade.Logs) != 1 {
-		t.Fatalf("expected one row, got %v", messages(held.Trade.Logs))
+	if len(held.Trade.Logs) != 1 || len(held.Trade.StrategyEvents) != 1 {
+		t.Fatalf("expected one row and its event, got %v and %d events", messages(held.Trade.Logs), len(held.Trade.StrategyEvents))
 	}
 
 	// The next tick arms the same depth again, on the same ladders and a
@@ -451,7 +451,8 @@ func TestFallenWalletWritesOneRowWhileTheHoldStands(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected the ladder to still be held on the next tick")
 	}
-	if len(again.Trade.Logs) != 1 {
-		t.Fatalf("a standing hold must not write a row per tick, got %v", messages(again.Trade.Logs))
+	if len(again.Trade.Logs) != 1 || len(again.Trade.StrategyEvents) != 1 {
+		t.Fatalf("a standing hold must not write a row or an event per tick, got %v and %d events",
+			messages(again.Trade.Logs), len(again.Trade.StrategyEvents))
 	}
 }

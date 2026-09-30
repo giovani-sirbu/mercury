@@ -15,22 +15,25 @@
 //
 // The reads are consulted once per ladder, when it opens (Opening): on the
 // ticks that judge a trade the flag shapes before its first entry fills and
-// before it carries an opened row. When the increase raises something the
-// engine writes ONE INFO row on the trade, the opened row (OpenedMessage),
-// carrying the amounts the ladder trades: BearPercentagePoints added to every
-// row's percentage and BearDepths to every row's depths, only the parts the
-// increase names. A first entry that is held or refused funds is judged
-// again on later ticks, the reads with it, until the ladder opens; once the
-// trade carries its row, no second one is written.
+// before it carries an opened event. When the increase raises something the
+// engine writes ONE opened pair on the trade (Opened.Rows): the opened
+// strategy event (OpenedEvent), carrying the amounts the ladder trades —
+// BearPercentagePoints added to every row's percentage and BearDepths to every
+// row's depths, only the parts the increase names — and beside it an INFO row
+// (OpenedMessage), the same amounts as text for the operator. A first entry
+// that is held or refused funds is judged again on later ticks, the reads with
+// it, until the ladder opens; once the trade carries its event, no second pair
+// is written.
 //
-// From then on every tick rebuilds the ladder's rows from its own opened row
+// From then on every tick rebuilds the ladder's rows from its own opened event
 // (OpenedRaise, RaisedSettings), the way smarttakeloss.rebuildState rebuilds
-// its state: the stored rows raised by the amounts the row carries (RaiseBy),
-// with no reads and nothing kept anywhere but the row. A change of the reads
-// while the ladder is open changes nothing and writes nothing, a retune of
-// the constants reaches only the next ladder that opens, and a ladder that
-// opened without an opened row trades its configured rows until it closes.
-// The next ladder consults the reads again when it opens.
+// its state: the stored rows raised by the amounts the event carries
+// (RaiseBy), with no reads and nothing kept anywhere but the event. The row's
+// text is never read back. A change of the reads while the ladder is open
+// changes nothing and writes nothing, a retune of the constants reaches only
+// the next ladder that opens, and a ladder that opened without an opened event
+// trades its configured rows until it closes. The next ladder consults the
+// reads again when it opens.
 //
 // The raised rows reach exactly two places, both handed over per tick by the
 // engines from RaisedSettings: the strategies.Strategy.Settings the position
@@ -52,5 +55,5 @@
 // rows carrying RowPrefix off the users' notifications.
 //
 // Vocabulary: row, depth, percentage, timeframe, read, tier, increase,
-// raised, configured rows, opened row.
+// raised, configured rows, opened event, opened row.
 package dynamicparams

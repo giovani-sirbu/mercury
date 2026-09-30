@@ -66,16 +66,29 @@ func expensiveCooldown() aggragates.CoolDownIndicators {
 
 var holdFamilyPrefixes = []string{"cooldown:", "pattern:", "fibonacci:", "smartTakeLoss:", "AI ", dynamicparams.RowPrefix}
 
-func assertOnlyFamily(t *testing.T, logs []aggragates.TradesLogs, want string) {
+// assertOnlyFamily checks the rows a tick wrote against the one family that
+// may speak: exactly its row, and no other family's text in it. The family
+// that owns a row owns its event: a cooldown hold writes one cooldown event
+// beside its row, and the market families (usePatterns, useAI) write the row
+// alone.
+func assertOnlyFamily(t *testing.T, trade aggragates.Trades, want string) {
 	t.Helper()
+	logs := trade.Logs
 	if want == "" {
-		if len(logs) != 0 {
-			t.Fatalf("expected no row, got %v", messages(logs))
+		if len(logs) != 0 || len(trade.StrategyEvents) != 0 {
+			t.Fatalf("expected no row and no event, got %v and %d events", messages(logs), len(trade.StrategyEvents))
 		}
 		return
 	}
 	if len(logs) != 1 {
 		t.Fatalf("expected exactly one row, got %v", messages(logs))
+	}
+	if strings.Contains(want, "cooldown:") {
+		if len(trade.StrategyEvents) != 1 || trade.StrategyEvents[0].Param != aggragates.StrategyParamCooldown {
+			t.Fatalf("a cooldown row must be paired with one cooldown event, got %+v", trade.StrategyEvents)
+		}
+	} else if len(trade.StrategyEvents) != 0 {
+		t.Fatalf("a %q row must write no strategy event, got %+v", want, trade.StrategyEvents)
 	}
 	if !strings.Contains(logs[0].Message, want) {
 		t.Fatalf("expected a %q row, got %q", want, logs[0].Message)
@@ -111,7 +124,7 @@ func TestShouldHoldOwnershipMatrixStopLoss(t *testing.T) {
 		if (c.want != "") != (err != nil) {
 			t.Fatalf("%s: held=%v want %q", c.name, err, c.want)
 		}
-		assertOnlyFamily(t, held.Trade.Logs, c.want)
+		assertOnlyFamily(t, held.Trade, c.want)
 	}
 }
 
@@ -139,7 +152,7 @@ func TestShouldHoldOwnershipMatrixTakeProfit(t *testing.T) {
 		if (c.want != "") != (err != nil) {
 			t.Fatalf("%s: held=%v want %q", c.name, err, c.want)
 		}
-		assertOnlyFamily(t, held.Trade.Logs, c.want)
+		assertOnlyFamily(t, held.Trade, c.want)
 	}
 }
 
@@ -169,7 +182,7 @@ func TestShouldHoldCooldownAloneHoldsTheRefusedFirstFill(t *testing.T) {
 		if err == nil {
 			t.Fatalf("inverse=%v: the cooldown must hold the refused first fill", inverse)
 		}
-		assertOnlyFamily(t, held.Trade.Logs, "cooldown: trying to get a better entry price")
+		assertOnlyFamily(t, held.Trade, "cooldown: trying to get a better entry price")
 	}
 }
 

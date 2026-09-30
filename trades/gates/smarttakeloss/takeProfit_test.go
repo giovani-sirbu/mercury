@@ -46,16 +46,16 @@ func betweenTheTakeProfits(t *testing.T, trade aggragates.Trades) float64 {
 	return (fromNewestFill + fromAverage) / 2
 }
 
-// A ladder without the marker reads its input unchanged at every price, at
-// or over break even included: it is watched, not pending.
-func TestTakeProfitPercentageLeavesATradeWithoutTheMarkerAlone(t *testing.T) {
+// A ladder without the pending event reads its input unchanged at every
+// price, at or over break even included: it is watched, not pending.
+func TestTakeProfitPercentageLeavesATradeWithoutThePendingEventAlone(t *testing.T) {
 	trade := watchedTrade()
 	if st := rebuildState(trade); !st.slowDeclineWatched || st.slowDeclinePending {
 		t.Fatal("fixture drifted: the ladder must be watched and not pending")
 	}
 	for _, price := range []float64{underTheBand, slowDeclineBand, betweenTheTakeProfits(t, pendingTrade()), 2 * slowDeclineBand} {
 		if got := TakeProfitPercentage(trade, price, breakEvenReading); got != breakEvenReading {
-			t.Fatalf("at %v a ladder without the marker must read its input, got %v", price, got)
+			t.Fatalf("at %v a ladder without the pending event must read its input, got %v", price, got)
 		}
 	}
 }
@@ -181,37 +181,34 @@ func TestTakeProfitPercentageReadsTheNewestOrderNotTheNewestRow(t *testing.T) {
 	}
 }
 
-// Every trade the marker does not make pending reads its input: an inverse
-// ladder, a child, a futures trade, a ladder without a fill, a ladder short
-// of SlowDeclineArmDepth, a strategy without the flag, a marker row without a
-// price — and a pending trade on no price at all.
+// Every trade the pending event does not make pending reads its input: an
+// inverse ladder, a child, a futures trade, a ladder without a fill, a ladder
+// short of SlowDeclineArmDepth, a strategy without the flag, a marker row
+// without its event — and a pending trade on no price at all.
 func TestTakeProfitPercentageLeavesTheOtherTradesAlone(t *testing.T) {
-	marker := pendingTrade().Logs
+	wearing := pendingTrade()
 	price := betweenTheTakeProfits(t, pendingTrade())
 
-	inverse := testutil.LadderTrade(true, fills(watchedFills, "17:38:00")...)
-	inverse.Logs = marker
+	inverse := carryingTheStateOf(testutil.LadderTrade(true, fills(watchedFills, "17:38:00")...), wearing)
 	child := pendingTrade()
 	child.ParentID = 7
 	futures := pendingTrade()
 	futures.Strategy.TradeType = aggragates.Futures
-	noFill := testutil.LadderTrade(false)
-	noFill.Logs = marker
-	shallow := testutil.LadderTrade(false, fills(SlowDeclineArmDepth-1, "17:38:00")...)
-	shallow.Logs = marker
+	noFill := carryingTheStateOf(testutil.LadderTrade(false), wearing)
+	shallow := carryingTheStateOf(testutil.LadderTrade(false, fills(SlowDeclineArmDepth-1, "17:38:00")...), wearing)
 	off := pendingTrade()
 	off.Strategy.Params.SmartTakeLoss = false
-	unpriced := watchedTrade()
-	unpriced.Logs = []aggragates.TradesLogs{{Message: SlowDeclineMessage("buy", slowDeclineReasons), Type: aggragates.LOG_INFO}}
+	textOnly := watchedTrade()
+	textOnly.Logs = []aggragates.TradesLogs{{Message: SlowDeclineMessage("buy", slowDeclineReasons), Price: slowDeclineLastFill, Type: aggragates.LOG_INFO}}
 
 	for name, trade := range map[string]aggragates.Trades{
-		"an inverse ladder":           inverse,
-		"a child":                     child,
-		"a futures trade":             futures,
-		"a ladder without a fill":     noFill,
-		"a ladder too shallow":        shallow,
-		"a strategy without the flag": off,
-		"a marker without a price":    unpriced,
+		"an inverse ladder":              inverse,
+		"a child":                        child,
+		"a futures trade":                futures,
+		"a ladder without a fill":        noFill,
+		"a ladder too shallow":           shallow,
+		"a strategy without the flag":    off,
+		"a marker row without its event": textOnly,
 	} {
 		if got := TakeProfitPercentage(trade, price, breakEvenReading); got != breakEvenReading {
 			t.Errorf("%s must read its input, got %v", name, got)
@@ -227,16 +224,15 @@ func TestTakeProfitPercentageLeavesTheOtherTradesAlone(t *testing.T) {
 	}
 }
 
-// A cancel row ends the reading from the newest fill: a cancelled trade reads
-// its input at every price, at and over break even included, exactly as the
-// ladder without the marker — it carries the marker row, but its last
-// slow-decline row is the cancel. A marker after the cancel makes it read its
-// newest fill again.
+// A cancelled event ends the reading from the newest fill: a cancelled trade
+// reads its input at every price, at and over break even included, exactly as
+// the ladder without the pending event — it carries the pending event, but
+// its last slow-decline event is the cancelled one. A pending event after the
+// cancelled one makes it read its newest fill again.
 func TestTakeProfitPercentageReadsTheInputOnACancelledTrade(t *testing.T) {
-	cancelled := pendingTrade()
-	cancelled.Logs = append(cancelled.Logs, aggragates.TradesLogs{Message: SlowDeclineCancelMessage("buy", slowDeclineBreakReasons), Price: slowDeclineLastFill})
-	if st := rebuildState(cancelled); st.slowDeclinePending || !carriesTakeProfitMarker(cancelled) {
-		t.Fatal("fixture drifted: the cancelled trade must carry the marker and read not pending")
+	cancelled := withRows(pendingTrade(), CancelledRow("buy", slowDeclineLastFill, slowDeclineBreakReasons))
+	if st := rebuildState(cancelled); st.slowDeclinePending || !carriesTakeProfitEvent(cancelled) {
+		t.Fatal("fixture drifted: the cancelled trade must carry the pending event and read not pending")
 	}
 	breakEven := ladder.AverageEntryPrice(cancelled)
 	for _, price := range []float64{breakEven, betweenTheTakeProfits(t, pendingTrade()), 2 * slowDeclineBand} {
@@ -246,11 +242,10 @@ func TestTakeProfitPercentageReadsTheInputOnACancelledTrade(t *testing.T) {
 		}
 	}
 
-	repended := cancelled
-	repended.Logs = append(append([]aggragates.TradesLogs(nil), cancelled.Logs...), aggragates.TradesLogs{Message: SlowDeclineMessage("buy", nil), Price: slowDeclineLastFill})
+	repended := withRows(cancelled, PendingRow("buy", slowDeclineLastFill, nil))
 	price := betweenTheTakeProfits(t, pendingTrade())
 	if got, want := TakeProfitPercentage(repended, price, breakEvenReading), moveAgainst(price, slowDeclineLastFill); got != want {
-		t.Fatalf("a marker after the cancel must read the newest fill again: got %v, want %v", got, want)
+		t.Fatalf("a pending event after the cancelled one must read the newest fill again: got %v, want %v", got, want)
 	}
 }
 
@@ -275,47 +270,54 @@ func TestTakeProfitPercentageReadsTheInputWhileSwitchedOff(t *testing.T) {
 }
 
 // The scan asked before the fold never turns a pending or a latched trade
-// away: every fixture rebuildState reads as pending or latched carries a row
-// the take profit's scan (carriesTakeProfitMarker) finds, an indecision row
-// included. A row without a price is found by neither the scan nor the fold,
-// as rebuildState folds none.
-func TestTakeProfitMarkerScanAgreesWithRebuildState(t *testing.T) {
-	framed := watchedTrade()
-	framed.Logs = []aggragates.TradesLogs{
-		{Message: "Hold stopLoss: cooldown: depth held", Price: slowDeclineLastFill},
-		{Message: SlowDeclineMessage("stopLoss", nil), Price: slowDeclineLastFill},
-	}
-	shallowest := testutil.LadderTrade(false, fills(SlowDeclineArmDepth, "17:38:00")...)
-	shallowest.Logs = pendingTrade().Logs
+// away: every fixture rebuildState reads as pending or latched carries an
+// event the take profit's scan (carriesTakeProfitEvent) finds, whatever
+// position the rows beside the events name. The scan reads the events' filing
+// alone and never a log row: text with no event beside it is found by neither
+// the scan nor the fold, and an event the switch of its rule ignores is found
+// by neither either.
+func TestTakeProfitEventScanAgreesWithRebuildState(t *testing.T) {
+	framed := withRows(heldBy(watchedTrade(), time.Time{}), PendingRow("stopLoss", slowDeclineLastFill, nil))
+	shallowest := carryingTheStateOf(testutil.LadderTrade(false, fills(SlowDeclineArmDepth, "17:38:00")...), pendingTrade())
 	for name, trade := range map[string]aggragates.Trades{"pending": pendingTrade(), "framed": framed, "shallowest watched": shallowest} {
 		if !rebuildState(trade).slowDeclinePending {
 			t.Fatalf("%s: fixture drifted: rebuildState must read it as pending", name)
 		}
-		if !carriesTakeProfitMarker(trade) {
-			t.Errorf("%s: the take profit's scan must find the row rebuildState folds", name)
+		if !carriesTakeProfitEvent(trade) {
+			t.Errorf("%s: the take profit's scan must find the event rebuildState folds", name)
 		}
 	}
-	if carriesTakeProfitMarker(watchedTrade()) {
-		t.Error("a ladder without the rows carries no marker")
+	if carriesTakeProfitEvent(watchedTrade()) {
+		t.Error("a ladder without the events carries none")
 	}
 
-	latchedFramed := watchedTrade()
-	latchedFramed.Logs = []aggragates.TradesLogs{
-		{Message: "Hold stopLoss: cooldown: depth held", Price: slowDeclineLastFill},
-		{Message: IndecisionMessage("stopLoss", indecisionReasons), Price: slowDeclineLastFill},
-	}
+	latchedFramed := withRows(heldBy(watchedTrade(), time.Time{}), LatchedRow("stopLoss", slowDeclineLastFill, indecisionReasons))
 	shallowestLatched := latchedBy(testutil.LadderTrade(false, fills(IndecisionArmDepth, "17:38:00")...))
 	for name, trade := range map[string]aggragates.Trades{"latched": latchedBy(watchedTrade()), "framed": latchedFramed, "shallowest watched": shallowestLatched, "pending and latched": latchedBy(pendingTrade())} {
 		if !rebuildState(trade).indecision {
 			t.Fatalf("%s: fixture drifted: rebuildState must read it as latched", name)
 		}
-		if !carriesTakeProfitMarker(trade) {
-			t.Errorf("%s: the take profit's scan must find the indecision row rebuildState folds", name)
+		if !carriesTakeProfitEvent(trade) {
+			t.Errorf("%s: the take profit's scan must find the latched event rebuildState folds", name)
 		}
 	}
-	unpriced := watchedTrade()
-	unpriced.Logs = []aggragates.TradesLogs{{Message: IndecisionMessage("buy", nil)}, {Message: SlowDeclineMessage("buy", nil)}}
-	if carriesTakeProfitMarker(unpriced) || rebuildState(unpriced).indecision || rebuildState(unpriced).slowDeclinePending {
-		t.Error("a row without a price is found by neither the scan nor the fold")
+
+	textOnly := watchedTrade()
+	textOnly.Logs = []aggragates.TradesLogs{
+		{Message: IndecisionMessage("buy", nil), Price: slowDeclineLastFill},
+		{Message: SlowDeclineMessage("buy", nil), Price: slowDeclineLastFill},
+	}
+	if carriesTakeProfitEvent(textOnly) || rebuildState(textOnly).indecision || rebuildState(textOnly).slowDeclinePending {
+		t.Error("a row without its event is found by neither the scan nor the fold")
+	}
+
+	withQuietSlowDeclineExit(t, false)
+	if carriesTakeProfitEvent(pendingTrade()) {
+		t.Error("switched off, the slow decline's events are found by no scan")
+	}
+	withQuietSlowDeclineExit(t, true)
+	withIndecisionDirection(t, false)
+	if carriesTakeProfitEvent(latchedBy(watchedTrade())) {
+		t.Error("switched off, the indecision direction's events are found by no scan")
 	}
 }

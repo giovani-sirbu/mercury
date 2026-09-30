@@ -31,7 +31,7 @@ func TestSaveHoldLogPersistsTheFirstHold(t *testing.T) {
 	ran := false
 	at := time.Date(2026, time.September, 5, 12, 0, 0, 0, time.UTC)
 
-	_, err := SaveHoldLog(recordingHoldEvent(testutil.NewHoldTrade("stopLoss", false), at, &ran), "stopLoss", holdReason)
+	_, err := SaveHoldLog(recordingHoldEvent(testutil.NewHoldTrade("stopLoss", false), at, &ran), "stopLoss", Hold{Reason: holdReason})
 
 	if !ran {
 		t.Fatal("a hold that writes its row must run updateTrade")
@@ -52,7 +52,7 @@ func TestSaveHoldLogFlagsTheCollapsedHoldAsUnpersisted(t *testing.T) {
 	at := time.Date(2026, time.September, 5, 12, 0, 0, 0, time.UTC)
 	first := false
 	event := recordingHoldEvent(testutil.NewHoldTrade("stopLoss", false), at, &first)
-	event, _ = SaveHoldLog(event, "stopLoss", holdReason)
+	event, _ = SaveHoldLog(event, "stopLoss", Hold{Reason: holdReason})
 	if !first {
 		t.Fatal("setup: the first hold must persist")
 	}
@@ -61,7 +61,7 @@ func TestSaveHoldLogFlagsTheCollapsedHoldAsUnpersisted(t *testing.T) {
 	event.Trade.PositionType = "stopLoss"
 	repeat := recordingHoldEvent(event.Trade, at.Add(time.Minute), &second)
 
-	_, err := SaveHoldLog(repeat, "stopLoss", holdReason)
+	_, err := SaveHoldLog(repeat, "stopLoss", Hold{Reason: holdReason})
 
 	if second {
 		t.Fatal("a collapsed hold must not run updateTrade")
@@ -80,13 +80,13 @@ func TestSaveHoldLogPastTheRelogWindowIsPersistedAgain(t *testing.T) {
 	at := time.Date(2026, time.September, 5, 12, 0, 0, 0, time.UTC)
 	first := false
 	event := recordingHoldEvent(testutil.NewHoldTrade("stopLoss", false), at, &first)
-	event, _ = SaveHoldLog(event, "stopLoss", holdReason)
+	event, _ = SaveHoldLog(event, "stopLoss", Hold{Reason: holdReason})
 
 	later := false
 	event.Trade.PositionType = "stopLoss"
 	repeat := recordingHoldEvent(event.Trade, at.Add(holdRelogAfter+time.Minute), &later)
 
-	_, err := SaveHoldLog(repeat, "stopLoss", holdReason)
+	_, err := SaveHoldLog(repeat, "stopLoss", Hold{Reason: holdReason})
 
 	if !later {
 		t.Fatal("past the relog window the reason is written again")

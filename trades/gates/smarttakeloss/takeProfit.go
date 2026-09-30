@@ -2,7 +2,6 @@ package smarttakeloss
 
 import (
 	"math"
-	"strings"
 
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
@@ -11,12 +10,12 @@ import (
 // profitPercentage an engine hands strategies.GetPosition, after its inverse
 // negation — the move against the average entry price. At or over break even
 // — that move zero or more — two rules raise it, each behind its own switch
-// and each read off the trade's own rows:
+// and each read off the trade's own strategy events:
 //
-//   - a trade rebuildState reads pending — its last slow-decline row a
-//     marker, not a cancel row (QuietSlowDeclineExit) — is also measured from
-//     its newest entry fill;
-//   - a trade rebuildState reads latched — it carries an indecision row
+//   - a trade rebuildState reads pending — its last slow-decline event a
+//     pending event, not a cancelled or reset one (QuietSlowDeclineExit) — is
+//     also measured from its newest entry fill;
+//   - a trade rebuildState reads latched — it carries a latched event
 //     (IndecisionDirection) — is also measured from its position price,
 //     trade.PositionPrice: the engines' own `percentage`, the move against
 //     the last buy.
@@ -24,18 +23,19 @@ import (
 // The reading is the largest of the moves that apply, so the take profit
 // arms at whichever price the tick reaches first, never later than from the
 // average entry price alone and never under break even. Under break even the
-// input comes back unchanged, exactly as on every other trade — no row, a
+// input comes back unchanged, exactly as on every other trade — no event, a
 // cancelled exit, no fill, an inverse ladder, a child, a futures trade, a
 // strategy without the flag, a rule switched off, no price: the `buy` row is
 // the spot ladder's, and sisyphus backtesting reads it for its futures trades
 // too.
 //
-// It reads the rows alone, never sophos: a new fill Apply has not judged yet
-// leaves the trade pending here, and only a cancel or reset row ends it;
-// nothing ends a latch. The engines read it before Apply, so a row Apply
-// hands back reaches it from the tick after the one that wrote it. While a
-// depth priority holds the ladder (depthPriorityHeld) neither rule moves it:
-// the input comes back unchanged, a latch included, until the next fill.
+// It reads the events alone, never sophos and never the text of a log row: a
+// new fill Apply has not judged yet leaves the trade pending here, and only a
+// cancelled or reset event ends it; nothing ends a latch. The engines read it
+// before Apply, so a row Apply hands back reaches it from the tick after the
+// one that wrote its event. While a depth priority holds the ladder
+// (depthPriorityHeld) neither rule moves it: the input comes back unchanged,
+// a latch included, until the next fill.
 //
 // Under break even nothing reads the newest fill or the position price, here
 // or in Apply: a pending trade's one sale there is the sell band. A take
@@ -69,7 +69,7 @@ func TakeProfitPercentage(trade aggragates.Trades, price, profitPercentage float
 	if trade.Strategy.TradeType == aggragates.Futures || profitPercentage < 0 {
 		return profitPercentage
 	}
-	if !carriesTakeProfitMarker(trade) {
+	if !carriesTakeProfitEvent(trade) {
 		return profitPercentage
 	}
 	st := rebuildState(trade)
@@ -88,23 +88,23 @@ func TakeProfitPercentage(trade aggragates.Trades, price, profitPercentage float
 	return reading
 }
 
-// carriesTakeProfitMarker is the cheap half of the pending and the latched
+// carriesTakeProfitEvent is the cheap half of the pending and the latched
 // tests, asked first because the engines read the take profit on every price
-// print of every trade: rebuildState reads a marker row only when it carries
-// a price, so a trade with no such row naming SlowDeclineMarker while
-// QuietSlowDeclineExit is on, or IndecisionMarker while IndecisionDirection
-// is on, can be neither pending nor latched, and the fold is skipped. One
-// pass over the rows answers for both markers and stops at the first such
-// row.
-func carriesTakeProfitMarker(trade aggragates.Trades) bool {
-	for _, row := range trade.Logs {
-		if row.Price <= 0 {
+// print of every trade: a trade with no smartTakeLoss event on the
+// slow-decline gate while QuietSlowDeclineExit is on, or on the indecision
+// gate while IndecisionDirection is on, can be neither pending nor latched,
+// and the fold is skipped. One pass over the events answers for both gates by
+// their filing alone — no document is decoded — and stops at the first such
+// event.
+func carriesTakeProfitEvent(trade aggragates.Trades) bool {
+	for _, event := range trade.StrategyEvents {
+		if event.Param != aggragates.StrategyParamSmartTakeLoss {
 			continue
 		}
-		if quietSlowDeclineExit && strings.Contains(row.Message, SlowDeclineMarker) {
+		if quietSlowDeclineExit && event.Gate == GateSlowDecline {
 			return true
 		}
-		if indecisionDirection && strings.Contains(row.Message, IndecisionMarker) {
+		if indecisionDirection && event.Gate == GateIndecision {
 			return true
 		}
 	}

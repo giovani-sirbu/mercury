@@ -4,7 +4,6 @@ import (
 	"math"
 	"reflect"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
@@ -77,7 +76,7 @@ func gridDepths() []int {
 
 // gridTrades are the ladders the grid runs on: the w3s ladder at every
 // gridDepths count — long, inverse, futures, under an impasse strategy, a
-// child and without the flag — each with no row, pending from its newest
+// child and without the flag — each with no event, pending from its newest
 // fill, latched at it by the indecision direction, and both.
 func gridTrades() []aggragates.Trades {
 	kinds := []func(*aggragates.Trades){
@@ -96,32 +95,18 @@ func gridTrades() []aggragates.Trades {
 			ladders = append(ladders, trade)
 		}
 		for _, trade := range ladders {
-			marker := aggragates.TradesLogs{Message: SlowDeclineMessage("buy", nil), Price: trade.PositionPrice}
-			latch := aggragates.TradesLogs{Message: IndecisionMessage("buy", nil), Price: trade.PositionPrice}
-			pending, latched, both := trade, trade, trade
-			pending.Logs = []aggragates.TradesLogs{marker}
-			latched.Logs = []aggragates.TradesLogs{latch}
-			both.Logs = []aggragates.TradesLogs{marker, latch}
-			trades = append(trades, trade, pending, latched, both)
+			marker := PendingRow("buy", trade.PositionPrice, nil)
+			latch := LatchedRow("buy", trade.PositionPrice, nil)
+			trades = append(trades, trade, withRows(trade, marker), withRows(trade, latch), withRows(trade, marker, latch))
 		}
 	}
 	return trades
 }
 
-// gridCarries is whether a grid trade carries a row with a price whose
-// message holds marker.
-func gridCarries(trade aggragates.Trades, marker string) bool {
-	for _, row := range trade.Logs {
-		if row.Price > 0 && strings.Contains(row.Message, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-// expectedApply is Apply stated on its own for the grid's ladders, whose rows
-// are a marker and an indecision row at the newest fill and whose blocks
-// serve no verdict and no quiet leg, so no slow-decline row ever comes back.
+// expectedApply is Apply stated on its own for the grid's ladders, whose
+// events are a pending and a latched event at the newest fill and whose
+// blocks serve no verdict and no quiet leg, so no slow-decline row ever comes
+// back.
 // Past the guards, a ladder the indecision direction watches — a long spot
 // one from IndecisionArmDepth fills — that carries no indecision row gets
 // its row on a block serving the indecision reading, whatever the proposal
@@ -136,13 +121,14 @@ func expectedApply(trade aggragates.Trades, position string, price float64, bloc
 	}
 	filled := ladder.CountFilledEntries(trade)
 	watched := indecision && !trade.Inverse && trade.Strategy.TradeType != aggragates.Futures && filled >= IndecisionArmDepth
-	if watched && block.SlowDeclineIndecision && !gridCarries(trade, IndecisionMarker) {
-		want.Indecision = &Row{Message: IndecisionMessage(trade.PositionType, block.SlowDeclineBreakReasons), Price: trade.PositionPrice}
+	if watched && block.SlowDeclineIndecision && !gridHas(trade, GateIndecision, EventLatched) {
+		row := LatchedRow(trade.PositionType, trade.PositionPrice, block.SlowDeclineBreakReasons)
+		want.Indecision = &row
 	}
 	if gridCloses[position] || gridCloses[trade.PositionType] {
 		return want
 	}
-	pending := slowDecline && !trade.Inverse && filled >= SlowDeclineArmDepth && gridCarries(trade, SlowDeclineMarker)
+	pending := slowDecline && !trade.Inverse && filled >= SlowDeclineArmDepth && gridHas(trade, GateSlowDecline, EventPending)
 	lastDepth := capitalProtection && !trade.Inverse && trade.Strategy.TradeType != aggragates.Futures &&
 		!trade.Strategy.Params.Impasse && filled >= int(trade.StrategyPair.StrategySettings[0].Depths)
 	switch {
@@ -196,8 +182,8 @@ func TestApplyOnTheGrid(t *testing.T) {
 							got := Apply(trade, position, price, withBlock(block))
 							want := expectedApply(trade, position, price, block, switches[0], switches[1], switches[2])
 							if !reflect.DeepEqual(got, want) {
-								t.Fatalf("switches %v, %d fills (inverse %v, state %q, rows %d), %q at %v, block %+v:\ngot  %+v\nwant %+v",
-									switches, len(trade.History), trade.Inverse, state, len(trade.Logs), position, price, block, got, want)
+								t.Fatalf("switches %v, %d fills (inverse %v, state %q, events %d), %q at %v, block %+v:\ngot  %+v\nwant %+v",
+									switches, len(trade.History), trade.Inverse, state, len(trade.StrategyEvents), position, price, block, got, want)
 							}
 							sold[got.Reason]++
 							if got.Indecision != nil {

@@ -2,6 +2,8 @@ package cooldown
 
 import (
 	"errors"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -58,22 +60,22 @@ func firstFillEvent(inverse bool, verdict aggragates.CoolDownIndicators) events.
 
 // tick runs one print through the gate the way shouldHoldEntry does: the
 // engine sets PositionPrice to the print, the gate answers, and a hold goes
-// through gates.SaveHoldLog, which writes or collapses the row. The event
-// that comes back is what the next tick starts from.
+// through gates.SaveHoldLog, which writes or collapses the row and its event.
+// The event that comes back is what the next tick starts from.
 func tick(t *testing.T, event events.Events, price float64, at time.Time) (events.Events, string) {
 	t.Helper()
 	event.Trade.PositionPrice = price
 	event.Timestamp = at.UnixMilli()
 	side := aggragates.EntrySide(event.Trade, event.Params.AIIndicators)
-	event, reason := FirstFillHold(event, side)
-	if reason == "" {
+	event, hold := FirstFillHold(event, side)
+	if !hold.Held() {
 		return event, ""
 	}
-	held, err := gates.SaveHoldLog(event, "entry", reason)
+	held, err := gates.SaveHoldLog(event, "entry", hold)
 	if !errors.Is(err, events.ErrTradeHeld) {
 		t.Fatalf("a hold must stop the chain, got %v", err)
 	}
-	return held, reason
+	return held, hold.Reason
 }
 
 // ticks runs a sequence of prints a minute apart from the given clock and
@@ -94,6 +96,49 @@ func rows(event events.Events) []string {
 	return out
 }
 
+// firstFillKinds is the kinds of the trade's first-fill events, in the order
+// the trade carries them.
+func firstFillKinds(trade aggragates.Trades) []string {
+	var kinds []string
+	for _, event := range trade.StrategyEventsOf(aggragates.StrategyParamCooldown, GateFirstFill) {
+		kinds = append(kinds, event.Kind())
+	}
+	return kinds
+}
+
+// firstFillData is the document of the trade's index-th first-fill event.
+func firstFillData(t *testing.T, trade aggragates.Trades, index int) FirstFillEvent {
+	t.Helper()
+	stored := trade.StrategyEventsOf(aggragates.StrategyParamCooldown, GateFirstFill)
+	if index >= len(stored) {
+		t.Fatalf("first-fill event %d asked for, the trade carries %v", index, firstFillKinds(trade))
+	}
+	var data FirstFillEvent
+	if err := stored[index].DecodeData(&data); err != nil {
+		t.Fatalf("first-fill event %d does not decode: %v", index, err)
+	}
+	return data
+}
+
+// assertPaired is the pairing rule of a gate's row and its event: the same
+// trade and the very same stamp, so (TradeID, CreatedAt) finds the pair.
+func assertPaired(t *testing.T, row aggragates.TradesLogs, event aggragates.TradesStrategyEvents) {
+	t.Helper()
+	if event.TradeID != row.TradeID || !event.CreatedAt.Equal(row.CreatedAt) {
+		t.Fatalf("row (trade %d, %s) and event (trade %d, %s) are not a pair",
+			row.TradeID, row.CreatedAt, event.TradeID, event.CreatedAt)
+	}
+}
+
+// wantKinds fails unless the trade's first-fill events are exactly these
+// kinds, in order.
+func wantKinds(t *testing.T, trade aggragates.Trades, want ...string) {
+	t.Helper()
+	if got := firstFillKinds(trade); !reflect.DeepEqual(got, want) {
+		t.Fatalf("first-fill events = %v, want %v", got, want)
+	}
+}
+
 // A refused verdict activates the hold at the tick price: one row, its Price
 // the reference, and PositionPrice back at 0 — a positive one reads as
 // "entered" to the engines.
@@ -112,6 +157,11 @@ func TestFirstFillHoldActivatesAtTheTickPrice(t *testing.T) {
 	if held.Trade.PositionPrice != 0 {
 		t.Fatalf("PositionPrice = %v, must stay 0 on a held new trade", held.Trade.PositionPrice)
 	}
+	wantKinds(t, held.Trade, FirstFillActivated)
+	assertPaired(t, row, held.Trade.StrategyEvents[0])
+	if got := firstFillData(t, held.Trade, 0); got != (FirstFillEvent{Event: FirstFillActivated, Price: 100, Reference: 100}) {
+		t.Fatalf("event = %+v, want the activation at the tick price", got)
+	}
 	if FirstFillVerdictNeeded(held.Trade, "new") {
 		t.Fatal("once the hold stands the verdict is not fetched again")
 	}
@@ -124,6 +174,7 @@ func TestFirstFillHoldCollapsesTheStandingWait(t *testing.T) {
 	if len(held.Trade.Logs) != 1 {
 		t.Fatalf("a standing wait must not write a row per tick, got %q", rows(held))
 	}
+	wantKinds(t, held.Trade, FirstFillActivated)
 }
 
 // From up(R) on the hold was wrong: the entry goes to market and the entered
@@ -143,11 +194,17 @@ func TestFirstFillHoldEntersAboveTheReferenceOnce(t *testing.T) {
 	if row.Price != 102.57 || row.Type != aggragates.LOG_INFO || row.TradeID != 7 || !row.CreatedAt.Equal(testutil.At("10:00:00")) {
 		t.Fatalf("entered row = %+v, want the tick price and the tick clock", row)
 	}
+	wantKinds(t, released.Trade, FirstFillActivated, FirstFillEntered)
+	assertPaired(t, row, released.Trade.StrategyEvents[1])
+	if got := firstFillData(t, released.Trade, 1); got != (FirstFillEvent{Event: FirstFillEntered, Price: 102.57, Reference: 100}) {
+		t.Fatalf("event = %+v, want the release at the tick price through the reference", got)
+	}
 
 	again, reason := tick(t, released, 103, testutil.At("10:01:00"))
 	if reason != "" || len(again.Trade.Logs) != 2 {
 		t.Fatalf("a release with the row present must add nothing, got %q %q", reason, rows(again))
 	}
+	wantKinds(t, again.Trade, FirstFillActivated, FirstFillEntered)
 	if FirstFillVerdictNeeded(again.Trade, "new") {
 		t.Fatal("after the release the verdict is not needed")
 	}
@@ -177,6 +234,11 @@ func TestFirstFillHoldArmsAtTheLadderStep(t *testing.T) {
 	if armed.Trade.PositionPrice != 0 {
 		t.Fatalf("PositionPrice = %v, must stay 0 while armed", armed.Trade.PositionPrice)
 	}
+	wantKinds(t, armed.Trade, FirstFillActivated, FirstFillArmed)
+	assertPaired(t, armed.Trade.Logs[1], armed.Trade.StrategyEvents[1])
+	if got := firstFillData(t, armed.Trade, 1); got != (FirstFillEvent{Event: FirstFillArmed, Price: 97.40, Reference: 100, Anchor: 97.40}) {
+		t.Fatalf("event = %+v, want the armed hold anchored at the tick", got)
+	}
 }
 
 // The anchor follows the low by whole (tr + t) steps and never rises: a
@@ -190,15 +252,21 @@ func TestFirstFillHoldTrailsTheLowByFullSteps(t *testing.T) {
 	if len(inside.Trade.Logs) != 2 {
 		t.Fatalf("a print inside the step must not move the anchor, got %q", rows(inside))
 	}
+	wantKinds(t, inside.Trade, FirstFillActivated, FirstFillArmed)
 	lower, reason := tick(t, inside, 96.50, testutil.At("09:20:00"))
 	if reason != armedReason("96.5000") || len(lower.Trade.Logs) != 3 || lower.Trade.Logs[2].Price != 96.50 {
 		t.Fatalf("a full step lower must write a new row at the new low, got %q %q", reason, rows(lower))
+	}
+	wantKinds(t, lower.Trade, FirstFillActivated, FirstFillArmed, FirstFillArmed)
+	if anchor := firstFillState(lower.Trade).anchor; anchor != 96.50 {
+		t.Fatalf("anchor = %v, want the new low 96.50", anchor)
 	}
 	// Back up, but short of the bounce off the new low: the low stands.
 	back, reason := tick(t, lower, 96.60, testutil.At("09:21:00"))
 	if reason != armedReason("96.5000") || len(back.Trade.Logs) != 3 {
 		t.Fatalf("a print short of the bounce must keep the low, got %q %q", reason, rows(back))
 	}
+	wantKinds(t, back.Trade, FirstFillActivated, FirstFillArmed, FirstFillArmed)
 }
 
 // A t bounce off the low fills the entry, exactly as STOPLOSS_TO_BUY does.
@@ -209,6 +277,7 @@ func TestFirstFillHoldFillsOnTheBounce(t *testing.T) {
 	if reason != "" || len(released.Trade.Logs) != 3 {
 		t.Fatalf("above bounce(A) the entry must proceed with no row, got %q %q", reason, rows(released))
 	}
+	wantKinds(t, released.Trade, FirstFillActivated, FirstFillArmed, FirstFillArmed)
 	// Exactly at the bounce is not yet a bounce: the ladder's `>` is strict.
 	// Computed in float64 at run time, as the gate computes it.
 	anchor, tolerance := 96.50, 0.15
@@ -217,25 +286,27 @@ func TestFirstFillHoldFillsOnTheBounce(t *testing.T) {
 	}
 }
 
-// gates.SaveHoldLog writes a standing row again once it is older than its
-// re-log window, at the price of that later tick. The reference is the FIRST
-// waiting row and the anchor the lowest armed row, so a re-log moves neither.
+// gates.SaveHoldLog writes a standing hold again once its row is older than
+// the re-log window, with an event at the price of that later tick. The
+// reference is the FIRST activated event and the anchor the lowest armed one,
+// so a re-log moves neither.
 //
 // Asserted on firstFillState rather than through FirstFillHold: while
 // FirstFillMaxHold is shorter than holdRelogAfter no first-fill hold survives
 // long enough to BE re-logged, so driving the gate past the window only ever
-// proves the cap. The rule the state owns still has to hold — the rows arrive
-// from the engines, and a wider cap (or none) puts them back in front of it.
+// proves the cap. The rule the state owns still has to hold — the events
+// arrive from the engines, and a wider cap (or none) puts them back in front
+// of it.
 func TestFirstFillStateRelogKeepsTheReferenceAndTheLow(t *testing.T) {
 	day := testutil.At("09:00:00")
-	trade := aggragates.Trades{Logs: []aggragates.TradesLogs{
-		{Message: "Hold entry: " + FirstFillWaitingPrefix + "100", Price: 100, CreatedAt: day},
+	trade := aggragates.Trades{StrategyEvents: []aggragates.TradesStrategyEvents{
+		NewFirstFillEvent(0, FirstFillEvent{Event: FirstFillActivated, Price: 100, Reference: 100}, day),
 		// The re-log of that same wait, past the window, at a later price.
-		{Message: "Hold entry: " + FirstFillWaitingPrefix + "100", Price: 101.5, CreatedAt: day.Add(25 * time.Hour)},
-		{Message: "Hold entry: " + FirstFillArmedPrefix + "97.40", Price: 97.40, CreatedAt: day.Add(26 * time.Hour)},
-		{Message: "Hold entry: " + FirstFillArmedPrefix + "96.50", Price: 96.50, CreatedAt: day.Add(27 * time.Hour)},
-		// The re-log of the armed row, above the low it trails.
-		{Message: "Hold entry: " + FirstFillArmedPrefix + "96.50", Price: 96.60, CreatedAt: day.Add(51 * time.Hour)},
+		NewFirstFillEvent(0, FirstFillEvent{Event: FirstFillActivated, Price: 101.5, Reference: 100}, day.Add(25*time.Hour)),
+		NewFirstFillEvent(0, FirstFillEvent{Event: FirstFillArmed, Price: 97.40, Reference: 100, Anchor: 97.40}, day.Add(26*time.Hour)),
+		NewFirstFillEvent(0, FirstFillEvent{Event: FirstFillArmed, Price: 96.50, Reference: 100, Anchor: 96.50}, day.Add(27*time.Hour)),
+		// The re-log of the armed hold, above the low it trails.
+		NewFirstFillEvent(0, FirstFillEvent{Event: FirstFillArmed, Price: 96.60, Reference: 100, Anchor: 96.50}, day.Add(51*time.Hour)),
 	}}
 
 	state := firstFillState(trade)
@@ -243,10 +314,47 @@ func TestFirstFillStateRelogKeepsTheReferenceAndTheLow(t *testing.T) {
 		t.Fatalf("reference = %v, want the first waiting row's 100", state.reference)
 	}
 	if !state.armed || state.anchor != 96.50 {
-		t.Fatalf("anchor = %v, want the lowest armed row's 96.50", state.anchor)
+		t.Fatalf("anchor = %v, want the lowest armed event's 96.50", state.anchor)
 	}
 	if !state.activatedAt.Equal(day) {
-		t.Fatalf("activatedAt = %s, want the first waiting row's stamp %s", state.activatedAt, day)
+		t.Fatalf("activatedAt = %s, want the first activated event's stamp %s", state.activatedAt, day)
+	}
+}
+
+// The rows are the operator's text, never the gate's state: a trade whose log
+// carries every row the gate writes, at their prices, but none of the events —
+// a trade from before events existed — has no first-fill state at all, and the
+// gate starts it afresh.
+func TestFirstFillStateIsNotTheRowText(t *testing.T) {
+	trade := testutil.NewHoldTrade("buy", false)
+	trade.Logs = []aggragates.TradesLogs{
+		{Message: waitingRow, Price: 100, Type: aggragates.LOG_INFO},
+		{Message: "Hold entry: " + armedReason("97.4000"), Price: 97.40, Type: aggragates.LOG_INFO},
+		{Message: enteredRow, Price: 102.6, Type: aggragates.LOG_INFO},
+	}
+
+	if state := firstFillState(trade); state != (firstFillRecord{}) {
+		t.Fatalf("state = %+v, want none from rows alone", state)
+	}
+	if !FirstFillVerdictNeeded(trade, "new") {
+		t.Fatal("rows alone are no activation: the verdict is still needed")
+	}
+	trade.History = []aggragates.TradesHistory{{Type: "BUY", Quantity: 1, Price: 102.6, OrderId: 1}}
+	if NextDepthDoubled(trade) {
+		t.Fatal("an entered row alone doubles nothing")
+	}
+
+	// The gate starts afresh, at a reference of its own: a print at another
+	// price is another message, which the log-row dedupe lets through.
+	event := firstFillEvent(false, refused())
+	event.Trade.Logs = trade.Logs
+	fresh, reason := tick(t, event, 101, testutil.At("09:00:00"))
+	if !strings.Contains(reason, FirstFillWaitingPrefix+"101.0000") {
+		t.Fatalf("reason = %q, want the gate to activate afresh at 101", reason)
+	}
+	wantKinds(t, fresh.Trade, FirstFillActivated)
+	if state := firstFillState(fresh.Trade); state.reference != 101 {
+		t.Fatalf("reference = %v, want the fresh activation's 101", state.reference)
 	}
 }
 
@@ -270,6 +378,7 @@ func TestFirstFillHoldExpiresAtTheCap(t *testing.T) {
 	if len(released.Trade.Logs) != 1 {
 		t.Fatalf("the release must write no row, got %q", rows(released))
 	}
+	wantKinds(t, released.Trade, FirstFillActivated)
 	if NextDepthDoubled(released.Trade) {
 		t.Fatal("a hold that ran out of time made no wrong call: the next depth must not double")
 	}
@@ -284,15 +393,17 @@ func TestFirstFillHoldNeverExpiresOnUnknownClocks(t *testing.T) {
 	unstamped := held
 	unstamped.Trade.Logs = append([]aggragates.TradesLogs(nil), held.Trade.Logs...)
 	unstamped.Trade.Logs[0].CreatedAt = time.Time{}
+	unstamped.Trade.StrategyEvents = append([]aggragates.TradesStrategyEvents(nil), held.Trade.StrategyEvents...)
+	unstamped.Trade.StrategyEvents[0].CreatedAt = time.Time{}
 	if _, reason := tick(t, unstamped, 100.5, start.Add(30*24*time.Hour)); reason == "" {
-		t.Fatal("an unstamped hold row must keep holding, not expire")
+		t.Fatal("an unstamped hold event must keep holding, not expire")
 	}
 
 	noTick := held
 	noTick.Trade.PositionPrice = 100.5
 	noTick.Timestamp = 0
 	side := aggragates.EntrySide(noTick.Trade, noTick.Params.AIIndicators)
-	if _, reason := FirstFillHold(noTick, side); reason == "" {
+	if _, hold := FirstFillHold(noTick, side); !hold.Held() {
 		t.Fatal("a zero tick clock must keep holding, not expire")
 	}
 }
@@ -323,18 +434,18 @@ func TestFirstFillHoldJudgesTheSideNotTheFlag(t *testing.T) {
 	event := firstFillEvent(false, cheapShort)
 	event.Trade.PositionPrice = 100
 
-	if _, reason := FirstFillHold(event, aggragates.SideShort); reason != "" {
-		t.Errorf("a short entry at an allowed short location must open, got %q", reason)
+	if _, hold := FirstFillHold(event, aggragates.SideShort); hold.Held() {
+		t.Errorf("a short entry at an allowed short location must open, got %q", hold.Reason)
 	}
-	if _, reason := FirstFillHold(event, aggragates.SideLong); reason == "" {
+	if _, hold := FirstFillHold(event, aggragates.SideLong); !hold.Held() {
 		t.Error("a long entry at a refused long location must be held")
 	}
 
 	// No side is nothing to judge, on spot as on futures: the verdict may
 	// refuse both directions and the gate still writes nothing.
 	event.Params.CoolDownIndicators = refused()
-	if got, reason := FirstFillHold(event, ""); reason != "" || len(got.Trade.Logs) != 0 {
-		t.Errorf("an entry with no side must not be held on spot, got %q %q", reason, rows(got))
+	if got, hold := FirstFillHold(event, ""); hold.Held() || len(got.Trade.Logs) != 0 {
+		t.Errorf("an entry with no side must not be held on spot, got %q %q", hold.Reason, rows(got))
 	}
 }
 
@@ -411,27 +522,45 @@ func TestFirstFillHoldOnFuturesIsTheVerdictAlone(t *testing.T) {
 	event.Trade.Strategy.TradeType = aggragates.Futures
 	event.Trade.PositionPrice = 0
 	event.Trade.Logs = []aggragates.TradesLogs{{Message: waitingRow, Price: 100}}
+	event.Trade.StrategyEvents = []aggragates.TradesStrategyEvents{activatedEventAt(100)}
 
-	got, reason := FirstFillHold(event, aggragates.SideLong)
-	if reason != "cooldown: trying to get a better entry price" || len(got.Trade.Logs) != 1 {
-		t.Fatalf("a refused futures long must be held by the verdict alone, got %q %q", reason, rows(got))
+	got, hold := FirstFillHold(event, aggragates.SideLong)
+	if hold.Reason != "cooldown: trying to get a better entry price" || len(got.Trade.Logs) != 1 || len(got.Trade.StrategyEvents) != 1 {
+		t.Fatalf("a refused futures long must be held by the verdict alone, got %q %q", hold.Reason, rows(got))
 	}
-	if _, reason := FirstFillHold(event, aggragates.SideShort); reason != "cooldown: trying to get a better entry price (inverse)" {
-		t.Fatalf("a refused futures short must be held by the verdict alone, got %q", reason)
+	if hold.Param != aggragates.StrategyParamCooldown || hold.Gate != GateFirstFill || hold.Data != (FirstFillEvent{Event: FirstFillVerdictHeld}) {
+		t.Fatalf("the verdict hold names %q/%q with %+v, want the cooldown first-fill verdictHeld event", hold.Param, hold.Gate, hold.Data)
 	}
-	if _, reason := FirstFillHold(event, ""); reason != "" {
-		t.Fatalf("no side is nothing to judge, got %q", reason)
+	if _, hold := FirstFillHold(event, aggragates.SideShort); hold.Reason != "cooldown: trying to get a better entry price (inverse)" {
+		t.Fatalf("a refused futures short must be held by the verdict alone, got %q", hold.Reason)
+	}
+	if _, hold := FirstFillHold(event, ""); hold.Held() {
+		t.Fatalf("no side is nothing to judge, got %q", hold.Reason)
+	}
+
+	// The verdict hold is written like every other, and no fold reads it back:
+	// the state the trade carried is the state it keeps.
+	before := firstFillState(event.Trade)
+	event.Timestamp = testutil.At("09:01:00").UnixMilli()
+	written, err := gates.SaveHoldLog(event, "entry", hold)
+	if !errors.Is(err, events.ErrTradeHeld) {
+		t.Fatalf("a hold must stop the chain, got %v", err)
+	}
+	wantKinds(t, written.Trade, FirstFillActivated, FirstFillVerdictHeld)
+	assertPaired(t, written.Trade.Logs[1], written.Trade.StrategyEvents[1])
+	if after := firstFillState(written.Trade); after != before {
+		t.Fatalf("state = %+v, want %+v: the verdict hold must change nothing", after, before)
 	}
 
 	event.Params.CoolDownIndicators = allowed()
 	for _, side := range []string{aggragates.SideLong, aggragates.SideShort} {
-		if _, reason := FirstFillHold(event, side); reason != "" {
-			t.Fatalf("an allowed futures %s must open, got %q", side, reason)
+		if _, hold := FirstFillHold(event, side); hold.Held() {
+			t.Fatalf("an allowed futures %s must open, got %q", side, hold.Reason)
 		}
 	}
 	event.Params.CoolDownIndicators = aggragates.CoolDownIndicators{}
-	if _, reason := FirstFillHold(event, aggragates.SideLong); reason != "" {
-		t.Fatalf("a missing verdict must fail open on futures, got %q", reason)
+	if _, hold := FirstFillHold(event, aggragates.SideLong); hold.Held() {
+		t.Fatalf("a missing verdict must fail open on futures, got %q", hold.Reason)
 	}
 	if !FirstFillVerdictNeeded(event.Trade, "new") {
 		t.Fatal("futures fetch the verdict on every tick of a new trade")

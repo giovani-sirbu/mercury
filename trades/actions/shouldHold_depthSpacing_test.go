@@ -7,6 +7,7 @@ import (
 
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/gates"
 	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 )
@@ -122,8 +123,8 @@ func TestDepthSpacingIsInertWithoutTheCooldownFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("depth spacing must not fire without params.Cooldown, got %v", err)
 	}
-	if len(held.Trade.Logs) != 0 {
-		t.Fatalf("no row may be written with the flag off, got %v", messages(held.Trade.Logs))
+	if len(held.Trade.Logs) != 0 || len(held.Trade.StrategyEvents) != 0 {
+		t.Fatalf("no row and no event may be written with the flag off, got %v and %d events", messages(held.Trade.Logs), len(held.Trade.StrategyEvents))
 	}
 }
 
@@ -180,14 +181,21 @@ func TestDepthSpacingWritesOneStableCooldownRow(t *testing.T) {
 	if held.Trade.PositionType != "active" {
 		t.Errorf("position restored to %q, want the old position", held.Trade.PositionType)
 	}
+	// The event is written beside the row, and the standing hold collapses
+	// the pair together: one event, not one per tick.
+	assertNewestPair(t, held.Trade, aggragates.StrategyParamCooldown, cooldown.GateDepthSpacing, gates.EventHeld)
+	if len(held.Trade.StrategyEvents) != 1 {
+		t.Fatalf("expected one event, got %d", len(held.Trade.StrategyEvents))
+	}
 
 	held.Trade.PositionType = "stopLoss"
 	again, err := ShouldHold(depthEvent(held.Trade, trade25858[1].Add(2*time.Minute)))
 	if err == nil {
 		t.Fatal("expected the depth to still be parked on the next tick")
 	}
-	if len(again.Trade.Logs) != 1 {
-		t.Fatalf("a standing hold must not write a row per tick, got %v", messages(again.Trade.Logs))
+	if len(again.Trade.Logs) != 1 || len(again.Trade.StrategyEvents) != 1 {
+		t.Fatalf("a standing hold must not write a row or an event per tick, got %v and %d events",
+			messages(again.Trade.Logs), len(again.Trade.StrategyEvents))
 	}
 	for _, prefix := range []string{"pattern:", "smartTakeLoss:"} {
 		if strings.Contains(row.Message, prefix) {

@@ -5,24 +5,40 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/gates"
 )
 
-// Row is a trade-log row Apply asks the engine to write: the slow-decline
-// marker, its cancel row or its reset row, or the indecision row, carrying
-// the newest fill's price. The price is the fill, never trade.PositionPrice —
-// rebuildState locates the fill a ladder is pending from by it.
+// Row is a decision Apply asks the engine to write, in the two forms every
+// gate execution takes: the log row an operator reads (Message at Price) and
+// the strategy event beside it, the state a later tick's fold reads (Gate, the
+// Event kind, Price and Reasons). Rows builds both from it, and the engine
+// writes them under one stamp.
+//
+// The rows Apply hands back are the slow-decline pending row — going pending,
+// or a new fill confirming the exit —, its cancelled row and its reset row,
+// and the indecision latched row: PendingRow, CancelledRow, ResetRow and
+// LatchedRow build them, for Apply and for a fixture alike, and ExitRow
+// builds the sold row of a forced sale. A Row built by hand, without a Gate,
+// files its event under no gate, which no fold reads, so callers build every
+// Row with those builders. Message is human-readable text, byte-stable for cp
+// and the notification filter, and nothing reads it back.
+// Price is the newest fill's price, never trade.PositionPrice — rebuildState
+// locates the fill a ladder is pending from by it — and the level of the sale
+// on a sold row.
 type Row struct {
 	Message string
 	Price   float64
+	Gate    string
+	Event   string
+	Reasons []string
 }
 
 // Result is the overlay's answer. Position is the ladder's proposal, or
 // "sellLoss" when a rule forced the exit — then Reason names the rule that
-// sold (reasonSellBand, reasonCapitalProtection) for the engine's ExitMessage
-// row, and is empty otherwise. SlowDecline is non-nil on the tick a watched
+// sold (reasonSellBand, reasonCapitalProtection) for the engine's ExitRow,
+// and is empty otherwise. SlowDecline is non-nil on the tick a watched
 // ladder goes pending, on the tick a new fill on a pending ladder is judged —
-// the marker again, or the cancel row — and on the first tick a depth
+// the pending row again, or the cancelled row — and on the first tick a depth
 // priority holds a pending ladder — the reset row. Indecision is non-nil on
 // the tick a ladder the indecision direction watches is latched
-// (indecisionRow). The engine appends each with LogRow, the slow-decline row
+// (indecisionRow). The engine writes each through Rows, the slow-decline row
 // first. Capital protection hands back no row.
 type Result struct {
 	Position    string

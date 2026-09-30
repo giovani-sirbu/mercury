@@ -18,7 +18,7 @@ func TestSaveHoldLogCollapsesAlternatingReasonsWithinWindow(t *testing.T) {
 	step := func(reason string, offset time.Duration) {
 		event.Trade.PositionType = "stopLoss"
 		event.Timestamp = at.Add(offset).UnixMilli()
-		event, _ = SaveHoldLog(event, "stopLoss", reason)
+		event, _ = SaveHoldLog(event, "stopLoss", Hold{Reason: reason})
 	}
 
 	step(reasonA, 0)

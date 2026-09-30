@@ -14,7 +14,7 @@ import "github.com/giovani-sirbu/mercury/trades/aggragates"
 // pending ladder's new fill does not ask it, since a new fill is recent by
 // construction, and neither do the first-fill hold and the indecision latch.
 // Once pending, a ladder stays pending however old its newest fill grows,
-// until its sale, a cancel row or a reset row.
+// until its sale, a cancelled or reset event.
 //
 // Switched off (SlowDeclineNeedsRecentFill) it always holds. Switched on, it
 // fails closed: no fill window served — sophos down, an older sophos, a

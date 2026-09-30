@@ -1,7 +1,9 @@
 package smarttakeloss
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,11 +74,86 @@ func indecisionReading() aggragates.AIIndicators {
 	})
 }
 
-// latchedBy is the trade carrying the indecision row the engine wrote for its
-// newest fill, after the rows it already carries.
+// latchedBy is the trade carrying the latched pair the engine wrote for its
+// newest fill — the indecision row and its event — after the rows and events
+// it already carries.
 func latchedBy(trade aggragates.Trades) aggragates.Trades {
-	row := Row{Message: IndecisionMessage("buy", indecisionReasons), Price: rebuildState(trade).lastFill().Price}
+	row := LatchedRow("buy", rebuildState(trade).lastFill().Price, indecisionReasons)
 	return withRow(trade, row, testutil.At("21:45:00"))
+}
+
+// withRow is the trade with one more row, written the way the engines write
+// the rows Apply hands back: the log row and its event, one stamp.
+func withRow(trade aggragates.Trades, row Row, at time.Time) aggragates.Trades {
+	return Append(trade, row, at)
+}
+
+// withRows is the trade with these rows written after the ones it already
+// carries, in order, none of them stamped: the state a fold reads, for the
+// tests that never look at a clock.
+func withRows(trade aggragates.Trades, rows ...Row) aggragates.Trades {
+	for _, row := range rows {
+		trade = withRow(trade, row, time.Time{})
+	}
+	return trade
+}
+
+// withEvents is the trade carrying these strategy events after the ones it
+// already carries, and no row beside them: the state a fold reads, with no
+// text to lean on.
+func withEvents(trade aggragates.Trades, events ...aggragates.TradesStrategyEvents) aggragates.Trades {
+	trade.StrategyEvents = append(append([]aggragates.TradesStrategyEvents(nil), trade.StrategyEvents...), events...)
+	return trade
+}
+
+// eventOf is a smartTakeLoss event of gate whose document is exactly this
+// JSON, unstamped: the documents no writer produces and the ones a database
+// hands back in its own rendering.
+func eventOf(gate, document string) aggragates.TradesStrategyEvents {
+	return aggragates.TradesStrategyEvents{
+		Param: aggragates.StrategyParamSmartTakeLoss,
+		Gate:  gate,
+		Data:  json.RawMessage(document),
+	}
+}
+
+// carryingTheStateOf is the trade wearing the log rows and the strategy events
+// of source: the two slices a fold reads, copied together so a fixture ladder
+// never carries the rows of one state and the events of another.
+func carryingTheStateOf(trade, source aggragates.Trades) aggragates.Trades {
+	trade.Logs = source.Logs
+	trade.StrategyEvents = source.StrategyEvents
+	return trade
+}
+
+// gridHas is whether a trade carries a smartTakeLoss event of gate and kind
+// with a price — stated on the events with the decoder alone, so the
+// expectations built on it never lean on the fold they check.
+func gridHas(trade aggragates.Trades, gate, kind string) bool {
+	for _, event := range trade.StrategyEventsOf(aggragates.StrategyParamSmartTakeLoss, gate) {
+		var data EventData
+		if err := event.DecodeData(&data); err == nil && data.Event == kind && data.Price > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// rowFiling is the gate and kind the event beside a row is filed under, read
+// off the marker the row's message carries: the one table every writer is
+// held to. A message that names none has no filing.
+func rowFiling(message string) (gate, kind string) {
+	for _, filing := range []struct{ marker, gate, kind string }{
+		{SlowDeclineMarker, GateSlowDecline, EventPending},
+		{SlowDeclineCancelMarker, GateSlowDecline, EventCancelled},
+		{SlowDeclineResetMarker, GateSlowDecline, EventReset},
+		{IndecisionMarker, GateIndecision, EventLatched},
+	} {
+		if strings.Contains(message, filing.marker) {
+			return filing.gate, filing.kind
+		}
+	}
+	return "", ""
 }
 
 // withIndecisionDirection is withQuietSlowDeclineExit for the indecision

@@ -45,27 +45,48 @@ func sampledLadder(r *rand.Rand) aggragates.Trades {
 	return trade
 }
 
-// sampledRows draws the trade's slow-decline and indecision rows: none, a
-// marker at the newest fill or at the fill before it (the newest not judged
-// yet), a marker a cancel row took back, a cancel row a marker followed, the
-// retired rule's rows before a marker, a marker without a price, an
-// indecision row, one beside a marker, or one without a price.
-func sampledRows(r *rand.Rand, trade aggragates.Trades) []aggragates.TradesLogs {
+// sampledState draws the trade's slow-decline and indecision state, ten kinds
+// with one draw: none, a marker at the newest fill or at the fill before it
+// (the newest not judged yet), a marker a cancel took back, a cancel a marker
+// followed, the retired rule's text rows before a marker, a marker's text
+// without its event, an indecision row, one beside a marker, or an
+// indecision text without its event. The rows are written the way the engines
+// write them, each with its event; a row of text alone carries no event, and
+// so no state.
+func sampledState(r *rand.Rand, trade aggragates.Trades) aggragates.Trades {
 	entries := entryFills(trade)
 	newest, before := trade.PositionPrice, trade.PositionPrice
 	if len(entries) >= 2 {
 		before = entries[len(entries)-2].Price
 	}
-	marker := aggragates.TradesLogs{Message: SlowDeclineMessage("buy", nil), Price: newest}
-	cancel := aggragates.TradesLogs{Message: SlowDeclineCancelMessage("buy", nil), Price: newest}
-	earlier := aggragates.TradesLogs{Message: SlowDeclineMessage("buy", nil), Price: before}
-	latch := aggragates.TradesLogs{Message: IndecisionMessage("buy", nil), Price: newest}
-	rows := [][]aggragates.TradesLogs{
-		nil, {marker}, {earlier}, {marker, cancel}, {cancel, marker},
-		append(retiredRows(newest), marker), {{Message: marker.Message}},
-		{latch}, {marker, latch}, {{Message: latch.Message}},
+	marker := PendingRow("buy", newest, nil)
+	cancel := CancelledRow("buy", newest, nil)
+	earlier := PendingRow("buy", before, nil)
+	latch := LatchedRow("buy", newest, nil)
+
+	trade.Logs, trade.StrategyEvents = nil, nil
+	switch r.IntN(10) {
+	case 1:
+		return withRows(trade, marker)
+	case 2:
+		return withRows(trade, earlier)
+	case 3:
+		return withRows(trade, marker, cancel)
+	case 4:
+		return withRows(trade, cancel, marker)
+	case 5:
+		trade.Logs = retiredRows(newest)
+		return withRows(trade, marker)
+	case 6:
+		trade.Logs = []aggragates.TradesLogs{{Message: marker.Message}}
+	case 7:
+		return withRows(trade, latch)
+	case 8:
+		return withRows(trade, marker, latch)
+	case 9:
+		trade.Logs = []aggragates.TradesLogs{{Message: latch.Message}}
 	}
-	return rows[r.IntN(len(rows))]
+	return trade
 }
 
 // sampledBlock draws a reading: the verdict, the leg on and quiet with its

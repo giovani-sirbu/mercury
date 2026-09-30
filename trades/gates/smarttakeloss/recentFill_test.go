@@ -158,7 +158,7 @@ func TestAPendingLadderStaysPendingAsItsFillAgesPastTheWindow(t *testing.T) {
 // The indecision latch reads no fill window: a watched ladder whose newest
 // fill sits before the window is latched on the indecision all the same, as
 // with no window served. The first-fill hold reads none either
-// (TestEntryHoldReasonIgnoresTheFillWindow).
+// (TestEntryHoldIgnoresTheFillWindow).
 func TestTheIndecisionLatchIgnoresTheFillWindow(t *testing.T) {
 	trade := testutil.LadderTrade(false, fills(IndecisionArmDepth, "17:38:00")...)
 	for _, from := range []time.Time{{}, testutil.At("17:38:00").Add(time.Hour)} {

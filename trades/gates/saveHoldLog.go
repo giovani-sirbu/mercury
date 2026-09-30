@@ -1,7 +1,8 @@
-// Package gates is the plumbing every strategy-flag gate shares: the INFO
-// hold row a gate writes on the trade, the position normalization the gates
-// key on, and the futures first-fill veto. It imports no gate family; the
-// families live in the sub-packages and actions.ShouldHold orders them.
+// Package gates is the plumbing every strategy-flag gate shares: the Hold a
+// gate refuses with, the INFO hold row and strategy event SaveHoldLog writes
+// on the trade for it, the position normalization the gates key on, and the
+// futures first-fill veto. It imports no gate family; the families live in the
+// sub-packages and actions.ShouldHold orders them.
 package gates
 
 import (
@@ -20,19 +21,24 @@ import (
 const holdRelogAfter = 24 * time.Hour
 
 // SaveHoldLog records a hold as an INFO entry in the trade logs, restores the
-// previous position and stops the action chain.
+// previous position and stops the action chain. A hold that names a strategy
+// param writes its strategy event beside the row, in place on the trade like
+// the row: an event exists exactly when its row does, stamped with the same
+// tick clock.
 //
 // Deduplication is on the FULL message, not on the "Hold <position>:" prefix:
 // with the prefix, every later stopLoss hold of a different reason (depth
 // spacing after a pattern hold) was silently dropped, and a cooldown entry
 // hold hid the legacy AI entry veto behind it. A repeat of the same reason
 // is written again once the previous row is older than holdRelogAfter on the
-// tick clock, so the duration of a hold is on record too.
-func SaveHoldLog(event events.Events, position string, reason string) (events.Events, error) {
-	message := fmt.Sprintf("Hold %s: %s", position, reason)
+// tick clock, so the duration of a hold is on record too. The dedupe reads
+// the log rows, so it gates the row and its event together: a collapsed hold
+// writes neither.
+func SaveHoldLog(event events.Events, position string, hold Hold) (events.Events, error) {
+	message := fmt.Sprintf("Hold %s: %s", position, hold.Reason)
 	// Wrapped so the chain still stops here while the runner keeps quiet about
 	// it: the INFO entry below is the record of this decision.
-	err := fmt.Errorf("%w: %s %s", events.ErrTradeHeld, position, reason)
+	err := fmt.Errorf("%w: %s %s", events.ErrTradeHeld, position, hold.Reason)
 
 	now := event.TickTime()
 	if holdLoggedWithin(event.Trade.Logs, message, now) {
@@ -61,6 +67,12 @@ func SaveHoldLog(event events.Events, position string, reason string) (events.Ev
 		CreatedAt: now,
 		UpdatedAt: now,
 	})
+	if hold.Param != "" {
+		event.Trade.StrategyEvents = append(
+			event.Trade.StrategyEvents,
+			aggragates.NewStrategyEvent(event.Trade.ID, hold.Param, hold.Gate, hold.Data, now),
+		)
+	}
 
 	newEvent, _ := event.Events["updateTrade"](event)
 

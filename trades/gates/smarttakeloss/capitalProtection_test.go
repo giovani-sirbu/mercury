@@ -137,8 +137,8 @@ func TestApplyCapitalProtectionNeverReplacesAClose(t *testing.T) {
 			t.Fatalf("at %v the take profit must read its input, got %v", price, got)
 		}
 	}
-	if got := EntryHoldReason(testutil.LadderTrade(false), aggragates.SideLong, withBlock(solBlock())); got != "" {
-		t.Fatalf("capital protection holds no first fill, got %q", got)
+	if got := EntryHold(testutil.LadderTrade(false), aggragates.SideLong, withBlock(solBlock())); got.Held() {
+		t.Fatalf("capital protection holds no first fill, got %+v", got)
 	}
 }
 
@@ -149,7 +149,7 @@ func TestApplyCapitalProtectionNeverReplacesAClose(t *testing.T) {
 func TestApplySellBandNamesTheSaleWhenBothBandsAreReached(t *testing.T) {
 	withCapitalProtectionExit(t, true)
 	pending := lastDepthLadder()
-	pending.Logs = []aggragates.TradesLogs{{Message: SlowDeclineMessage("buy", nil), Price: pending.PositionPrice}}
+	pending = withRows(pending, PendingRow("buy", pending.PositionPrice, nil))
 	block := solBlock()
 	block.SlowDeclineSellBand = capitalProtectionBand
 	assertForced(t, Apply(pending, "", capitalProtectionBand, withBlock(block)), reasonSellBand)

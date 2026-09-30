@@ -41,6 +41,12 @@ func TestShouldHoldFirstFillActivatesAtTheTickPrice(t *testing.T) {
 	if held.Trade.Logs[0].Price != 100 || held.Trade.PositionPrice != 0 {
 		t.Fatalf("the row carries the tick (%v) and PositionPrice stays 0 (%v)", held.Trade.Logs[0].Price, held.Trade.PositionPrice)
 	}
+	// The hold's event is written beside its row through the chain: the
+	// activation the next tick's fold reads the reference from.
+	assertNewestPair(t, held.Trade, aggragates.StrategyParamCooldown, cooldown.GateFirstFill, cooldown.FirstFillActivated)
+	if len(held.Trade.StrategyEvents) != 1 {
+		t.Fatalf("expected the one activated event, got %d", len(held.Trade.StrategyEvents))
+	}
 	if cooldown.FirstFillVerdictNeeded(held.Trade, "new") {
 		t.Fatal("once the hold stands the engines stop fetching the verdict")
 	}
@@ -66,6 +72,12 @@ func TestShouldHoldFirstFillCarriesTheEnteredRowToTheChain(t *testing.T) {
 	if released.Trade.Logs[1].Price != 103 {
 		t.Fatalf("entered row price = %v, want the tick 103", released.Trade.Logs[1].Price)
 	}
+	// The pair travels together: the returned event carries the entered event
+	// too, or the row would reach updateTrade without the fact it stands for.
+	if len(released.Trade.StrategyEvents) != 2 {
+		t.Fatalf("the returned event must carry the entered event, got %d events", len(released.Trade.StrategyEvents))
+	}
+	assertNewestPair(t, released.Trade, aggragates.StrategyParamCooldown, cooldown.GateFirstFill, cooldown.FirstFillEntered)
 
 	// The market fill that follows is the one depth the correction applies to.
 	released.Trade.History = []aggragates.TradesHistory{{Type: "BUY", Quantity: 1, Price: 103, OrderId: 1}}

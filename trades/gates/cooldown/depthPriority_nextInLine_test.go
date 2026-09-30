@@ -65,7 +65,7 @@ func refillCost(t *testing.T, trade aggragates.Trades) float64 {
 func assertRefillHold(t *testing.T, own aggragates.Trades, view []aggragates.LadderDepth, free float64, want string) {
 	t.Helper()
 
-	if got := DepthPriorityHoldReason(priorityEvent(own, "buy", view, free), "stopLoss"); got != want {
+	if got := DepthPriorityHold(priorityEvent(own, "buy", view, free), "stopLoss").Reason; got != want {
 		t.Fatalf("%s on a wallet of %v: reason = %q, want %q", own.Symbol, free, got, want)
 	}
 }
@@ -171,7 +171,7 @@ func TestDepthPriorityHoldsAFirstFillForTheNextInLine(t *testing.T) {
 	newcomer := testutil.LadderDepthTrade(21, "ADA/USDT", 0, refillDepths)
 
 	firstFill := func(free float64) string {
-		return DepthPriorityHoldReason(priorityEvent(newcomer, "new", view, free), "buy")
+		return DepthPriorityHold(priorityEvent(newcomer, "new", view, free), "buy").Reason
 	}
 
 	// The remainder and not a unit more: any bid at all breaks into it.
@@ -222,14 +222,14 @@ func TestDepthPriorityNeverHoldsATradeBehindItsOwnRow(t *testing.T) {
 		_, free := ladder.NextEntryCost(tc.own, 0)
 
 		stale := []aggragates.LadderDepth{refillFull(13, "SOL/USDT"), tc.copy}
-		if got := DepthPriorityHoldReason(priorityEvent(tc.own, "buy", stale, free), "stopLoss"); got != "" {
+		if got := DepthPriorityHold(priorityEvent(tc.own, "buy", stale, free), "stopLoss").Reason; got != "" {
 			t.Errorf("%s: the trade's own row held it: %q", name, got)
 		}
 
 		renumbered := tc.copy
 		renumbered.TradeID = 12
 		other := []aggragates.LadderDepth{refillFull(13, "SOL/USDT"), renumbered}
-		if got := DepthPriorityHoldReason(priorityEvent(tc.own, "buy", other, free), "stopLoss"); got == "" {
+		if got := DepthPriorityHold(priorityEvent(tc.own, "buy", other, free), "stopLoss").Reason; got == "" {
 			t.Errorf("%s: the same row under another trade id must hold the trade", name)
 		}
 	}

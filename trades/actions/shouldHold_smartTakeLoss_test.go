@@ -8,6 +8,7 @@ import (
 
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/gates"
 	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
 	"github.com/giovani-sirbu/mercury/trades/gates/smarttakeloss"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
@@ -15,7 +16,9 @@ import (
 
 // The smart take loss's one hold: no new ladder on a pair while sophos reads
 // a quiet slow decline on it. Flag first, long parents only, verdict only —
-// and before the cooldown's first-fill gate, after its wallet reserve.
+// and before the cooldown's first-fill gate, after its wallet reserve. Its
+// hold is a pair: the INFO row and, beside it under the same stamp, the held
+// event of the entry hold gate.
 
 const stlEntryHoldRow = "Hold entry: " + smarttakeloss.SlowDeclineEntryHoldReason
 
@@ -48,8 +51,18 @@ func slowDeclinePayload(on bool) aggragates.AIIndicators {
 func assertNotHeld(t *testing.T, name string, event events.Events) {
 	t.Helper()
 	held, err := ShouldHold(event)
-	if err != nil || len(held.Trade.Logs) != 0 {
-		t.Fatalf("%s: the first fill must go through, got %v %v", name, err, messages(held.Trade.Logs))
+	if err != nil || len(held.Trade.Logs) != 0 || len(held.Trade.StrategyEvents) != 0 {
+		t.Fatalf("%s: the first fill must go through, got %v %v and %d events", name, err, messages(held.Trade.Logs), len(held.Trade.StrategyEvents))
+	}
+}
+
+// assertEntryHoldPair fails unless the trade's newest row and event are the
+// smart take loss's entry hold, paired: the one hold event of its gate.
+func assertEntryHoldPair(t *testing.T, trade aggragates.Trades) {
+	t.Helper()
+	assertNewestPair(t, trade, aggragates.StrategyParamSmartTakeLoss, smarttakeloss.GateEntryHold, gates.EventHeld)
+	if got := trade.StrategyEventsOf(aggragates.StrategyParamSmartTakeLoss, smarttakeloss.GateEntryHold); len(got) != 1 {
+		t.Fatalf("the hold writes one event, got %d", len(got))
 	}
 }
 
@@ -70,10 +83,11 @@ func TestShouldHoldEntrySmartTakeLossHoldsALongFirstFill(t *testing.T) {
 	if held.Trade.PositionType != "new" {
 		t.Fatalf("a held first fill stays new, got %q", held.Trade.PositionType)
 	}
+	assertEntryHoldPair(t, held.Trade)
 
 	again, err := ShouldHold(held)
-	if !errors.Is(err, events.ErrTradeHeld) || len(again.Trade.Logs) != 1 {
-		t.Fatalf("the next tick must hold onto the same row, got %v %v", err, messages(again.Trade.Logs))
+	if !errors.Is(err, events.ErrTradeHeld) || len(again.Trade.Logs) != 1 || len(again.Trade.StrategyEvents) != 1 {
+		t.Fatalf("the next tick must hold onto the same row and write no second event, got %v %v and %d events", err, messages(again.Trade.Logs), len(again.Trade.StrategyEvents))
 	}
 }
 
@@ -137,6 +151,10 @@ func TestShouldHoldEntryDepthPriorityOutranksTheSlowDeclineHold(t *testing.T) {
 	if row := held.Trade.Logs[0].Message; !strings.HasPrefix(row, "Hold entry: cooldown: depth priority,") {
 		t.Fatalf("row = %q, want the wallet reserve's", row)
 	}
+	if len(held.Trade.StrategyEvents) != 1 {
+		t.Fatalf("the reserve's row is paired with the reserve's event alone, got %d events", len(held.Trade.StrategyEvents))
+	}
+	assertNewestPair(t, held.Trade, aggragates.StrategyParamCooldown, cooldown.GateDepthPriority, gates.EventHeld)
 }
 
 // Before the first-fill gate: while the slow-decline hold stands the gate is
@@ -156,6 +174,10 @@ func TestShouldHoldEntrySlowDeclineHoldsBeforeTheFirstFillGate(t *testing.T) {
 	if strings.Contains(held.Trade.Logs[0].Message, cooldown.FirstFillWaitingPrefix) {
 		t.Fatal("the first-fill gate must not have been consulted")
 	}
+	assertEntryHoldPair(t, held.Trade)
+	if len(held.Trade.StrategyEvents) != 1 {
+		t.Fatalf("the slow-decline hold is the only event, got %d", len(held.Trade.StrategyEvents))
+	}
 	if !cooldown.FirstFillVerdictNeeded(held.Trade, "new") {
 		t.Fatal("a first fill the gate never judged must still need its verdict")
 	}
@@ -165,6 +187,10 @@ func TestShouldHoldEntrySlowDeclineHoldsBeforeTheFirstFillGate(t *testing.T) {
 	held, err = ShouldHold(control)
 	if err == nil || len(held.Trade.Logs) != 1 || !strings.Contains(held.Trade.Logs[0].Message, cooldown.FirstFillWaitingPrefix) {
 		t.Fatalf("control: without the slow decline the first-fill gate holds, got %v %v", err, messages(held.Trade.Logs))
+	}
+	assertNewestPair(t, held.Trade, aggragates.StrategyParamCooldown, cooldown.GateFirstFill, cooldown.FirstFillActivated)
+	if got := held.Trade.StrategyEventsOf(aggragates.StrategyParamSmartTakeLoss, smarttakeloss.GateEntryHold); len(got) != 0 {
+		t.Fatalf("control: the slow decline held nothing, so it wrote no event, got %d", len(got))
 	}
 }
 
@@ -179,34 +205,47 @@ func TestShouldHoldEntrySlowDeclineHoldCollapsesAndHandsOverToTheFirstFillGate(t
 	start := testutil.At("09:00:00")
 
 	var logs []aggragates.TradesLogs
+	var stored []aggragates.TradesStrategyEvents
 	for tick := 0; tick < 8; tick++ {
 		event := stlEntryEvent(params, slowDeclinePayload(true))
 		event.Params.CoolDownIndicators = refused
 		event.Trade.Logs = logs
+		event.Trade.StrategyEvents = stored
 		event.Timestamp = start.Add(time.Duration(tick) * 15 * time.Minute).UnixMilli()
 		held, err := ShouldHold(event)
 		if !errors.Is(err, events.ErrTradeHeld) {
 			t.Fatalf("tick %d: the first fill must stay held while the verdict stands, got %v", tick, err)
 		}
 		logs = held.Trade.Logs
+		stored = held.Trade.StrategyEvents
 	}
 	if len(logs) != 1 || logs[0].Message != stlEntryHoldRow {
 		t.Fatalf("the hold must write one row over the whole stretch, got %v", messages(logs))
 	}
 	trade := testutil.NewHoldTrade("buy", false)
 	trade.Logs = logs
+	trade.StrategyEvents = stored
+	assertEntryHoldPair(t, trade)
+	if len(stored) != 1 {
+		t.Fatalf("the hold must write one event over the whole stretch, got %d", len(stored))
+	}
 	if !cooldown.FirstFillVerdictNeeded(trade, "new") {
 		t.Fatal("the first-fill gate was never asked, so it must still need its verdict")
+	}
+	if got := trade.StrategyEventsOf(aggragates.StrategyParamCooldown, cooldown.GateFirstFill); len(got) != 0 {
+		t.Fatalf("the first-fill gate was never asked, so it wrote no event, got %d", len(got))
 	}
 
 	cleared := stlEntryEvent(params, slowDeclinePayload(false))
 	cleared.Params.CoolDownIndicators = refused
 	cleared.Trade.Logs = logs
+	cleared.Trade.StrategyEvents = stored
 	cleared.Timestamp = start.Add(8 * 15 * time.Minute).UnixMilli()
 	held, err := ShouldHold(cleared)
 	if err == nil || len(held.Trade.Logs) != 2 || !strings.Contains(held.Trade.Logs[1].Message, cooldown.FirstFillWaitingPrefix) {
 		t.Fatalf("once the verdict clears the first-fill gate must hold on its own row, got %v %v", err, messages(held.Trade.Logs))
 	}
+	assertNewestPair(t, held.Trade, aggragates.StrategyParamCooldown, cooldown.GateFirstFill, cooldown.FirstFillActivated)
 }
 
 // The hold outranks the legacy AI veto after it: an entry both would hold is
@@ -218,10 +257,14 @@ func TestShouldHoldEntrySlowDeclineHoldsBeforeTheAIVeto(t *testing.T) {
 	if !errors.Is(err, events.ErrTradeHeld) || len(held.Trade.Logs) != 1 || held.Trade.Logs[0].Message != stlEntryHoldRow {
 		t.Fatalf("the slow-decline hold must be the one row, got %v %v", err, messages(held.Trade.Logs))
 	}
+	assertEntryHoldPair(t, held.Trade)
 
 	payload.SmartTakeLoss = aggragates.SmartTakeLossIndicators{}
 	held, err = ShouldHold(stlEntryEvent(aggragates.StrategyParams{SmartTakeLoss: true, UseAI: true}, payload))
 	if err == nil || len(held.Trade.Logs) != 1 || held.Trade.Logs[0].Message == stlEntryHoldRow {
 		t.Fatalf("control: without the verdict the AI veto holds on its own row, got %v %v", err, messages(held.Trade.Logs))
+	}
+	if len(held.Trade.StrategyEvents) != 0 {
+		t.Fatalf("control: the AI veto writes its row alone, got %d events", len(held.Trade.StrategyEvents))
 	}
 }

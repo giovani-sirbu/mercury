@@ -3,14 +3,14 @@ package dynamicparams
 import "github.com/giovani-sirbu/mercury/trades/aggragates"
 
 // RaisedSettings is the rows a trade trades, the one call each engine makes
-// per tick: while the flag shapes the trade (Applies) and its opened row
+// per tick: while the flag shapes the trade (Applies) and its opened event
 // carries amounts that change a row (OpenedRaise), the stored rows raised by
 // those amounts (RaiseBy) and true; otherwise the stored rows themselves —
 // the very slice — and false, and the engine changes nothing.
 //
 // The reads play no part. A ladder trades the raise it opened with until it
 // closes, whatever the reads say by then, and one that opened without an
-// opened row trades its configured rows for life.
+// opened event trades its configured rows for life.
 //
 // On true the engine hands the rows to exactly two places: the
 // strategies.Strategy.Settings it computes the position from, and the

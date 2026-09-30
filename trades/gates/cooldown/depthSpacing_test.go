@@ -1,10 +1,15 @@
 package cooldown
 
 import (
+	"fmt"
+	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/gates"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
@@ -243,5 +248,65 @@ func TestDepthSpacingStepLagsTheLadderDepthAfterARealPause(t *testing.T) {
 	}
 	if got := ladder.CountFilledEntries(trade); got != 5 {
 		t.Fatalf("CountFilledEntries = %d, want 5", got)
+	}
+}
+
+// The hold hands gates.SaveHoldLog the depth spacing event that goes beside
+// its row: the ladder's depth, the escalation step and the hold that step
+// earned, and the release price only when the ladder's rows could price one.
+// The expectations come from the fold and the release rule, which have their
+// own tests, so no calibration value is restated here. The event the writer
+// stores is the very one NewDepthSpacingEvent builds.
+func TestDepthSpacingHoldCarriesItsEvent(t *testing.T) {
+	first := testutil.At("09:00:00")
+	second := first.Add(5 * time.Minute)
+	tick := second.Add(time.Minute)
+	trade := testutil.DepthTrade(first, second)
+	trade.ID = 21
+	trade.PositionPrice = trade.History[1].Price
+	state := fold(first, second)
+	release, priced := depthSpacingReleasePrice(trade, trade.History[1].Price, state.step)
+	if !priced {
+		t.Fatal("fixture drifted: the fixture ladder row must price a release")
+	}
+	event := events.Events{Trade: trade, Timestamp: tick.UnixMilli()}
+
+	hold := DepthSpacingHold(event, "stopLoss")
+	data := DepthSpacingEvent{Event: gates.EventHeld, Depth: 2, Step: state.step, Hold: state.hold, Release: release}
+	if hold.Param != aggragates.StrategyParamCooldown || hold.Gate != GateDepthSpacing || hold.Data != data {
+		t.Fatalf("hold names %q/%q with %+v, want the cooldown depthSpacing event %+v", hold.Param, hold.Gate, hold.Data, data)
+	}
+	want := fmt.Sprintf("cooldown: depths too close (depth 2, step %d), next add parked for %s or until %s",
+		state.step, state.hold, strconv.FormatFloat(release, 'f', -1, 64))
+	if hold.Reason != want {
+		t.Fatalf("reason = %q, want %q", hold.Reason, want)
+	}
+
+	// Without a ladder row there is no release price to name: the event
+	// omits it and the message stops at the wait.
+	unpriced := trade
+	unpriced.StrategyPair.StrategySettings = nil
+	hold = DepthSpacingHold(events.Events{Trade: unpriced, Timestamp: tick.UnixMilli()}, "stopLoss")
+	data.Release = 0
+	if hold.Data != data {
+		t.Fatalf("data = %+v, want the event without a release %+v", hold.Data, data)
+	}
+	want = fmt.Sprintf("cooldown: depths too close (depth 2, step %d), next add parked for %s", state.step, state.hold)
+	if hold.Reason != want {
+		t.Fatalf("reason = %q, want %q", hold.Reason, want)
+	}
+
+	event.Events = map[string]func(events.Events) (events.Events, error){"updateTrade": testutil.NopUpdateTrade}
+	written, err := gates.SaveHoldLog(event, "stopLoss", DepthSpacingHold(event, "stopLoss"))
+	if err == nil {
+		t.Fatal("a depth spacing hold must stop the chain")
+	}
+	data.Release = release
+	stored := []aggragates.TradesStrategyEvents{NewDepthSpacingEvent(21, data, tick)}
+	if !reflect.DeepEqual(written.Trade.StrategyEvents, stored) {
+		t.Fatalf("events = %+v, want %+v", written.Trade.StrategyEvents, stored)
+	}
+	if len(written.Trade.Logs) != 1 || !written.Trade.Logs[0].CreatedAt.Equal(tick) {
+		t.Fatalf("rows = %+v, want the one row carrying the event's stamp", written.Trade.Logs)
 	}
 }

@@ -6,12 +6,14 @@ import (
 )
 
 // RowPrefix opens the one row the engines write for the flag: the opened
-// row. agora keeps the rows carrying it off the users' notifications and
-// OpenedRaise finds the row by it, so it must stay byte-stable.
+// row. agora keeps the rows carrying it off the users' notifications, so it
+// must stay byte-stable. It is human-readable text, never a schema: nothing
+// finds the opened row by it, and the ladder's amounts are the opened event's.
 const RowPrefix = "dynamic params:"
 
-// OpenedMarker is the words the opened row carries right after RowPrefix:
-// Opening writes them, and OpenedRaise matches the row by them.
+// OpenedMarker is the words the opened row carries right after RowPrefix.
+// Human-readable and byte-stable like the prefix; no reader matches a row by
+// them.
 const OpenedMarker = "opened raised"
 
 // openedHead is how the opened row begins: RowPrefix, then OpenedMarker.
@@ -31,11 +33,13 @@ const (
 // depths, each under its label with its amount, joined with " and " — and
 // " on every row". A part whose amount is zero is left out; Opening never
 // writes a row whose amounts are both zero. The amounts are written with no
-// trailing zeros (strconv 'f' at the shortest precision), the text
-// OpenedRaise parses back to the very amount written.
+// trailing zeros (strconv 'f' at the shortest precision).
 //
-// Every engine writes this one text, and OpenedRaise reads the ladder's rows
-// back from it on every later tick, so it must stay byte-stable.
+// Every engine writes this one text (Opened.Message) as the human-readable
+// half of the opened pair, so it must stay byte-stable for cp, the
+// notification filter and every analysis of a recorded log. The ladder's
+// amounts are read from the opened event beside the row, never from this
+// text.
 func OpenedMessage(points float64, depths int) string {
 	var parts []string
 	if points != 0 {

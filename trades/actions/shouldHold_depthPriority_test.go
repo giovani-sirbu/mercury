@@ -1,12 +1,14 @@
 package actions
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/gates"
 	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 	"github.com/giovani-sirbu/mercury/trades/ladder"
@@ -117,6 +119,22 @@ func TestDepthPriorityHoldsAnAddThroughShouldHold(t *testing.T) {
 	if held.Trade.PositionType != "buy" {
 		t.Errorf("position restored to %q, want the old position", held.Trade.PositionType)
 	}
+
+	// The event beside the row, built with the constructor every fixture uses:
+	// the ladder the wallet is kept for and the ladder that waits, on a tick
+	// with no clock.
+	wantEvent := cooldown.NewDepthPriorityEvent(12, cooldown.DepthPriorityEvent{
+		Event:            gates.EventHeld,
+		PrioritySymbol:   "LINK/USDT",
+		PriorityDepth:    7,
+		PriorityMaxDepth: 8,
+		Depth:            4,
+		MaxDepth:         8,
+	}, time.Time{})
+	if !reflect.DeepEqual(held.Trade.StrategyEvents, []aggragates.TradesStrategyEvents{wantEvent}) {
+		t.Fatalf("events = %+v, want the one depth priority event %+v", held.Trade.StrategyEvents, wantEvent)
+	}
+	assertNewestPair(t, held.Trade, aggragates.StrategyParamCooldown, cooldown.GateDepthPriority, gates.EventHeld)
 }
 
 // The same add on a wallet that carries both goes straight through, with no
@@ -128,8 +146,8 @@ func TestDepthPriorityLetsAnAddThroughWhenTheWalletCoversBoth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a wallet that covers both must let the entry through, got %v", err)
 	}
-	if len(free.Trade.Logs) != 0 {
-		t.Fatalf("no row may be written on a released ladder, got %v", messages(free.Trade.Logs))
+	if len(free.Trade.Logs) != 0 || len(free.Trade.StrategyEvents) != 0 {
+		t.Fatalf("no row and no event may be written on a released ladder, got %v and %d events", messages(free.Trade.Logs), len(free.Trade.StrategyEvents))
 	}
 }
 

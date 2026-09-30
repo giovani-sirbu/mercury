@@ -11,7 +11,7 @@ import (
 // filled the given entries — one distinct exchange order each.
 func doubledTrade(inverse bool, fills ...float64) aggragates.Trades {
 	trade := testutil.NewHoldTrade("stopLoss", inverse)
-	trade.Logs = []aggragates.TradesLogs{waitingRowAt(100), enteredRowAt(102.6)}
+	trade = withEvents(trade, activatedEventAt(100), enteredEventAt(102.6))
 	side := "BUY"
 	if inverse {
 		side = "SELL"
@@ -53,23 +53,22 @@ func TestNextDepthDoubledOnlyAfterOneFillAtOrAboveTheReference(t *testing.T) {
 	}
 }
 
-// Only the entered row says the entry went to market above the reference:
+// Only the entered event says the entry went to market above the reference:
 // an armed hold that filled on its bounce entered below it.
-func TestNextDepthDoubledNeedsTheEnteredRow(t *testing.T) {
+func TestNextDepthDoubledNeedsTheEnteredEvent(t *testing.T) {
 	waitingOnly := doubledTrade(false, 102.6)
-	waitingOnly.Logs = waitingOnly.Logs[:1]
+	waitingOnly.StrategyEvents = waitingOnly.StrategyEvents[:1]
 	if NextDepthDoubled(waitingOnly) {
-		t.Error("without the entered row nothing is doubled")
+		t.Error("without the entered event nothing is doubled")
 	}
 
-	noRows := doubledTrade(false, 102.6)
-	noRows.Logs = nil
-	if NextDepthDoubled(noRows) {
+	noEvents := doubledTrade(false, 102.6)
+	noEvents.StrategyEvents = nil
+	if NextDepthDoubled(noEvents) {
 		t.Error("a trade the gate never held is not doubled")
 	}
 
-	bounced := doubledTrade(false, 96.65)
-	bounced.Logs = []aggragates.TradesLogs{waitingRowAt(100), armedRowAt(97.4), armedRowAt(96.5)}
+	bounced := withEvents(doubledTrade(false, 96.65), activatedEventAt(100), armedEventAt(97.4), armedEventAt(96.5))
 	if NextDepthDoubled(bounced) {
 		t.Error("an entry filled on the bounce entered below the reference")
 	}

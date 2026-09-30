@@ -25,7 +25,7 @@ func overBreakEven(trade aggragates.Trades) (price, fromAverage, fromPosition fl
 }
 
 // No latch starts while the depth priority holds a ladder: the indecision
-// reading latches the watched ladder without the gate's row, and with it no
+// reading latches the watched ladder without the gate's event, and with it no
 // proposal gets a row and the ladder reads unlatched. A pending ladder the
 // indecision reaches on its first held tick gets the reset row alone.
 func TestNoLatchStartsWhileTheDepthPriorityHolds(t *testing.T) {
@@ -42,17 +42,17 @@ func TestNoLatchStartsWhileTheDepthPriorityHolds(t *testing.T) {
 	control := Apply(pendingTrade(), "", underTheBand, indecisionReading())
 	assertRow(t, control.Indecision, IndecisionMessage("buy", indecisionReasons), slowDeclineLastFill)
 	got := Apply(heldBy(pendingTrade(), testutil.At("18:05:00")), "", underTheBand, indecisionReading())
-	assertRow(t, got.SlowDecline, resetRow("buy"), slowDeclineLastFill)
+	assertRow(t, got.SlowDecline, resetMessage("buy"), slowDeclineLastFill)
 	if got.Indecision != nil {
 		t.Fatalf("the held tick latches nothing, got %+v", got)
 	}
 }
 
-// A latch taken before the hold keeps its row: the ladder reads latched and
+// A latch taken before the hold keeps its event: the ladder reads latched and
 // held, its take profit reads the move it is handed instead of the position
 // price's, and no second row goes out. The next fill ends the hold and the
 // latch's effects resume from it: the take profit reads the position price —
-// the new fill — on the one row still.
+// the new fill — on the one row and event still.
 func TestALatchTakenBeforeTheHoldResumesAfterTheNextFill(t *testing.T) {
 	latched := latchedBy(indecisionLadder())
 	held := heldBy(latched, testutil.At("22:00:00"))
@@ -76,23 +76,36 @@ func TestALatchTakenBeforeTheHoldResumesAfterTheNextFill(t *testing.T) {
 	if got := TakeProfitPercentage(resumed, price, fromAverage); got != fromPosition || !(fromAverage < fromPosition) {
 		t.Fatalf("resumed, the take profit reads the new fill %v, got %v", fromPosition, got)
 	}
-	if got := Apply(resumed, "", underTheBand, indecisionReading()); got.Indecision != nil || carriedRows(resumed, IndecisionMarker) != 1 {
-		t.Fatalf("one indecision row, before the hold and after it, got %+v on %+v", got, resumed.Logs)
+	if got := Apply(resumed, "", underTheBand, indecisionReading()); got.Indecision != nil || carriedRows(resumed, IndecisionMarker) != 1 || carriedEvents(resumed, GateIndecision, EventLatched) != 1 {
+		t.Fatalf("one indecision row and event, before the hold and after it, got %+v on %+v and %+v", got, resumed.Logs, resumed.StrategyEvents)
 	}
 }
 
-// carriedRows counts the trade's rows naming marker.
+// carriedRows counts the trade's rows naming marker: the text the operator
+// reads, twin of carriedEvents.
 func carriedRows(trade aggragates.Trades, marker string) int {
 	count := 0
-	for _, row := range trade.Logs {
-		if strings.Contains(row.Message, marker) {
+	for _, logged := range trade.Logs {
+		if strings.Contains(logged.Message, marker) {
 			count++
 		}
 	}
 	return count
 }
 
-// Switched off, the gate's rows are ignored by every rule: a held pending
+// carriedEvents counts the trade's smartTakeLoss events of gate and kind: one
+// for every row the engines wrote for it, twin of carriedRows.
+func carriedEvents(trade aggragates.Trades, gate, kind string) int {
+	count := 0
+	for _, event := range trade.StrategyEventsOf(aggragates.StrategyParamSmartTakeLoss, gate) {
+		if event.Kind() == kind {
+			count++
+		}
+	}
+	return count
+}
+
+// Switched off, the gate's events are ignored by every rule: a held pending
 // ladder sells at the band with no reset row, a held watched ladder goes
 // pending on the verdict and is latched on the indecision, and a held latched
 // one reads its position price, as a held pending one reads its newest fill.
@@ -118,7 +131,8 @@ func TestSwitchedOffTheDepthPriorityRowsAreIgnored(t *testing.T) {
 	}
 }
 
-// No row is read as another. No marker the smart take loss folds, nor its
+// No row is taken for another by the filters that find a row by its text (cp,
+// the notification filter). No marker the smart take loss writes, nor its
 // first-fill hold reason, contains another or the depth priority marker, or
 // is contained in either; no framed smart take loss row names the depth
 // priority marker, and the gate's framed row names no smart take loss marker.

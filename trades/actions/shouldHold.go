@@ -11,7 +11,13 @@ import (
 )
 
 // ShouldHold blocks the action chain when a strategy flag advises against
-// acting. Holds are recorded by gates.SaveHoldLog as INFO trade-log entries.
+// acting. Holds are recorded by gates.SaveHoldLog as INFO trade-log entries;
+// a hold of a gate that owns a strategy param (Cooldown, SmartTakeLoss) also
+// writes its strategy event beside the row, so the trade's record of the flag
+// is whole. Some events are read back on a later tick — the first-fill gate's
+// state, the depth priority hold that pauses the smart take loss — and the
+// rest (depth spacing, the smart take loss's entry hold) only record the
+// execution. The market families (UsePatterns, UseAI) write the row alone.
 //
 // OWNERSHIP. Every gate answers to exactly one strategy flag, flag first and
 // payload second: `params.X && <payload present>`. Payload presence is only a
@@ -38,7 +44,7 @@ import (
 //
 //   - the first-fill gate decides whether the trade opens here at all. It
 //     takes one higher-highs verdict from sophos /cooldown to activate and
-//     from then on reads only the tick price and its own log rows;
+//     from then on reads only the tick price and its own strategy events;
 //   - depth spacing keeps one ladder from cascading through every depth in
 //     one drop. It reads only that trade's own fill stamps;
 //   - depth priority keeps the ladders of one wallet from all stopping
@@ -81,31 +87,32 @@ func shouldHoldEntry(event events.Events) (events.Events, error) {
 		// new capital like any other. It runs before the first-fill gate so a
 		// held entry neither consumes nor records a first-fill verdict — that
 		// judgement belongs to the tick the wallet can actually afford it on.
-		if reason := cooldown.DepthPriorityHoldReason(event, event.Trade.PositionType); reason != "" {
-			return gates.SaveHoldLog(event, "entry", reason)
+		if hold := cooldown.DepthPriorityHold(event, event.Trade.PositionType); hold.Held() {
+			return gates.SaveHoldLog(event, "entry", hold)
 		}
 	}
 	if params.SmartTakeLoss {
 		// No new ladder while sophos reads a quiet slow decline on the pair.
 		// Before the first-fill gate for the reason the wallet reserve is: a
 		// held entry must neither consume nor record a first-fill verdict.
-		if reason := smarttakeloss.EntryHoldReason(event.Trade, side, event.Params.AIIndicators); reason != "" {
-			return gates.SaveHoldLog(event, "entry", reason)
+		if hold := smarttakeloss.EntryHold(event.Trade, side, event.Params.AIIndicators); hold.Held() {
+			return gates.SaveHoldLog(event, "entry", hold)
 		}
 	}
 	if params.Cooldown {
 		// The gate hands the event back: on the tick it releases an entry
-		// above its reference it has written the row NextDepthDoubled reads,
-		// and only the event that continues down the chain reaches updateTrade.
-		var reason string
-		event, reason = cooldown.FirstFillHold(event, side)
-		if reason != "" {
-			return gates.SaveHoldLog(event, "entry", reason)
+		// above its reference it has written the entered row and event
+		// NextDepthDoubled reads, and only the event that continues down the
+		// chain reaches updateTrade.
+		var hold gates.Hold
+		event, hold = cooldown.FirstFillHold(event, side)
+		if hold.Held() {
+			return gates.SaveHoldLog(event, "entry", hold)
 		}
 	}
 	if params.UseAI {
 		if reason := ai.EntryHold(side, event.Params.AIIndicators); reason != "" {
-			return gates.SaveHoldLog(event, "entry", reason)
+			return gates.SaveHoldLog(event, "entry", gates.Hold{Reason: reason})
 		}
 	}
 	return event, nil
@@ -120,33 +127,34 @@ func shouldHoldPosition(event events.Events) (events.Events, error) {
 	position := gates.PositionType(event.Trade.PositionType)
 
 	// The market families first: a pattern hold names the reason before the
-	// legacy AI hold does.
-	reason := ""
+	// legacy AI hold does. Both write the row alone, so they set only the
+	// reason of the hold.
+	var hold gates.Hold
 	if params.UsePatterns {
-		reason = patterns.HoldReason(event, position, indicators)
+		hold.Reason = patterns.HoldReason(event, position, indicators)
 	}
-	if reason == "" && params.UseAI {
-		reason = ai.LegacyHoldReason(event, position, indicators)
+	if !hold.Held() && params.UseAI {
+		hold.Reason = ai.LegacyHoldReason(event, position, indicators)
 	}
 
-	if reason == "" && params.Cooldown {
+	if !hold.Held() && params.Cooldown {
 		// The wallet before the ladder. Neither cooldown gate has a view of
 		// the market, so nothing above is being displaced; between the two of
 		// them, "a deeper ladder of this wallet is keeping the funds" names
 		// the situation an operator is looking at, and "the last depths were
 		// close together" does not.
-		reason = cooldown.DepthPriorityHoldReason(event, position)
+		hold = cooldown.DepthPriorityHold(event, position)
 	}
 
-	if reason == "" && params.Cooldown {
+	if !hold.Held() && params.Cooldown {
 		// Last, and only when nothing else spoke: depth spacing has no view of
 		// the market at all, so every gate above names the reason for a hold
 		// better than "the last depths were close together" ever could.
-		reason = cooldown.DepthSpacingHoldReason(event, position)
+		hold = cooldown.DepthSpacingHold(event, position)
 	}
 
-	if reason != "" {
-		return gates.SaveHoldLog(event, event.Trade.PositionType, reason)
+	if hold.Held() {
+		return gates.SaveHoldLog(event, event.Trade.PositionType, hold)
 	}
 	return event, nil
 }

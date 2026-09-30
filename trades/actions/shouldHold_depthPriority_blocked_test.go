@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/gates"
 	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 	"github.com/giovani-sirbu/mercury/trades/ladder"
@@ -167,6 +168,7 @@ func TestDepthPriorityHoldsTheShallowLaddersWhileTheDeepOneIsActive(t *testing.T
 		if len(held.Trade.Logs) != 1 {
 			t.Fatalf("%s: expected one row, got %v", trade.Symbol, messages(held.Trade.Logs))
 		}
+		assertNewestPair(t, held.Trade, aggragates.StrategyParamCooldown, cooldown.GateDepthPriority, gates.EventHeld)
 
 		want := keepingRow(t, reservedSymbol, blockedRunDepthOf(t, trade.Symbol))
 		if got := held.Trade.Logs[0].Message; got != want {
@@ -215,8 +217,9 @@ func TestDepthPriorityStopsKeepingTheWalletForABlockedLadder(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s must arm its next entry once the blocked ladder is out of the wallet, got %v", trade.Symbol, err)
 		}
-		if len(armed.Trade.Logs) != 1 {
-			t.Fatalf("%s: a released ladder writes no row, got %v", trade.Symbol, messages(armed.Trade.Logs))
+		if len(armed.Trade.Logs) != 1 || len(armed.Trade.StrategyEvents) != 1 {
+			t.Fatalf("%s: a released ladder writes no row and no event, got %v and %d events",
+				trade.Symbol, messages(armed.Trade.Logs), len(armed.Trade.StrategyEvents))
 		}
 	}
 }
@@ -257,8 +260,9 @@ func TestDepthPriorityReservesTheWalletAgainWhenTheLadderIsReAdmitted(t *testing
 		if err == nil {
 			t.Fatalf("%s must wait again once %s is back in the wallet", trade.Symbol, reservedSymbol)
 		}
-		if len(reHeld.Trade.Logs) != 1 {
-			t.Fatalf("%s: the standing row must not be written per tick, got %v", trade.Symbol, messages(reHeld.Trade.Logs))
+		if len(reHeld.Trade.Logs) != 1 || len(reHeld.Trade.StrategyEvents) != 1 {
+			t.Fatalf("%s: the standing row and event must not be written per tick, got %v and %d events",
+				trade.Symbol, messages(reHeld.Trade.Logs), len(reHeld.Trade.StrategyEvents))
 		}
 
 		// A ladder that was not holding the row yet writes it on the tick the

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/gates"
 	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 )
@@ -115,8 +116,11 @@ func TestArmedLadderSellsFromTheDeadZone(t *testing.T) {
 	assertForced(t, Apply(trade, "", capitalProtectionBand, withBlock(solBlock())), reasonCapitalProtection)
 }
 
-// heldBy is the trade carrying a row of the cooldown depth priority gate,
-// stamped at, after the rows it already carries.
+// heldBy is the trade carrying the pair the cooldown depth priority gate
+// writes for a hold, stamped at, after the rows and events it already
+// carries: the gate's text row, as cp shows it, and its event, the record the
+// pause reads. The event is built with the constructor the gate's writers and
+// every fixture share.
 func heldBy(trade aggragates.Trades, at time.Time) aggragates.Trades {
 	row := aggragates.TradesLogs{
 		Message:   "Hold stopLoss: " + cooldown.DepthPriorityHoldMarker + ", ETH/USDT at depth 5 of 8 keeps the wallet for its remaining depths, this ladder waits at depth 4 of 8",
@@ -124,17 +128,25 @@ func heldBy(trade aggragates.Trades, at time.Time) aggragates.Trades {
 		Price:     trade.PositionPrice,
 		CreatedAt: at,
 	}
-	trade.Logs = append(append([]aggragates.TradesLogs(nil), trade.Logs...), row)
-	return trade
+	event := cooldown.NewDepthPriorityEvent(trade.ID, cooldown.DepthPriorityEvent{
+		Event:            gates.EventHeld,
+		PrioritySymbol:   "ETH/USDT",
+		PriorityDepth:    5,
+		PriorityMaxDepth: 8,
+		Depth:            4,
+		MaxDepth:         8,
+	}, at)
+	return aggragates.AppendStrategyRow(trade, row, event)
 }
 
-// A ladder the depth priority holds — the gate's row stamped after its
+// A ladder the depth priority holds — the gate's event stamped after its
 // newest fill — stays armed, and Apply pauses it: a pending exit is reset
 // once, with a row at the newest fill, then nothing is marked or sold, at the
 // sell band or at capital protection's band; the next fill ends the hold and
-// the verdict marks the ladder pending again. A row stamped before the newest
-// fill, or without a stamp, holds nothing. The reset marker neither holds nor
-// is held by any other marker, the gate's included.
+// the verdict marks the ladder pending again. An event stamped before the
+// newest fill, or without a stamp, holds nothing. The reset marker neither
+// holds nor is held by any other marker, the gate's included: the texts stay
+// apart for the filters that find a row by them.
 func TestAHeldLadderStaysArmedAndApplyPausesIt(t *testing.T) {
 	withCapitalProtectionExit(t, true)
 	held := heldBy(pendingTrade(), testutil.At("18:05:00"))
@@ -156,7 +168,7 @@ func TestAHeldLadderStaysArmedAndApplyPausesIt(t *testing.T) {
 	assertRow(t, Apply(refilled, "", underTheBand, slowDeclineBlock(true)).SlowDecline, SlowDeclineMessage("buy", slowDeclineReasons), 179.78)
 	for _, at := range []time.Time{testutil.At("17:00:00"), {}} {
 		if rebuildState(heldBy(pendingTrade(), at)).depthPriorityHeld {
-			t.Fatalf("a row stamped %v holds nothing", at)
+			t.Fatalf("an event stamped %v holds nothing", at)
 		}
 	}
 	markers := []string{SlowDeclineMarker, SlowDeclineCancelMarker, SlowDeclineResetMarker, IndecisionMarker, cooldown.DepthPriorityHoldMarker}

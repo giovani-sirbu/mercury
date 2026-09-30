@@ -177,7 +177,8 @@ func TestApplyGoesPendingRecentlyOnlyOnALadderThatStoodBeforeTheBar(t *testing.T
 		}
 		want := Result{}
 		if tc.pending {
-			want = Result{Position: "sellLoss", Reason: reasonSellBand, SlowDecline: &Row{Message: SlowDeclineMessage("buy", slowDeclineRecentReasons), Price: slowDeclineLastFill}}
+			row := PendingRow("buy", slowDeclineLastFill, slowDeclineRecentReasons)
+			want = Result{Position: "sellLoss", Reason: reasonSellBand, SlowDecline: &row}
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("first fill %s: got %+v, want %+v", name, got, want)

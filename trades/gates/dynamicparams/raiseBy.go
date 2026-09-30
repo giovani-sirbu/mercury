@@ -2,7 +2,7 @@ package dynamicparams
 
 import "github.com/giovani-sirbu/mercury/trades/aggragates"
 
-// RaiseBy is settings raised by an opened row's amounts: a COPY in which
+// RaiseBy is settings raised by an opened event's amounts: a COPY in which
 // every row's percentage is raised by points and its depths by depths, and no
 // other field moves. When nothing is raised — no rows, or both amounts zero —
 // it is settings itself, the very slice.

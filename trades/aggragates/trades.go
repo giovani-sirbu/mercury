@@ -29,10 +29,15 @@ type (
 		PendingOrder    int64           `gorm:"index" bson:"pendingOrder" json:"pendingOrder"`
 		History         []TradesHistory `gorm:"foreignKey:TradeID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" bson:"history" json:"history"`
 		Logs            []TradesLogs    `gorm:"foreignKey:TradeID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" bson:"logs" json:"logs"`
-		Status          Status          `gorm:"default:active;index;index:idx_dashboard_stats,priority:3;index:idx_user_status,priority:2;" bson:"status" json:"status"`
-		CreatedAt       time.Time       `form:"createdAt" json:"createdAt" xml:"createdAt"`
-		UpdatedAt       time.Time       `gorm:"index;index:idx_dashboard_stats,priority:4" form:"updatedAt" json:"updatedAt" xml:"updatedAt"`
-		DeletedAt       gorm.DeletedAt  `gorm:"index" form:"deletedAt" json:"-" xml:"deletedAt"`
+		// StrategyEvents is the state of the strategy gates: one event per
+		// gate execution, beside the log row that tells an operator what
+		// happened (see TradesStrategyEvents). Append-only, and carried with
+		// the trade wherever the trade travels.
+		StrategyEvents []TradesStrategyEvents `gorm:"foreignKey:TradeID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"strategyEvents"`
+		Status         Status                 `gorm:"default:active;index;index:idx_dashboard_stats,priority:3;index:idx_user_status,priority:2;" bson:"status" json:"status"`
+		CreatedAt      time.Time              `form:"createdAt" json:"createdAt" xml:"createdAt"`
+		UpdatedAt      time.Time              `gorm:"index;index:idx_dashboard_stats,priority:4" form:"updatedAt" json:"updatedAt" xml:"updatedAt"`
+		DeletedAt      gorm.DeletedAt         `gorm:"index" form:"deletedAt" json:"-" xml:"deletedAt"`
 	}
 	UsedAmountResult struct {
 		UsedAmount    float64 `json:"usedAmount"`
@@ -88,9 +93,11 @@ type (
 		// (SophosSmcTrend.DynamicParams), set by the engines after the merge.
 		// The zero block is not read and raises nothing. The engines consult
 		// it only when a ladder opens: dynamicparams.Opening turns it into the
-		// ladder's opened row, and from then on every tick rebuilds the
-		// ladder's rows from that row (dynamicparams.RaisedSettings), never
-		// from these reads. No gate holds on it.
+		// amounts the ladder opens with, which the engines record as the
+		// ladder's opened strategy event beside a human-readable row, and from
+		// then on every tick rebuilds the ladder's rows from that event
+		// (dynamicparams.RaisedSettings), never from these reads. No gate
+		// holds on it.
 		DynamicParams DynamicParamsIndicators
 	}
 

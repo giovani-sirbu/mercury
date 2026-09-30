@@ -10,13 +10,13 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
-// The indecision row is schema like the slow-decline rows: the marker pinned
-// byte for byte, framed like them with the reasons in parentheses, and
-// neither holding nor held by any other marker rebuildState reads, nor by the
-// first-fill hold's reason.
+// The indecision row's text is pinned like the slow-decline rows': the marker
+// byte for byte, for cp and the notification filter that find the row by it,
+// framed like them with the reasons in parentheses, and neither holding nor
+// held by any other marker, nor by the first-fill hold's reason.
 func TestIndecisionMessageIsFramedLikeTheMarker(t *testing.T) {
 	if IndecisionMarker != "smartTakeLoss: indecision direction, take profit from the last buy" {
-		t.Fatalf("the marker is schema and must not move, got %q", IndecisionMarker)
+		t.Fatalf("the marker is byte-stable text and must not move, got %q", IndecisionMarker)
 	}
 	if got, want := IndecisionMessage("stopLoss", nil), "Hold stopLoss: "+IndecisionMarker; got != want {
 		t.Fatalf("row %q, want %q", got, want)
@@ -34,8 +34,8 @@ func TestIndecisionMessageIsFramedLikeTheMarker(t *testing.T) {
 	}
 }
 
-// The row carries the newest fill's price, and rebuildState folds a row only
-// with a price, so the rule watches no ladder before its first fill.
+// The event carries the newest fill's price, and rebuildState folds an event
+// only with a price, so the rule watches no ladder before its first fill.
 func TestIndecisionArmDepthNeedsAFill(t *testing.T) {
 	if IndecisionArmDepth < 1 {
 		t.Fatalf("IndecisionArmDepth %d must hold at least one fill", IndecisionArmDepth)
@@ -90,14 +90,9 @@ func TestApplyWritesTheIndecisionRowOnce(t *testing.T) {
 	if got.Indecision != nil || got.SlowDecline == nil || !rebuildState(trade).indecision {
 		t.Fatalf("a new fill is judged on the reading and neither unlatches the ladder nor writes a second row, got %+v", got)
 	}
-	rows := 0
-	for _, row := range trade.Logs {
-		if strings.Contains(row.Message, IndecisionMarker) {
-			rows++
-		}
-	}
-	if rows != 1 {
-		t.Fatalf("one indecision row over every tick, got %d in %+v", rows, trade.Logs)
+	rows, latched := carriedRows(trade, IndecisionMarker), carriedEvents(trade, GateIndecision, EventLatched)
+	if rows != 1 || latched != 1 {
+		t.Fatalf("one indecision row and one latched event over every tick, got %d and %d in %+v and %+v", rows, latched, trade.Logs, trade.StrategyEvents)
 	}
 }
 

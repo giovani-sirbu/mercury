@@ -16,10 +16,11 @@ const (
 	reasonCapitalProtection = "upper bollinger band (capital protection)"
 )
 
-// ExitMessage is the INFO row the engines write beside a forced sellLoss:
-// the only trace of WHY the trade sold, and what the backtest verification
-// reads. level is the price the sellLoss chain places its limit at, printed
-// with the pair's PriceFilter decimals.
+// ExitMessage is the text of the INFO row the engines write beside a forced
+// sellLoss: the human-readable trace of WHY the trade sold, and what the
+// backtest verification reads. ExitRow builds the row from it, with the sold
+// event that records the rule beside it. level is the price the sellLoss chain
+// places its limit at, printed with the pair's PriceFilter decimals.
 func ExitMessage(trade aggragates.Trades, reason string, level float64) string {
 	return fmt.Sprintf("smartTakeLoss: sell at %s %s", reason, gates.FormatPriceLevel(trade, level))
 }

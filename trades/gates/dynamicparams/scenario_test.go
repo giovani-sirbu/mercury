@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
@@ -82,6 +83,9 @@ func scenarioAmounts(bearish int, mixed Increase) (float64, int) {
 	return points, added
 }
 
+// scenarioStart is the clock of the run's first tick; a tick is a minute.
+var scenarioStart = time.Date(2022, time.May, 9, 14, 0, 0, 0, time.UTC)
+
 // scenarioLadder is a row-per-depth ladder whose rows differ in every field a
 // raise could touch, one of them carrying its own timeframe list.
 func scenarioLadder() []aggragates.StrategySettings {
@@ -104,14 +108,14 @@ func scenarioTrade(stored []aggragates.StrategySettings) aggragates.Trades {
 
 // Tick by tick over a run of flipping reads, under every increase the mixed
 // tier can name, ladder after ladder: a ladder consults the reads only until
-// its first entry fills, and writes its opened row on the first of those
-// ticks whose reads raise something, naming the amounts the constants give
-// them. From then on — through bull turns, outages, mixed and both-bearish
-// reads — it trades the configured rows raised by exactly those amounts and
-// writes nothing more; a ladder that opened on reads raising nothing trades
-// the very configured slice for life. The next ladder opens on the reads of
-// its own first tick. The configured rows never move. Under the shipped
-// MixedIncrease the calls the engines make (Opening, RaisedSettings,
+// its first entry fills, and writes its opened pair on the first of those
+// ticks whose reads raise something, the event naming the amounts the
+// constants give them. From then on — through bull turns, outages, mixed and
+// both-bearish reads — it trades the configured rows raised by exactly those
+// amounts and writes nothing more; a ladder that opened on reads raising
+// nothing trades the very configured slice for life. The next ladder opens on
+// the reads of its own first tick. The configured rows never move. Under the
+// shipped MixedIncrease the calls the engines make (Opening, RaisedSettings,
 // OpenedRaise) answer the same run the same way.
 func TestScenarioALadderTradesTheRaiseItOpenedWith(t *testing.T) {
 	for _, mixed := range []Increase{IncreasePercentage, IncreaseDepths, IncreaseBoth, IncreaseNone} {
@@ -133,20 +137,24 @@ func TestScenarioALadderTradesTheRaiseItOpenedWith(t *testing.T) {
 					}
 				}
 
-				message, ok := openingFor(trade, reads, mixed)
+				opening, ok := openingFor(trade, reads, mixed)
 				if ok != (tick == openedAt) {
-					t.Fatalf("mixed %q, %s, tick %d: the ladder was handed a row %v, want %v", mixed, plan.name, tick, ok, tick == openedAt)
+					t.Fatalf("mixed %q, %s, tick %d: the ladder was handed an opening %v, want %v", mixed, plan.name, tick, ok, tick == openedAt)
 				}
 				if mixed == MixedIncrease {
-					if engineMessage, engineOK := Opening(trade, reads); engineMessage != message || engineOK != ok {
-						t.Fatalf("tick %d: Opening = %q, %v, want %q, %v", tick, engineMessage, engineOK, message, ok)
+					if engineOpening, engineOK := Opening(trade, reads); engineOpening != opening || engineOK != ok {
+						t.Fatalf("tick %d: Opening = %+v, %v, want %+v, %v", tick, engineOpening, engineOK, opening, ok)
 					}
 				}
 				if ok {
-					if message != OpenedMessage(points, depths) {
-						t.Fatalf("mixed %q, %s, tick %d: the row %q does not name the amounts %v and %d", mixed, plan.name, tick, message, points, depths)
+					if opening != (Opened{Points: points, Depths: depths}) {
+						t.Fatalf("mixed %q, %s, tick %d: the opening %+v does not name the amounts %v and %d", mixed, plan.name, tick, opening, points, depths)
 					}
-					trade.Logs = append(trade.Logs, aggragates.TradesLogs{Message: message, Type: aggragates.LOG_INFO})
+					if opening.Message() != OpenedMessage(points, depths) {
+						t.Fatalf("mixed %q, %s, tick %d: the row %q does not name the amounts %v and %d", mixed, plan.name, tick, opening.Message(), points, depths)
+					}
+					row, event := opening.Rows(trade, 100, scenarioStart.Add(time.Duration(tick)*time.Minute))
+					trade = aggragates.AppendStrategyRow(trade, row, event)
 				}
 
 				rows, raised := RaisedSettings(trade)
@@ -190,15 +198,16 @@ func TestScenarioALadderTradesTheRaiseItOpenedWith(t *testing.T) {
 					rowCount++
 				}
 			}
-			wantRows := 0
+			eventCount := len(trade.StrategyEventsOf(aggragates.StrategyParamDynamicParams, GateOpened))
+			wantPairs := 0
 			if openedAt >= 0 {
-				wantRows = 1
+				wantPairs = 1
 				raisedLadders++
 			} else {
 				configuredLadders++
 			}
-			if rowCount != wantRows {
-				t.Fatalf("mixed %q, %s: %d rows written, want %d", mixed, plan.name, rowCount, wantRows)
+			if rowCount != wantPairs || eventCount != wantPairs {
+				t.Fatalf("mixed %q, %s: %d rows and %d events written, want %d of each", mixed, plan.name, rowCount, eventCount, wantPairs)
 			}
 		}
 

@@ -10,14 +10,14 @@ import "time"
 // deliberately so. Everywhere else a missing clock means "do not hold", and
 // the worst case is a gate that does nothing. Here the missing clock would
 // mean "expire", and the worst case is the whole first-fill gate switching
-// itself off on any engine that does not stamp its hold rows — a silent
+// itself off on any engine that does not stamp its hold events — a silent
 // behaviour change rather than a silent no-op. The conservative direction is
 // the one that keeps the gate doing what it was configured to do.
 //
-// It is measured from the FIRST waiting row, not from the trade's creation:
-// the row is stamped with the tick the hold actually activated, it lives on
-// the trade like every other fact this gate reads, and trade.CreatedAt means
-// different things on different engines.
+// It is measured from the FIRST activated event, not from the trade's
+// creation: the event is stamped with the tick the hold actually activated, it
+// lives on the trade like every other fact this gate reads, and
+// trade.CreatedAt means different things on different engines.
 //
 // A zero FirstFillMaxHold disables the cap: the gate is then released by
 // price alone.

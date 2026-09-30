@@ -27,11 +27,10 @@ func watchedTrade() aggragates.Trades {
 	return testutil.LadderTrade(false, fills(watchedFills, "17:38:00")...)
 }
 
-// pendingTrade is watchedTrade carrying the marker row the engine wrote.
+// pendingTrade is watchedTrade carrying the pending pair the engine wrote for
+// its newest fill: the marker row and its event.
 func pendingTrade() aggragates.Trades {
-	trade := watchedTrade()
-	trade.Logs = []aggragates.TradesLogs{{Message: SlowDeclineMessage("buy", slowDeclineReasons), Price: slowDeclineLastFill, Type: aggragates.LOG_INFO}}
-	return trade
+	return withRows(watchedTrade(), PendingRow("buy", slowDeclineLastFill, slowDeclineReasons))
 }
 
 // slowDeclineBlock is the block sophos serves with the verdict on or off,
