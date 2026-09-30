@@ -89,7 +89,13 @@
 // its SlowDeclineIndecisionVoteShare of the enabled readings hold — one short
 // of the need at the shipped shares — with the SMC trend dashboard bearish on
 // every timeframe sophos' SmcTrendTimeframes names while that condition is
-// on. The first tick a watched ladder is served it on writes one row
+// on. Sophos also serves it on any window it read, whatever the leg and the
+// vote, when its SMC trend dashboard reads the whole table bearish — the
+// Trend Direction row down and at least its IndecisionSmcTrendShare of every
+// timeframe's reads bearish, while its IndecisionSmcTrend is on — so a
+// watched ladder that is not pending, or that sophos reads as a leg on and
+// quiet, is latched too; on a leg on and quiet the row names only that
+// reading. The first tick a watched ladder is served it on writes one row
 // (IndecisionMarker, carrying the newest fill's price, naming
 // SlowDeclineBreakReasons), and the ladder is LATCHED until it closes: no row
 // takes the latch away. From break even up a latched ladder's take profit is

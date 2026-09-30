@@ -17,8 +17,9 @@ const IndecisionMarker = "smartTakeLoss: indecision direction, take profit from 
 // its own — "Hold <positionType>: …" with the trade's raw PositionType — and
 // names what sophos read after it when it served any
 // (SlowDeclineBreakReasons: each reading that does not hold, then the count
-// against the need). It is a marker row, not a hold: nothing is refused on
-// that tick.
+// against the need, then the whole-table SMC trend reading when it held; that
+// reading alone on a leg on and quiet). It is a marker row, not a hold:
+// nothing is refused on that tick.
 func IndecisionMessage(positionType string, reasons []string) string {
 	return slowDeclineRowMessage(positionType, IndecisionMarker, reasons)
 }
@@ -45,9 +46,13 @@ func indecisionEligible(trade aggragates.Trades) bool {
 
 // indecisionRow is the indecision row a tick hands back, if any, and the
 // state as that row leaves it: a watched ladder not latched yet, on a tick
-// sophos serves the indecision reading on (SlowDeclineIndecision), gets the
-// row — IndecisionMessage naming SlowDeclineBreakReasons, carrying the newest
-// fill's price — and is latched from that tick on. A latched ladder gets no
+// sophos serves the indecision, from either reading (SlowDeclineIndecision:
+// the vote's, or the whole SMC trend table bearish), gets the row —
+// IndecisionMessage naming SlowDeclineBreakReasons, carrying the newest
+// fill's price — and is latched from that tick on. The flag alone decides it,
+// whatever SlowDeclineLegQuiet and SlowDeclineExit say: the ladder need not
+// be pending, so one whose own smoothness fails, or whose newest fill is
+// outside the fill window, latches all the same. A latched ladder gets no
 // second row however often sophos serves the reading again, and nothing takes
 // the latch away: it holds until the trade closes. A reading without the
 // indecision, a ladder the rule does not watch and a ladder already latched

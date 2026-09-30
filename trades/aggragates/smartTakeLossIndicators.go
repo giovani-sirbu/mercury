@@ -39,15 +39,19 @@ type SmartTakeLossIndicators struct {
 	// its value, the count against the need, the span the smoothness was read
 	// over, the bar it reads smooth from, the sell band and the SMC trend
 	// while the leg is on and quiet, and only ever reaches the marker row.
-	// SlowDeclineBreakReasons is served only while the leg is not on and
-	// quiet, on a window sophos read: it names what broke — the leg that is
-	// not on, the leg on but short of SlowDeclineMinLegFallPct, each reading
-	// of the vote that fails and the count, or the SMC trend condition — and
-	// only ever reaches two rows: the cancel row, and the indecision row that
-	// latches a ladder (SlowDeclineIndecision). A new fill on a pending ladder
-	// is judged on the first tick that serves the band: the leg on and quiet,
-	// or the decline read recently for the ladder, confirms the exit, anything
-	// else cancels it.
+	// SlowDeclineBreakReasons is served while the leg is not on and quiet, on
+	// a window sophos read: it names what broke — the leg that is not on, the
+	// leg on but short of SlowDeclineMinLegFallPct, each reading of the vote
+	// that fails and the count, or the SMC trend condition — and, when sophos'
+	// whole-table indecision holds (its IndecisionSmcTrend reading, the SMC
+	// trend table bearish), that reason last, on any window sophos read. On a
+	// leg on and quiet it is then the only entry, the one exception to the
+	// break reasons being null there. It reaches two rows: the cancel row,
+	// never written for a leg on and quiet because that confirms the exit, and
+	// the indecision row that latches a ladder (SlowDeclineIndecision). A new
+	// fill on a pending ladder is judged on the first tick that serves the
+	// band: the leg on and quiet, or the decline read recently for the ladder,
+	// confirms the exit, anything else cancels it.
 	SlowDeclineExit         bool
 	SlowDeclineLegQuiet     bool
 	SlowDeclineSmoothFrom   int64
@@ -55,20 +59,27 @@ type SmartTakeLossIndicators struct {
 	SlowDeclineSellBand     float64
 	SlowDeclineExitReasons  []string
 	SlowDeclineBreakReasons []string
-	// SlowDeclineIndecision is sophos' indecision reading, served only while the
-	// leg is not on and quiet: the leg on and still down sophos'
-	// SlowDeclineMinLegFallPct from its high close, the vote failing even with a
-	// ladder's own smoothness counted, and at least sophos'
+	// SlowDeclineIndecision is sophos' indecision, read one of two ways. The
+	// vote's, served only while the leg is not on and quiet: the leg on and
+	// still down sophos' SlowDeclineMinLegFallPct from its high close, the vote
+	// failing even with a ladder's own smoothness counted, and at least sophos'
 	// SlowDeclineIndecisionVoteShare of the enabled readings holding with it —
 	// one short of the need at the shipped shares, the count the break reasons
 	// name — with the SMC trend dashboard bearish on every timeframe sophos'
-	// SmcTrendTimeframes names while that condition is on. gates/smarttakeloss
-	// latches a long spot parent ladder the indecision direction watches (from
-	// IndecisionArmDepth filled entries) on the first tick it is served: one row
+	// SmcTrendTimeframes names while that condition is on. The dashboard's,
+	// while sophos' IndecisionSmcTrend is on: the whole table bearish, its
+	// Trend Direction row down and at least sophos' IndecisionSmcTrendShare of
+	// every timeframe's reads bearish, on any window sophos read whatever the
+	// leg, the vote and the SMC trend condition say, SlowDeclineLegQuiet and
+	// SlowDeclineExit included. gates/smarttakeloss latches a long spot parent
+	// ladder the indecision direction watches (from IndecisionArmDepth filled
+	// entries) on the first tick it is served, from the flag alone: one row
 	// naming SlowDeclineBreakReasons, and from then until the trade closes its
 	// take profit is measured from the position price as well
 	// (TakeProfitPercentage) and its trailing take profit's sale may close under
-	// the minimum profit (SaleActions).
+	// the minimum profit (SaleActions). The latch needs no pending: a ladder
+	// whose own smoothness fails, or whose newest fill is outside the fill
+	// window (SlowDeclineFillFrom), still latches.
 	SlowDeclineIndecision bool
 	// SlowDeclineRecentAt is the open time in ms of the newest of sophos'
 	// last SlowDeclineRecentBars closed bars on which the verdict stood: the

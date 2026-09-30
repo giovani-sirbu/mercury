@@ -37,10 +37,13 @@ type SophosFib struct {
 // read nothing. The slowDecline* keys are the quiet slow-decline exit — the
 // slowDeclineRecent* keys its reading on the last closed bars sophos looks
 // back over, slowDeclineFillFrom the oldest bar a ladder's newest fill must
-// sit in for the ladder to go pending, and slowDeclineIndecision its vote
-// read one short of the need, which the indecision direction reads — and the
+// sit in for the ladder to go pending, and slowDeclineIndecision the
+// indecision, read from the vote one short of the need or from the whole SMC
+// trend table bearish, which the indecision direction reads — and the
 // capitalProtection* keys the capital protection exit, all read on the
-// closed window of sophos' smart take loss. A sophos without the object —
+// closed window of sophos' smart take loss. slowDeclineBreakReasons may be
+// non-null on a leg on and quiet, carrying the whole-table reading's reason
+// alone. A sophos without the object —
 // or one still serving the retired pattern-window keys of the trend-reversal
 // rule, or the retired `slowDeclineMiddleBB` key — decodes to no verdict, no
 // quiet leg, no smooth bar, no bar a fill has to precede, no sell band, no
