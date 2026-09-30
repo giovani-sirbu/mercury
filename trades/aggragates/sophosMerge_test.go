@@ -1,47 +1,59 @@
 package aggragates
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 )
 
-// The dynamic params reads ride the patterns leg through the merge
-// untouched, with or without an ML leg merged over it. The ML route does not
-// serve them, so an ML-only merge carries none — a stray block on that leg
-// included — and neither does a merge with no leg up: both read as not read,
-// which raises no row.
-func TestMergeSophosVerdictsCarriesTheDynamicParamsOnThePatternLeg(t *testing.T) {
-	pattern := AIIndicators{
-		AIAction:      "LONG",
-		DynamicParams: DynamicParamsIndicators{Timeframe: "1D", Guppy: -1, BMSB: -1, Valid: true},
+// decodedLeg is one sophos body the way every engine decodes a /patterns or
+// ML answer: the SophosPrediction wire contract, mapped by its Indicators.
+func decodedLeg(t *testing.T, body string) AIIndicators {
+	t.Helper()
+	var prediction SophosPrediction
+	if err := json.Unmarshal([]byte(body), &prediction); err != nil {
+		t.Fatalf("unmarshal %s: %v", body, err)
 	}
-	ml := AIIndicators{
-		AIAction:        "SHORT",
-		AIMarketBearish: true,
-		DynamicParams:   DynamicParamsIndicators{Timeframe: "4h", Guppy: 1, BMSB: 1, Valid: true},
+	return prediction.Indicators()
+}
+
+// Neither leg carries the DynamicParams reads, so no merge of them does. A
+// /patterns body still serving the dynamicParams block an earlier sophos
+// build put on it and an ML body carrying the same stray block decode to legs
+// without reads, and every merge of them — under the flag alone or beside
+// UseAI, on the pattern leg alone, on both, on the ML leg alone and on
+// neither — carries none: the reads are the smc-trend leg's
+// (NeedsSmcTrendRoute), which the engines set after the merge.
+func TestMergeSophosVerdictsOfDecodedLegsCarriesNoDynamicParams(t *testing.T) {
+	stray := `"dynamicParams":{"timeframe":"1D","guppy":-1,"bmsb":-1,"valid":true}`
+	pattern := decodedLeg(t, `{"action":"LONG","smartTakeLoss":{"slowDeclineSellBand":186.4},`+stray+`}`)
+	ml := decodedLeg(t, `{"action":"SHORT","marketBearish":true,`+stray+`}`)
+	if pattern.AIAction != ActionLong || ml.AIAction != ActionShort {
+		t.Fatalf("fixture drifted: the legs must decode their actions, got %q and %q", pattern.AIAction, ml.AIAction)
 	}
 
-	for _, merge := range []struct {
-		name   string
-		params StrategyParams
-		hasML  bool
-	}{
-		{"dynamicParams alone", StrategyParams{DynamicParams: true}, false},
-		{"with the ML leg under UseAI", StrategyParams{DynamicParams: true, UseAI: true}, true},
-		{"with the ML leg and patterns", StrategyParams{DynamicParams: true, UseAI: true, UsePatterns: true}, true},
+	for _, params := range []StrategyParams{
+		{DynamicParams: true},
+		{DynamicParams: true, UseAI: true},
+		{DynamicParams: true, UseAI: true, UsePatterns: true, SmartTakeLoss: true},
 	} {
-		got := MergeSophosVerdicts(merge.params, pattern, ml, true, merge.hasML).DynamicParams
-		if got != pattern.DynamicParams {
-			t.Errorf("%s: the pattern leg's block must survive the merge, got %+v want %+v", merge.name, got, pattern.DynamicParams)
+		for _, legs := range []struct {
+			hasPattern bool
+			hasML      bool
+		}{
+			{hasPattern: true},
+			{hasPattern: true, hasML: true},
+			{hasML: true},
+			{},
+		} {
+			merged := MergeSophosVerdicts(params, pattern, ml, legs.hasPattern, legs.hasML)
+			if (legs.hasPattern && merged.PatternAction != ActionLong) || (legs.hasML && merged.AIAction != ActionShort) {
+				t.Fatalf("%+v, legs %+v: the merge must take the legs it is handed, got %+v", params, legs, merged)
+			}
+			if merged.DynamicParams != (DynamicParamsIndicators{}) {
+				t.Errorf("%+v, legs %+v: the merge must carry no reads, got %+v", params, legs, merged.DynamicParams)
+			}
 		}
-	}
-
-	params := StrategyParams{DynamicParams: true, UseAI: true}
-	if got := MergeSophosVerdicts(params, pattern, ml, false, true).DynamicParams; got != (DynamicParamsIndicators{}) {
-		t.Errorf("an ML-only merge must carry no block, got %+v", got)
-	}
-	if got := MergeSophosVerdicts(params, pattern, ml, false, false).DynamicParams; got != (DynamicParamsIndicators{}) {
-		t.Errorf("a merge with no leg up must carry no block, got %+v", got)
 	}
 }
 

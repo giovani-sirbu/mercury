@@ -77,8 +77,8 @@ func TestShouldHoldEntrySmartTakeLossHoldsALongFirstFill(t *testing.T) {
 	}
 }
 
-// FETCH IS NOT GATE: the verdict rides /patterns for DynamicParams too, and
-// holds nothing without SmartTakeLoss.
+// FETCH IS NOT GATE: a slow-decline verdict holds nothing without
+// SmartTakeLoss, whether another sophos flag is on or no flag is.
 func TestShouldHoldEntrySmartTakeLossNeedsItsFlag(t *testing.T) {
 	assertNotHeld(t, "dynamicParams", stlEntryEvent(aggragates.StrategyParams{DynamicParams: true}, slowDeclinePayload(true)))
 	assertNotHeld(t, "no flag", stlEntryEvent(aggragates.StrategyParams{}, slowDeclinePayload(true)))
