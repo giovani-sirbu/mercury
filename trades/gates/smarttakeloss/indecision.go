@@ -56,9 +56,10 @@ func indecisionEligible(trade aggragates.Trades) bool {
 // second row however often sophos serves the reading again, and nothing takes
 // the latch away: it holds until the trade closes. A reading without the
 // indecision, a ladder the rule does not watch and a ladder already latched
-// get nothing. Apply does not ask it while a depth priority holds the ladder
-// (depthPriorityHeld), so no latch starts during the hold, and one latched
-// before it keeps its row while its effects wait for the next fill.
+// get nothing. Apply asks it while a depth priority holds the ladder
+// (depthPriorityHeld) all the same, so a ladder latches during the hold: the
+// hold pauses the quiet slow-decline exit and capital protection, never this
+// direction.
 func indecisionRow(trade aggragates.Trades, st state, block aggragates.SmartTakeLossIndicators) (state, *Row) {
 	if !st.indecisionWatched || st.indecision || !block.SlowDeclineIndecision {
 		return st, nil

@@ -35,7 +35,8 @@ type state struct {
 	indecisionWatched bool
 	indecision        bool
 	// depthPriorityHeld: a depth priority holds this ladder
-	// (depthPriorityHeld), which pauses every rule on it until its next fill.
+	// (depthPriorityHeld), which pauses the quiet slow-decline exit and capital
+	// protection on it until its next fill; the indecision direction goes on.
 	depthPriorityHeld bool
 }
 

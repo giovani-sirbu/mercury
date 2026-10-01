@@ -34,8 +34,10 @@ import (
 // leaves the trade pending here, and only a cancel or reset row ends it;
 // nothing ends a latch. The engines read it before Apply, so a row Apply
 // hands back reaches it from the tick after the one that wrote it. While a
-// depth priority holds the ladder (depthPriorityHeld) neither rule moves it:
-// the input comes back unchanged, a latch included, until the next fill.
+// depth priority holds the ladder (depthPriorityHeld) the pending reading —
+// the move from the newest fill — waits for the next fill, while the latched
+// reading — the move from the position price — applies all the same: the
+// hold pauses the quiet slow-decline exit, never the indecision direction.
 //
 // Under break even nothing reads the newest fill or the position price, here
 // or in Apply: a pending trade's one sale there is the sell band. A take
@@ -73,11 +75,8 @@ func TakeProfitPercentage(trade aggragates.Trades, price, profitPercentage float
 		return profitPercentage
 	}
 	st := rebuildState(trade)
-	if st.depthPriorityHeld {
-		return profitPercentage
-	}
 	reading := profitPercentage
-	if st.slowDeclinePending {
+	if st.slowDeclinePending && !st.depthPriorityHeld {
 		fromNewestFill := (price - st.lastFill().Price) / price * 100
 		reading = math.Max(reading, fromNewestFill)
 	}

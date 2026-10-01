@@ -26,11 +26,13 @@ func SlowDeclineResetMessage(positionType string) string {
 }
 
 // depthPriorityHeld is whether a depth priority holds the ladder, which
-// pauses the smart take loss on it (Apply, TakeProfitPercentage):
-// DepthPriorityHoldPausesSmartTakeLoss on, and the trade
-// carries a row naming cooldown.DepthPriorityHoldMarker stamped strictly
-// after its newest entry fill — newest in slice order, as rebuildState folds
-// the fills.
+// pauses the quiet slow-decline exit and capital protection on it (Apply,
+// TakeProfitPercentage): DepthPriorityHoldPausesSmartTakeLoss on, and the
+// trade carries a row naming cooldown.DepthPriorityHoldMarker stamped
+// strictly after its newest entry fill — newest in slice order, as
+// rebuildState folds the fills. The indecision direction is not paused: a
+// held ladder is latched on a reading, and a latched ladder's take profit
+// reads its position price, all the same.
 //
 // The comparison is the row's CreatedAt against the fill's history stamp
 // (entryFill.At). gates.SaveHoldLog stamps the row with the tick clock, and

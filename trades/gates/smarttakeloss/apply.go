@@ -37,10 +37,12 @@ type Result struct {
 // trade no rule watches (slowDeclineWatched, capitalProtectionWatched,
 // indecisionWatched).
 //
-// A ladder a depth priority holds (depthPriorityHeld) is paused: a pending
-// exit is reset with one row (slowDeclineReset), and past that the proposal
-// comes back untouched — no marker, no judgement of a new fill, no latch, no
-// sale at either band — until the ladder's next fill ends the hold.
+// A ladder a depth priority holds (depthPriorityHeld) is paused, the latch
+// excepted: a pending exit is reset with one row (slowDeclineReset), a
+// watched ladder the indecision direction reads is latched as on any other
+// tick (indecisionRow), and past those two rows the proposal comes back
+// untouched — no slow-decline marker, no judgement of a new fill, no sale at
+// either band — until the ladder's next fill ends the hold.
 //
 // The slow-decline row and the indecision row go out first, before the
 // protected return: a ladder resting in its trailing take profit when the
@@ -73,7 +75,8 @@ func Apply(trade aggragates.Trades, position string, price float64, ai aggragate
 		return result
 	}
 	if st.depthPriorityHeld {
-		_, result.SlowDecline = slowDeclineReset(trade, st)
+		st, result.SlowDecline = slowDeclineReset(trade, st)
+		_, result.Indecision = indecisionRow(trade, st, ai.SmartTakeLoss)
 		return result
 	}
 	st, result.SlowDecline = slowDeclineRow(trade, st, ai.SmartTakeLoss)

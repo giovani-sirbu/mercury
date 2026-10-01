@@ -3,6 +3,7 @@ package smarttakeloss
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
@@ -10,10 +11,16 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
+// indecisionFills is how deep the ladder the indecision direction watches
+// stands in these tests: IndecisionArmDepth fills and never fewer than two,
+// so the position price differs from the average entry price and a take
+// profit that reads the one is told from a take profit that reads the other.
+const indecisionFills = max(IndecisionArmDepth, 2)
+
 // indecisionLadder is the w3s ladder the indecision direction watches from
-// its first tick: IndecisionArmDepth fills, the newest at 17:38.
+// its first tick: indecisionFills fills, the newest at 17:38.
 func indecisionLadder() aggragates.Trades {
-	return testutil.LadderTrade(false, fills(IndecisionArmDepth, "17:38:00")...)
+	return testutil.LadderTrade(false, fills(indecisionFills, "17:38:00")...)
 }
 
 // overBreakEven is a price a dollar over the ladder's break even, with the
@@ -24,51 +31,115 @@ func overBreakEven(trade aggragates.Trades) (price, fromAverage, fromPosition fl
 	return price, moveAgainst(price, ladder.AverageEntryPrice(trade)), moveAgainst(price, trade.PositionPrice)
 }
 
-// No latch starts while the depth priority holds a ladder: the indecision
-// reading latches the watched ladder without the gate's row, and with it no
-// proposal gets a row and the ladder reads unlatched. A pending ladder the
-// indecision reaches on its first held tick gets the reset row alone.
-func TestNoLatchStartsWhileTheDepthPriorityHolds(t *testing.T) {
+// A watched ladder the depth priority holds is latched on the indecision as
+// on any other tick: it gets the row the same ladder gets unheld, framed with
+// the trade's state and carrying the newest fill's price — never the
+// position price, a re-anchor included — beside the proposal it leaves
+// untouched. The row marks and sells nothing. From the next tick the ladder
+// reads latched and held, and no second row goes out however often sophos
+// serves a reading. The indecision direction alone watching the ladder, the
+// other two rules switched off, changes none of it.
+func TestAHeldWatchedLadderIsLatchedOnTheIndecision(t *testing.T) {
 	trade := indecisionLadder()
-	assertRow(t, Apply(trade, "", underTheBand, indecisionReading()).Indecision, IndecisionMessage("buy", indecisionReasons), trade.PositionPrice)
+	newest := rebuildState(trade).lastFill().Price
+	assertRow(t, Apply(trade, "", underTheBand, indecisionReading()).Indecision, IndecisionMessage("buy", indecisionReasons), newest)
+
 	held := heldBy(trade, testutil.At("18:00:00"))
-	for _, position := range []string{"", "stopLoss", "takeProfit"} {
-		assertUntouched(t, Apply(held, position, underTheBand, indecisionReading()), position)
-	}
-	if st := rebuildState(held); st.indecision || !st.indecisionWatched {
-		t.Fatalf("a held ladder stays watched and unlatched, got %+v", st)
+	reanchored := held
+	reanchored.PositionPrice = newest + 5
+	for _, candidate := range []aggragates.Trades{held, reanchored} {
+		for _, position := range []string{"", "stopLoss", "takeProfit"} {
+			got := Apply(candidate, position, underTheBand, indecisionReading())
+			assertRow(t, got.Indecision, IndecisionMessage("buy", indecisionReasons), newest)
+			assertNoSale(t, got, position)
+			if got.SlowDecline != nil {
+				t.Fatalf("%q: the latch tick marks nothing, got %+v", position, got)
+			}
+		}
 	}
 
-	control := Apply(pendingTrade(), "", underTheBand, indecisionReading())
+	latched, _ := engineTick(held, "", underTheBand, testutil.At("18:10:00"), indecisionReading())
+	if st := rebuildState(latched); !st.indecision || !st.indecisionWatched || !st.depthPriorityHeld || st.slowDeclinePending {
+		t.Fatalf("the tick after: latched, watched and held, not pending, got %+v", st)
+	}
+	for index, reading := range []aggragates.AIIndicators{indecisionReading(), slowDeclineBlock(true), brokenAtTheBand(), withBlock(aggragates.SmartTakeLossIndicators{})} {
+		for _, position := range []string{"", "stopLoss"} {
+			var next Result
+			latched, next = engineTick(latched, position, slowDeclineBand+5, testutil.At("18:15:00").Add(time.Duration(index)*time.Minute), reading)
+			assertUntouched(t, next, position)
+		}
+	}
+	if rows := carriedRows(latched, IndecisionMarker); rows != 1 {
+		t.Fatalf("one indecision row over every held tick, got %d in %+v", rows, latched.Logs)
+	}
+
+	withQuietSlowDeclineExit(t, false)
+	withCapitalProtectionExit(t, false)
+	alone := Apply(held, "", underTheBand, indecisionReading())
+	assertRow(t, alone.Indecision, IndecisionMessage("buy", indecisionReasons), newest)
+	assertNoSale(t, alone, "")
+}
+
+// A held ladder both pending and served the indecision gets both rows on its
+// first held tick — the reset row, then the indecision row that latches it,
+// each at the newest fill's price — and sells nothing at the band the same
+// ladder unheld sells at, a protected close included. From the next tick it
+// reads watched, latched and held, not pending, and nothing more is written.
+func TestAHeldPendingLadderServedTheIndecisionIsResetAndLatchedOnOneTick(t *testing.T) {
+	control := Apply(pendingTrade(), "", slowDeclineBand+1, indecisionReading())
+	assertForced(t, control, reasonSellBand)
 	assertRow(t, control.Indecision, IndecisionMessage("buy", indecisionReasons), slowDeclineLastFill)
-	got := Apply(heldBy(pendingTrade(), testutil.At("18:05:00")), "", underTheBand, indecisionReading())
+
+	held := heldBy(pendingTrade(), testutil.At("18:05:00"))
+	protected := Apply(held, "sell", slowDeclineBand+5, indecisionReading())
+	assertRow(t, protected.SlowDecline, resetRow("buy"), slowDeclineLastFill)
+	assertRow(t, protected.Indecision, IndecisionMessage("buy", indecisionReasons), slowDeclineLastFill)
+	assertNoSale(t, protected, "sell")
+
+	trade, got := engineTick(held, "", slowDeclineBand+1, testutil.At("18:10:00"), indecisionReading())
 	assertRow(t, got.SlowDecline, resetRow("buy"), slowDeclineLastFill)
-	if got.Indecision != nil {
-		t.Fatalf("the held tick latches nothing, got %+v", got)
+	assertRow(t, got.Indecision, IndecisionMessage("buy", indecisionReasons), slowDeclineLastFill)
+	assertNoSale(t, got, "")
+	if st := rebuildState(trade); !st.slowDeclineWatched || st.slowDeclinePending || !st.indecision || !st.depthPriorityHeld {
+		t.Fatalf("the tick after: watched, not pending, latched and held, got %+v", st)
+	}
+	assertUntouched(t, Apply(trade, "", slowDeclineBand+1, indecisionReading()), "")
+	if rows := len(trade.Logs) - len(held.Logs); rows != 2 || carriedRows(trade, SlowDeclineResetMarker) != 1 || carriedRows(trade, IndecisionMarker) != 1 {
+		t.Fatalf("one reset row and one indecision row, got %+v", trade.Logs)
 	}
 }
 
-// A latch taken before the hold keeps its row: the ladder reads latched and
-// held, its take profit reads the move it is handed instead of the position
-// price's, and no second row goes out. The next fill ends the hold and the
-// latch's effects resume from it: the take profit reads the position price —
-// the new fill — on the one row still.
-func TestALatchTakenBeforeTheHoldResumesAfterTheNextFill(t *testing.T) {
+// A latch taken before the hold keeps working through it: the ladder reads
+// latched and held, no second row goes out, and its take profit reads the
+// move against the position price all the same — the larger of that move and
+// the move it is handed, and the move it is handed under break even. The next
+// fill ends the hold and keeps the latch, and the take profit reads the new
+// fill's position price on the one row still.
+func TestALatchedLadderTheDepthPriorityHoldsStillReadsItsPositionPrice(t *testing.T) {
 	latched := latchedBy(indecisionLadder())
 	held := heldBy(latched, testutil.At("22:00:00"))
 	if st := rebuildState(held); !st.indecision || !st.depthPriorityHeld {
 		t.Fatalf("fixture drifted: latched and held, got %+v", st)
 	}
 	price, fromAverage, fromPosition := overBreakEven(latched)
-	if !(fromAverage < fromPosition) || TakeProfitPercentage(latched, price, fromAverage) != fromPosition {
-		t.Fatal("control: a latched ladder's take profit reads its position price")
+	if !(fromAverage < fromPosition) {
+		t.Fatal("fixture drifted: the position price's move must exceed the average entry price's")
 	}
-	if got := TakeProfitPercentage(held, price, fromAverage); got != fromAverage {
-		t.Fatalf("held, the take profit reads the move it is handed %v, got %v", fromAverage, got)
+	for name, trade := range map[string]aggragates.Trades{"unheld": latched, "held": held} {
+		if got := TakeProfitPercentage(trade, price, fromAverage); got != fromPosition {
+			t.Errorf("%s: the take profit reads the move against the position price %v, got %v", name, fromPosition, got)
+		}
+		if got := TakeProfitPercentage(trade, price, fromPosition+1); got != fromPosition+1 {
+			t.Errorf("%s: an input larger than the position price's move comes back, got %v", name, got)
+		}
+	}
+	under := ladder.AverageEntryPrice(held) - 1
+	if input := moveAgainst(under, ladder.AverageEntryPrice(held)); input >= 0 || TakeProfitPercentage(held, under, input) != input {
+		t.Fatalf("under break even the input comes back, got %v for %v", TakeProfitPercentage(held, under, input), input)
 	}
 	assertUntouched(t, Apply(held, "", underTheBand, indecisionReading()), "")
 
-	resumed := withFill(held, w3sPrice(IndecisionArmDepth+1), testutil.At("22:30:00"))
+	resumed := withFill(held, w3sPrice(indecisionFills+1), testutil.At("22:30:00"))
 	if st := rebuildState(resumed); !st.indecision || st.depthPriorityHeld {
 		t.Fatalf("the next fill ends the hold and keeps the latch, got %+v", st)
 	}
@@ -107,6 +178,12 @@ func TestSwitchedOffTheDepthPriorityRowsAreIgnored(t *testing.T) {
 	watched := heldBy(watchedTrade(), testutil.At("18:05:00"))
 	assertRow(t, Apply(watched, "", underTheBand, slowDeclineBlock(true)).SlowDecline, SlowDeclineMessage("buy", slowDeclineReasons), slowDeclineLastFill)
 	assertRow(t, Apply(heldBy(indecisionLadder(), testutil.At("18:00:00")), "", underTheBand, indecisionReading()).Indecision, IndecisionMessage("buy", indecisionReasons), indecisionLadder().PositionPrice)
+	pendingServed := Apply(held, "", slowDeclineBand, indecisionReading())
+	assertForced(t, pendingServed, reasonSellBand)
+	assertRow(t, pendingServed.Indecision, IndecisionMessage("buy", indecisionReasons), slowDeclineLastFill)
+	if pendingServed.SlowDecline != nil {
+		t.Fatalf("switched off, a held pending ladder served the indecision gets no reset row, got %+v", pendingServed)
+	}
 	price := betweenTheTakeProfits(t, held)
 	if got := TakeProfitPercentage(held, price, breakEvenReading); got != moveAgainst(price, slowDeclineLastFill) {
 		t.Fatalf("switched off, the take profit reads the newest fill, got %v", got)

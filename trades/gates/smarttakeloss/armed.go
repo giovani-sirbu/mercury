@@ -19,9 +19,10 @@ import "github.com/giovani-sirbu/mercury/trades/aggragates"
 // ticks the ladder proposes something. Fills never disappear, so a watched
 // ladder stays armed; there is no separate predicate to ask. A ladder a depth
 // priority holds (depthPriorityHeld) stays armed on purpose: the pause is
-// Apply's to answer — it writes the reset row on the first held tick, the
-// dead zone included, and sells nothing — and the pause ends with the
-// ladder's next fill, from which the rules read it again on every print.
+// Apply's to answer — it writes the reset row on the first held tick and the
+// indecision row on the first held tick sophos serves one, the dead zone
+// included, and sells nothing — and the pause ends with the ladder's next
+// fill, from which the two exits read it again on every print.
 func Armed(trade aggragates.Trades) bool {
 	if !trade.Strategy.Params.SmartTakeLoss || trade.ParentID != 0 {
 		return false

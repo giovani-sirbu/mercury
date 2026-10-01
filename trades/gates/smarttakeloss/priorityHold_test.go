@@ -76,12 +76,15 @@ func TestDepthPriorityHeldReadsTheGatesRowAfterTheNewestFill(t *testing.T) {
 }
 
 // The gate's row alone moves no fold: the ladder still reads pending. On its
-// first held tick a pending ladder hands back exactly one row — the reset
-// row, framed with the trade's raw state, at its newest fill's price, never
-// the position price — and sells nothing, at the band or past it, a close it
-// proposes passing untouched. From the next tick it reads watched and not
-// pending, still held, and nothing writes or sells again.
-func TestAPendingLadderTheDepthPriorityHoldsIsResetOnce(t *testing.T) {
+// first held tick a pending ladder hands back exactly one slow-decline row —
+// the reset row, framed with the trade's raw state, at its newest fill's
+// price, never the position price — and sells nothing, at the band or past
+// it, a close it proposes passing untouched. From the next tick it reads
+// watched and not pending, still held, and no slow-decline row is written and
+// nothing is sold again, whatever sophos serves. A reading that serves the
+// indecision latches the ladder besides, which writes the indecision row
+// beside the reset row on the same tick.
+func TestAHeldPendingLadderIsResetOnceAndNoSlowDeclineRowFollows(t *testing.T) {
 	held := heldBy(pendingTrade(), testutil.At("18:05:00"))
 	if st := rebuildState(held); !st.slowDeclinePending || !st.depthPriorityHeld {
 		t.Fatalf("fixture drifted: the gate's row leaves the ladder pending and holds it, got %+v", st)
@@ -93,12 +96,12 @@ func TestAPendingLadderTheDepthPriorityHoldsIsResetOnce(t *testing.T) {
 	assertRow(t, got.SlowDecline, resetRow("buy"), slowDeclineLastFill)
 	assertNoSale(t, got, "")
 	if got.Indecision != nil {
-		t.Fatalf("the reset tick latches nothing, got %+v", got)
+		t.Fatalf("a reading without the indecision latches nothing, got %+v", got)
 	}
 	if st := rebuildState(trade); !st.slowDeclineWatched || st.slowDeclinePending || st.slowDeclinePendingFrom != 0 || !st.depthPriorityHeld {
 		t.Fatalf("the reset row leaves the ladder watched, not pending and held, got %+v", st)
 	}
-	readings := []aggragates.AIIndicators{slowDeclineBlock(true), quietLegBlock(false, testutil.At("17:00:00"), fillBarClosed), brokenAtTheBand(), indecisionReading(), withRecent(brokenAtTheBand(), testutil.At("16:00:00"), testutil.At("09:00:00"))}
+	readings := []aggragates.AIIndicators{slowDeclineBlock(true), quietLegBlock(false, testutil.At("17:00:00"), fillBarClosed), brokenAtTheBand(), withRecent(brokenAtTheBand(), testutil.At("16:00:00"), testutil.At("09:00:00"))}
 	for index, reading := range readings {
 		for _, position := range []string{"", "stopLoss"} {
 			var next Result
@@ -118,11 +121,12 @@ func TestAPendingLadderTheDepthPriorityHoldsIsResetOnce(t *testing.T) {
 	assertNoSale(t, protected, "sell")
 }
 
-// While held no rule acts: a watched ladder goes pending on no verdict, a
-// pending ladder's new fill is neither confirmed nor cancelled — the reset
-// row goes out in place of either — and neither band sells, capital
-// protection's on a ladder it alone watches included. The take profit reads
-// the move it is handed. Each control is the same tick without the gate's row.
+// While held the quiet slow decline and capital protection act on nothing: a
+// watched ladder goes pending on no verdict, a pending ladder's new fill is
+// neither confirmed nor cancelled — the reset row goes out in place of either
+// — and neither band sells, capital protection's on a ladder it alone
+// watches included. A pending ladder's take profit reads the move it is
+// handed. Each control is the same tick without the gate's row.
 func TestAHeldLadderIsNeitherMarkedJudgedNorSold(t *testing.T) {
 	withCapitalProtectionExit(t, true)
 	assertUntouched(t, Apply(heldBy(watchedTrade(), testutil.At("18:05:00")), "", slowDeclineBand, slowDeclineBlock(true)), "")
