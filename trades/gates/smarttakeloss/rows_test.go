@@ -18,6 +18,7 @@ func TestTheEventNamesAreTheStoredContract(t *testing.T) {
 		{GateCapitalProtection, "capitalProtection"},
 		{GateIndecision, "indecision"},
 		{GateEntryHold, "entryHold"},
+		{GateSlowPattern, "slowPattern"},
 		{EventPending, "pending"},
 		{EventCancelled, "cancelled"},
 		{EventReset, "reset"},
@@ -135,6 +136,7 @@ func TestAppendWritesThePairAndNeverTheCallersArrays(t *testing.T) {
 // the exit confirms, the cancelled row, the reset row, the latched row. Each is
 // stated here with the literal names that are stored.
 func TestApplyHandsBackEveryRowFiledUnderItsGateAndKind(t *testing.T) {
+	withSlowPatternDeclineExit(t, true)
 	for name, tc := range map[string]struct {
 		got  *Row
 		want Row
@@ -154,6 +156,18 @@ func TestApplyHandsBackEveryRowFiledUnderItsGateAndKind(t *testing.T) {
 		"a pending ladder a depth priority holds": {
 			Apply(heldBy(pendingTrade(), testutil.At("18:05:00")), "", underTheBand, slowDeclineBlock(true)).SlowDecline,
 			Row{Message: SlowDeclineResetMessage("buy"), Price: slowDeclineLastFill, Gate: "slowDecline", Event: "reset"},
+		},
+		"a ladder the slow pattern makes pending": {
+			Apply(stairLadder(0, 9, 15, 24), "", underTheBand, withBlock(stairBlock(stairTurns, 24))).SlowDecline,
+			Row{Message: SlowPatternMessage("buy", patternReasonsAt24), Price: stairPrices[3], Gate: "slowPattern", Event: "pending", Reasons: patternReasonsAt24},
+		},
+		"a fill the slow pattern confirms": {
+			Apply(stairFifthFill(t), "", underTheBand, withBlock(stairBlock(stairTurns, 30))).SlowDecline,
+			Row{Message: SlowPatternMessage("buy", patternReasonsAt30), Price: stairPrices[4], Gate: "slowPattern", Event: "pending", Reasons: patternReasonsAt30},
+		},
+		"a fill the slow pattern cancels": {
+			Apply(stairFifthFill(t), "", underTheBand, withBlock(stairBlock(stairBounce, 30))).SlowDecline,
+			Row{Message: SlowPatternCancelMessage("buy", patternBreaksAt30), Price: stairPrices[4], Gate: "slowPattern", Event: "cancelled", Reasons: patternBreaksAt30},
 		},
 		"a ladder the indecision latches": {
 			Apply(indecisionLadder(), "", underTheBand, indecisionReading()).Indecision,
@@ -181,6 +195,10 @@ func TestExitRowFilesTheSaleUnderTheRuleThatSold(t *testing.T) {
 		"the slow decline's sell band": {
 			reasonSellBand, 175.39,
 			Row{Message: "smartTakeLoss: sell at slow-decline bollinger band 175.39", Price: 175.39, Gate: "slowDecline", Event: "sold"},
+		},
+		"the slow pattern's sell band": {
+			reasonSlowPatternBand, 175.39,
+			Row{Message: "smartTakeLoss: sell at slow-pattern bollinger band 175.39", Price: 175.39, Gate: "slowPattern", Event: "sold"},
 		},
 		"capital protection's upper band": {
 			reasonCapitalProtection, 192.6543,
@@ -213,5 +231,11 @@ func TestExitMessagePrintsTheReasonAndTheLevel(t *testing.T) {
 	trade.StrategyPair.TradeFilters.PriceFilter = 0
 	if got := ExitMessage(trade, reasonSellBand, 175.39); got != "smartTakeLoss: sell at slow-decline bollinger band 175.39" {
 		t.Fatalf("without a price filter the shortest exact form is printed, got %q", got)
+	}
+	if got := ExitMessage(trade, reasonSlowPatternBand, 175.39); got != "smartTakeLoss: sell at slow-pattern bollinger band 175.39" {
+		t.Fatalf("the slow pattern's sale names its own band, got %q", got)
+	}
+	if SlowPatternMarker != "smartTakeLoss: slow pattern decline, sell at the bollinger band" || SlowPatternCancelMarker != "smartTakeLoss: slow pattern decline not read at the new fill, exit cancelled" {
+		t.Fatal("the pattern's markers are byte-stable text and must not move")
 	}
 }

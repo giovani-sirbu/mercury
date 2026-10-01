@@ -15,16 +15,17 @@ import (
 )
 
 // ExitReached agrees with Apply's sale on every grid ladder, state, block and
-// price, under both switches in every position: where it holds, Apply sells
+// price, under the three exits' switches in every position: where it holds, Apply sells
 // from every proposal that is not a close and from none that is; where it
 // does not, Apply sells from none.
 func TestExitReachedAgreesWithApply(t *testing.T) {
 	positions := []string{"", "buy", "stopLoss", "update_stopLoss", "update_buy", "forceTrailingStopLoss", "takeProfit", "sellLoss", "forceTrailingTakeProfit"}
 	blocks, prices := gridBlocks(), gridPrices()
 	reached := map[bool]int{}
-	for _, switches := range [][2]bool{{true, true}, {true, false}, {false, true}, {false, false}} {
+	for _, switches := range [][3]bool{{true, true, true}, {true, false, true}, {false, true, true}, {false, false, true}, {true, true, false}, {true, false, false}, {false, true, false}, {false, false, false}} {
 		withQuietSlowDeclineExit(t, switches[0])
 		withCapitalProtectionExit(t, switches[1])
+		withSlowPatternDeclineExit(t, switches[2])
 		for _, trade := range gridTrades() {
 			for _, state := range []string{"buy", "stopLoss", "takeProfit", "sellLoss"} {
 				trade.PositionType = state

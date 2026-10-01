@@ -486,3 +486,64 @@ func TestRebuildStateTextIsNotState(t *testing.T) {
 		}
 	}
 }
+
+// The slow pattern gate folds apart from the quiet slow decline's: pending
+// makes a ladder the slow pattern decline watches pending from the price it
+// carries, cancelled makes it not pending, the sold kind, a kind the gate does
+// not have — reset is the quiet rule's — and an event with no price change
+// nothing, and the last of them wins.
+func TestRebuildStateFoldsTheSlowPatternEvents(t *testing.T) {
+	withSlowPatternDeclineExit(t, true)
+	pending := func(price float64) step { return writes(SlowPatternPendingRow("buy", price, slowPatternReasons)) }
+	cancelled := writes(SlowPatternCancelledRow("buy", sixthFill, nil))
+	sold := writes(ExitRow(watchedTrade(), reasonSlowPatternBand, slowDeclineBand))
+	for name, tc := range map[string]struct {
+		steps   []step
+		pending bool
+		from    float64
+	}{
+		"no event":                       {nil, false, 0},
+		"pending":                        {[]step{pending(slowDeclineLastFill)}, true, slowDeclineLastFill},
+		"confirmed at the next fill":     {[]step{pending(slowDeclineLastFill), pending(179.78)}, true, 179.78},
+		"cancelled":                      {[]step{pending(slowDeclineLastFill), cancelled}, false, 0},
+		"pending again after the cancel": {[]step{pending(slowDeclineLastFill), cancelled, pending(179.78)}, true, 179.78},
+		"the sale changes nothing":       {[]step{pending(slowDeclineLastFill), sold}, true, slowDeclineLastFill},
+		"a reset kind is not its own":    {[]step{pending(slowDeclineLastFill), records(eventOf(GateSlowPattern, `{"event":"reset","price":184.45}`))}, true, slowDeclineLastFill},
+		"an event with no price":         {[]step{pending(slowDeclineLastFill), records(eventOf(GateSlowPattern, `{"event":"cancelled"}`))}, true, slowDeclineLastFill},
+		"a document that is no JSON":     {[]step{records(eventOf(GateSlowPattern, `not json`))}, false, 0},
+	} {
+		st := rebuildState(withSteps(watchedTrade(), tc.steps...))
+		if !st.slowPatternWatched || st.slowPatternPending != tc.pending || st.slowPatternPendingFrom != tc.from {
+			t.Errorf("%s: want pending %v from %v on a watched ladder, got %+v", name, tc.pending, tc.from, st)
+		}
+		if st.slowDeclinePending || st.slowDeclinePendingFrom != 0 {
+			t.Errorf("%s: the quiet slow decline's fold reads none of the slow pattern's events, got %+v", name, st)
+		}
+	}
+}
+
+// The slow pattern's events make nothing pending on a ladder it does not
+// watch — one fill short of SlowPatternArmDepth, an inverse ladder, a futures
+// one — nor while SlowPatternDeclineExit is off, and each rule folds its own
+// events alone: the quiet slow decline cancelled and the pattern pending read
+// as exactly that.
+func TestRebuildStateFoldsTheSlowPatternApartFromTheQuietRule(t *testing.T) {
+	withSlowPatternDeclineExit(t, true)
+	rows := []Row{SlowPatternPendingRow("buy", slowDeclineLastFill, nil), CancelledRow("buy", slowDeclineLastFill, nil)}
+	if st := rebuildState(withRows(watchedTrade(), rows...)); !st.slowPatternPending || st.slowDeclinePending {
+		t.Fatalf("the pattern pending and the quiet rule cancelled, got %+v", st)
+	}
+	short := testutil.LadderTrade(false, fills(SlowPatternArmDepth-1, "17:38:00")...)
+	inverse := testutil.LadderTrade(true, fills(watchedFills, "17:38:00")...)
+	futures := watchedTrade()
+	futures.Strategy.TradeType = aggragates.Futures
+	for name, trade := range map[string]aggragates.Trades{"one fill short": short, "an inverse ladder": inverse, "a futures ladder": futures} {
+		if st := rebuildState(withRows(trade, rows[0])); st.slowPatternWatched || st.slowPatternPending || st.slowPatternPendingFrom != 0 {
+			t.Errorf("%s: the pattern watches no such ladder, got %+v", name, st)
+		}
+	}
+	withSlowPatternDeclineExit(t, false)
+	if st := rebuildState(withRows(watchedTrade(), rows[0])); st.slowPatternWatched || st.slowPatternPending {
+		t.Fatalf("switched off, the pattern's events are ignored, got %+v", st)
+	}
+}

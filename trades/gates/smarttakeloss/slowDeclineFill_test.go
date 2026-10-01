@@ -2,6 +2,7 @@ package smarttakeloss
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -112,7 +113,7 @@ func TestSlowDeclineCancelMessageIsFramedLikeTheMarker(t *testing.T) {
 	if got := SlowDeclineCancelMessage("buy", []string{"leg off", "NATR over"}); got != "Hold buy: "+SlowDeclineCancelMarker+" (leg off, NATR over)" {
 		t.Fatalf("the reasons follow the marker in parentheses, got %q", got)
 	}
-	markers := []string{SlowDeclineMarker, SlowDeclineCancelMarker, SlowDeclineEntryHoldReason}
+	markers := []string{SlowDeclineMarker, SlowDeclineCancelMarker, SlowDeclineEntryHoldReason, SlowPatternMarker, SlowPatternCancelMarker}
 	for _, one := range markers {
 		for _, other := range markers {
 			if one != other && strings.Contains(one, other) {
@@ -490,4 +491,89 @@ func TestApplyFoldsItsOwnRowsFillAfterFill(t *testing.T) {
 	if listed := slowDeclineEventsInOrder(t, trade); fmt.Sprint(listed) != fmt.Sprint(want) {
 		t.Fatalf("events %v, want the rows' %v", listed, want)
 	}
+}
+
+// A new fill on a pending slow-pattern ladder is judged once the series sophos
+// serves has closed its bar: the window read again with the new fill holding
+// confirms the exit — the pending row at the new fill, and the band sells on
+// that same tick — and anything else cancels it, with the reasons of what
+// missed, a window the series cannot read included, and no sale on the cancel
+// tick. A series not served, or one that has not closed the new fill's bar,
+// is waited on: no row, and a ladder with an unjudged fill sells nothing. The
+// judgement has no freshness bound, and the latch the pattern took stays
+// through a cancel.
+func TestSlowPatternJudgesTheNewFillOfAPendingLadder(t *testing.T) {
+	fifth := stairFifthFill(t)
+	if st := rebuildState(fifth); !st.slowPatternPending || !slowPatternFillUnjudged(fifth, st) || slowPatternSells(fifth, st) {
+		t.Fatalf("fixture drifted: pending from the fourth fill, the fifth unjudged, got %+v", st)
+	}
+	late := stairBlock(append(append([]float64{}, stairTurns...), 84, 83, 82, 81), 42)
+	older := stairBlock(stairTurns, 30)
+	older.SlowPatternOpens, older.SlowPatternCloses = older.SlowPatternOpens[10:], older.SlowPatternCloses[10:]
+	for name, tc := range map[string]struct {
+		block aggragates.SmartTakeLossIndicators
+		event string
+	}{
+		"confirmed":                           {stairBlock(stairTurns, 30), EventPending},
+		"confirmed twelve bars late":          {late, EventPending},
+		"broken by a rally":                   {stairBlock(stairBounce, 30), EventCancelled},
+		"a window the series no longer holds": {older, EventCancelled},
+		"the fill's bar not closed yet":       {stairBlock(stairTurns, 29), ""},
+		"no series served":                    {aggragates.SmartTakeLossIndicators{SlowDeclineSellBand: slowDeclineBand}, ""},
+	} {
+		got := Apply(fifth, "", slowDeclineBand+1, withBlock(tc.block))
+		if (got.SlowDecline == nil && tc.event != "") || (got.SlowDecline != nil && (got.SlowDecline.Event != tc.event || got.SlowDecline.Gate != GateSlowPattern || got.SlowDecline.Price != stairPrices[4])) {
+			t.Errorf("%s: want a %q row at the fifth fill, got %+v", name, tc.event, got.SlowDecline)
+		}
+		if got.Indecision != nil {
+			t.Errorf("%s: the latch is taken and never written twice, got %+v", name, got.Indecision)
+		}
+		if sold := got.Reason == reasonSlowPatternBand; sold != (tc.event == EventPending) {
+			t.Errorf("%s: the band sells on a confirmation and on no other tick, got %+v", name, got)
+		}
+	}
+
+	_, got := engineTick(fifth, "", slowDeclineBand+1, testutil.At("08:00:00"), withBlock(older))
+	if want := []string{"depth 5, no window between the fills is readable in the 1h bars served"}; !reflect.DeepEqual(got.SlowDecline.Reasons, want) {
+		t.Errorf("the cancel names why nothing was read, got %q", got.SlowDecline.Reasons)
+	}
+	broken := stairBlock(stairBounce, 30)
+	cancelled, _ := engineTick(fifth, "", slowDeclineBand+1, testutil.At("08:00:00"), withBlock(broken))
+	if st := rebuildState(cancelled); !st.slowPatternWatched || st.slowPatternPending || !st.indecision {
+		t.Fatalf("a cancelled ladder is watched, not pending, and still latched, got %+v", st)
+	}
+	assertUntouched(t, Apply(cancelled, "", slowDeclineBand+1, withBlock(broken)), "")
+}
+
+// The fill that takes a pending slow-pattern ladder to its last depth is never
+// judged: it stays pending from where it was and the band sells at once.
+func TestSlowPatternNeverJudgesTheFillThatReachesTheLastDepth(t *testing.T) {
+	withSlowPatternDeclineExit(t, true)
+	seventh := withRows(stairLadder(0, 9, 15, 24, 30, 36, 42), SlowPatternPendingRow("buy", stairPrices[6], nil))
+	eighth := withFill(seventh, stairPrices[7], stairOpen(48).Add(time.Minute))
+	if st := rebuildState(eighth); !st.slowPatternPending || slowPatternFillUnjudged(eighth, st) || !slowPatternSells(eighth, st) {
+		t.Fatalf("fixture drifted: the last-depth fill must read as judged, got %+v", st)
+	}
+	block := withBlock(aggragates.SmartTakeLossIndicators{SlowDeclineSellBand: slowDeclineBand})
+	assertUntouched(t, Apply(eighth, "", slowDeclineBand-1, block), "")
+	assertForced(t, Apply(eighth, "", slowDeclineBand+1, block), reasonSlowPatternBand)
+}
+
+// The slow pattern shares the slow-decline slot: on a tick the quiet slow decline
+// writes its own row the pattern is not read, and lands on the next tick with its
+// latch; with both pending the quiet rule's band is read first.
+func TestSlowPatternYieldsTheSlotToTheQuietSlowDecline(t *testing.T) {
+	withSlowPatternDeclineExit(t, true)
+	block := stairBlock(stairTurns, 24)
+	block.SlowDeclineExit, block.SlowDeclineExitReasons, block.SlowDeclineFillFrom = true, slowDeclineReasons, fillWindowFrom.UnixMilli()
+	ticked, first := engineTick(stairLadder(0, 9, 15, 24), "", slowDeclineBand-1, testutil.At("01:00:00"), withBlock(block))
+	assertRow(t, first.SlowDecline, SlowDeclineMessage("buy", slowDeclineReasons), stairPrices[3])
+	if first.Indecision != nil || rebuildState(ticked).slowPatternPending {
+		t.Fatalf("the quiet rule keeps the slot and the pattern is not read, got %+v", first)
+	}
+	both, second := engineTick(ticked, "", slowDeclineBand-1, testutil.At("01:15:00"), withBlock(block))
+	assertRow(t, second.SlowDecline, SlowPatternMessage("buy", patternReasonsAt24), stairPrices[3])
+	assertRow(t, second.Indecision, IndecisionMessage("buy", append([]string{"slow pattern decline"}, patternReasonsAt24...)), stairPrices[3])
+	assertForced(t, Apply(both, "", slowDeclineBand+1, withBlock(block)), reasonSellBand)
+	assertUntouched(t, Apply(both, "", slowDeclineBand-1, withBlock(block)), "")
 }

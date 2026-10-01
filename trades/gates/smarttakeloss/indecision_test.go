@@ -24,7 +24,7 @@ func TestIndecisionMessageIsFramedLikeTheMarker(t *testing.T) {
 	if got := IndecisionMessage("buy", []string{"NATR over", "2 of 4 readings hold with a smooth ladder, 3 needed"}); got != "Hold buy: "+IndecisionMarker+" (NATR over, 2 of 4 readings hold with a smooth ladder, 3 needed)" {
 		t.Fatalf("the reasons follow the marker in parentheses, got %q", got)
 	}
-	markers := []string{SlowDeclineMarker, SlowDeclineCancelMarker, SlowDeclineEntryHoldReason, IndecisionMarker}
+	markers := []string{SlowDeclineMarker, SlowDeclineCancelMarker, SlowDeclineEntryHoldReason, IndecisionMarker, SlowPatternMarker, SlowPatternCancelMarker}
 	for _, one := range markers {
 		for _, other := range markers {
 			if one != other && strings.Contains(one, other) {
@@ -174,5 +174,39 @@ func TestADepthPriorityHoldLeavesTheIndecisionDirectionOn(t *testing.T) {
 	}
 	if got := TakeProfitPercentage(heldLatched, price, fromAverage); got != fromPosition {
 		t.Fatalf("held, the take profit reads the position price %v, got %v", fromPosition, got)
+	}
+}
+
+// The slow pattern decline latches a ladder the indecision direction watches
+// the tick it goes pending, once: one latched row at the newest fill naming the
+// rule and the reasons of the window that held. A ladder already latched, and
+// one the indecision reading latches on that very tick, get no second row; one
+// the indecision direction does not watch goes pending without a latch.
+func TestTheSlowPatternLatchesOnceAndOnlyWhereTheIndecisionWatches(t *testing.T) {
+	withSlowPatternDeclineExit(t, true)
+	block := withBlock(stairBlock(stairTurns, 24))
+	latchReasons := append([]string{"slow pattern decline"}, patternReasonsAt24...)
+
+	got := Apply(stairLadder(0, 9, 15, 24), "", underTheBand, block)
+	assertRow(t, got.SlowDecline, SlowPatternMessage("buy", patternReasonsAt24), stairPrices[3])
+	assertRow(t, got.Indecision, IndecisionMessage("buy", latchReasons), stairPrices[3])
+
+	got = Apply(latchedBy(stairLadder(0, 9, 15, 24)), "", underTheBand, block)
+	if got.SlowDecline == nil || got.SlowDecline.Gate != GateSlowPattern || got.Indecision != nil {
+		t.Errorf("a latched ladder goes pending without a second latch, got %+v", got)
+	}
+
+	reading := stairBlock(stairTurns, 24)
+	reading.SlowDeclineIndecision, reading.SlowDeclineBreakReasons = true, indecisionReasons
+	got = Apply(stairLadder(0, 9, 15, 24), "", underTheBand, withBlock(reading))
+	assertRow(t, got.Indecision, IndecisionMessage("buy", indecisionReasons), stairPrices[3])
+	if got.SlowDecline == nil || got.SlowDecline.Gate != GateSlowPattern {
+		t.Errorf("the reading's latch is the one written and the pattern still goes pending, got %+v", got)
+	}
+
+	withIndecisionDirection(t, false)
+	got = Apply(stairLadder(0, 9, 15, 24), "", underTheBand, block)
+	if got.SlowDecline == nil || got.SlowDecline.Gate != GateSlowPattern || got.Indecision != nil {
+		t.Errorf("with the indecision direction off the ladder goes pending without a latch, got %+v", got)
 	}
 }

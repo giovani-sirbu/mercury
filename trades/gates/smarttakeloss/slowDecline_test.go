@@ -328,12 +328,13 @@ func TestSlowDeclineWatchCountsFilledEntriesNotRows(t *testing.T) {
 // Switched off, the quiet slow decline watches no ladder: the verdict marks
 // nothing, a new fill on a pending ladder is judged by nothing, the band
 // sells nothing — the rows written earlier are ignored — and a ladder short
-// of its last depth is no longer armed by it; the indecision direction, which
-// watches such a ladder too, is switched off beside it. Switched back on, the
-// same ticks mark and sell again.
+// of its last depth is no longer armed by it; the indecision direction and the
+// slow pattern decline, which watch such a ladder too, are switched off beside
+// it. Switched back on, the same ticks mark and sell again.
 func TestApplySlowDeclineSwitchedOff(t *testing.T) {
 	withQuietSlowDeclineExit(t, false)
 	withIndecisionDirection(t, false)
+	withSlowPatternDeclineExit(t, false)
 	for _, position := range []string{"", "stopLoss"} {
 		assertNoSlowDeclineRow(t, Apply(watchedTrade(), position, underTheBand, slowDeclineBlock(true)), position)
 		assertNoSlowDeclineRow(t, Apply(pendingTrade(), position, slowDeclineBand+1, slowDeclineBlock(true)), position)

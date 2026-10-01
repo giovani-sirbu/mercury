@@ -57,20 +57,20 @@ func indecisionEligible(trade aggragates.Trades) bool {
 
 // indecisionRow is the indecision row a tick hands back, if any, and the
 // state as that row leaves it: a watched ladder not latched yet, on a tick
-// sophos serves the indecision, from either reading (SlowDeclineIndecision:
-// the vote's, or the whole SMC trend table bearish), gets the row —
-// IndecisionMessage naming SlowDeclineBreakReasons, carrying the newest
-// fill's price — and is latched from that tick on. The flag alone decides it,
-// whatever SlowDeclineLegQuiet and SlowDeclineExit say: the ladder need not
-// be pending, so one whose own smoothness fails, or whose newest fill is
-// outside the fill window, latches all the same. A latched ladder gets no
-// second row however often sophos serves the reading again, and nothing takes
-// the latch away: it holds until the trade closes. A reading without the
-// indecision, a ladder the rule does not watch and a ladder already latched
-// get nothing. Apply asks it while a depth priority holds the ladder
-// (depthPriorityHeld) all the same, so a ladder latches during the hold: the
-// hold pauses the quiet slow-decline exit and capital protection, never this
-// direction.
+// sophos serves the indecision, from any reading (SlowDeclineIndecision: the
+// vote's, the thresholds' near miss, the SMC trend tolerance's, or the whole
+// SMC trend table bearish), gets the row — IndecisionMessage naming
+// SlowDeclineBreakReasons, carrying the newest fill's price — and is latched
+// from that tick on. The flag alone decides it, whatever SlowDeclineLegQuiet
+// and SlowDeclineExit say: the ladder need not be pending, so one whose own
+// smoothness fails, or whose newest fill is outside the fill window, latches
+// all the same. A latched ladder gets no second row however often sophos
+// serves the reading again, and nothing takes the latch away: it holds until
+// the trade closes. A reading without the indecision, a ladder the rule does
+// not watch and a ladder already latched get nothing. Apply asks it while a
+// depth priority holds the ladder (depthPriorityHeld) all the same, so a
+// ladder latches during the hold: the hold pauses the quiet slow-decline exit
+// and capital protection, never this direction.
 func indecisionRow(trade aggragates.Trades, st state, block aggragates.SmartTakeLossIndicators) (state, *Row) {
 	if !st.indecisionWatched || st.indecision || !block.SlowDeclineIndecision {
 		return st, nil

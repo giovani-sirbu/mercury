@@ -11,9 +11,10 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 )
 
-// The package reads each switch as shipped: every test that flips one has put
-// it back. Which way each ships is the user's call, so no value is pinned
-// here; a test of a rule switches that rule on for itself.
+// The package reads every switch as shipped, the slow pattern decline's
+// included: every test that flips one has put it back. Which way each ships is
+// the user's call, so no value is pinned here; a test that needs a rule off or
+// on switches it for itself.
 func TestSwitchesReadAsShipped(t *testing.T) {
 	if quietSlowDeclineExit != QuietSlowDeclineExit {
 		t.Fatalf("QuietSlowDeclineExit ships %v, read as %v", QuietSlowDeclineExit, quietSlowDeclineExit)
@@ -30,16 +31,20 @@ func TestSwitchesReadAsShipped(t *testing.T) {
 	if depthPriorityHoldPauses != DepthPriorityHoldPausesSmartTakeLoss {
 		t.Fatalf("DepthPriorityHoldPausesSmartTakeLoss ships %v, read as %v", DepthPriorityHoldPausesSmartTakeLoss, depthPriorityHoldPauses)
 	}
+	if slowPatternDeclineExit != SlowPatternDeclineExit {
+		t.Fatalf("SlowPatternDeclineExit ships %v, read as %v", SlowPatternDeclineExit, slowPatternDeclineExit)
+	}
 }
 
 // Armed is the predicate hermes and live-testing ask before their
 // empty-position early return: the flag, a parent, and a ladder one of the
-// three rules watches — the quiet slow decline a long ladder from
+// four rules watches — the quiet slow decline a long ladder from
 // SlowDeclineArmDepth filled entries, capital protection a long spot ladder
 // outside an impasse strategy from its last depth, the indecision direction
-// a long spot ladder from IndecisionArmDepth filled entries. Each switch
-// takes its own rule's watch away and nothing else; a child and a trade
-// without the flag are never armed.
+// a long spot ladder from IndecisionArmDepth filled entries, the slow pattern
+// decline a long spot ladder, an impasse strategy's included, from
+// SlowPatternArmDepth filled entries. Each switch takes its own rule's watch
+// away and nothing else; a child and a trade without the flag are never armed.
 func TestArmed(t *testing.T) {
 	futures := lastDepthLadder()
 	futures.Strategy.TradeType = aggragates.Futures
@@ -51,21 +56,23 @@ func TestArmed(t *testing.T) {
 	off.Strategy.Params.SmartTakeLoss = false
 
 	type armedCase struct {
-		name                                       string
-		trade                                      aggragates.Trades
-		slowDecline, capitalProtection, indecision bool
+		name                                                    string
+		trade                                                   aggragates.Trades
+		slowDecline, capitalProtection, indecision, slowPattern bool
 	}
 	cases := []armedCase{
-		{"a long ladder short of every watch", testutil.LadderTrade(false, fills(min(SlowDeclineArmDepth, IndecisionArmDepth)-1, "17:38:00")...), false, false, false},
-		{"a long ladder at SlowDeclineArmDepth", testutil.LadderTrade(false, fills(SlowDeclineArmDepth, "17:38:00")...), true, false, SlowDeclineArmDepth >= IndecisionArmDepth},
-		{"a long ladder one short of IndecisionArmDepth", testutil.LadderTrade(false, fills(IndecisionArmDepth-1, "17:38:00")...), IndecisionArmDepth-1 >= SlowDeclineArmDepth, false, false},
-		{"a long ladder at IndecisionArmDepth", testutil.LadderTrade(false, fills(IndecisionArmDepth, "17:38:00")...), IndecisionArmDepth >= SlowDeclineArmDepth, false, true},
-		{"one depth short of the last", testutil.LadderTrade(false, fills(lastDepthFills-1, "21:30:00")...), true, false, true},
-		{"a long ladder at its last depth", lastDepthLadder(), true, true, true},
-		{"a futures ladder at its last depth", futures, true, false, false},
-		{"an impasse strategy at its last depth", impasse, true, false, true},
-		{"an inverse ladder at its last depth", testutil.LadderTrade(true, fills(lastDepthFills, "21:30:00")...), false, false, false},
-		{"a ladder with no fill", testutil.LadderTrade(false), false, false, false},
+		{"a long ladder short of every watch", testutil.LadderTrade(false, fills(min(SlowDeclineArmDepth, IndecisionArmDepth)-1, "17:38:00")...), false, false, false, false},
+		{"a long ladder at SlowDeclineArmDepth", testutil.LadderTrade(false, fills(SlowDeclineArmDepth, "17:38:00")...), true, false, SlowDeclineArmDepth >= IndecisionArmDepth, SlowDeclineArmDepth >= SlowPatternArmDepth},
+		{"a long ladder one short of IndecisionArmDepth", testutil.LadderTrade(false, fills(IndecisionArmDepth-1, "17:38:00")...), IndecisionArmDepth-1 >= SlowDeclineArmDepth, false, false, IndecisionArmDepth-1 >= SlowPatternArmDepth},
+		{"a long ladder at IndecisionArmDepth", testutil.LadderTrade(false, fills(IndecisionArmDepth, "17:38:00")...), IndecisionArmDepth >= SlowDeclineArmDepth, false, true, IndecisionArmDepth >= SlowPatternArmDepth},
+		{"a long ladder one short of SlowPatternArmDepth", testutil.LadderTrade(false, fills(SlowPatternArmDepth-1, "17:38:00")...), true, false, true, false},
+		{"a long ladder at SlowPatternArmDepth", testutil.LadderTrade(false, fills(SlowPatternArmDepth, "17:38:00")...), true, false, true, true},
+		{"one depth short of the last", testutil.LadderTrade(false, fills(lastDepthFills-1, "21:30:00")...), true, false, true, true},
+		{"a long ladder at its last depth", lastDepthLadder(), true, true, true, true},
+		{"a futures ladder at its last depth", futures, true, false, false, false},
+		{"an impasse strategy at its last depth", impasse, true, false, true, true},
+		{"an inverse ladder at its last depth", testutil.LadderTrade(true, fills(lastDepthFills, "21:30:00")...), false, false, false, false},
+		{"a ladder with no fill", testutil.LadderTrade(false), false, false, false, false},
 	}
 	// A row short of the slow decline's watch that is still at its last depth
 	// needs a filled entry under SlowDeclineArmDepth: with the constant at one
@@ -73,14 +80,15 @@ func TestArmed(t *testing.T) {
 	if SlowDeclineArmDepth >= 2 {
 		shortRow := testutil.LadderTrade(false, fills(SlowDeclineArmDepth-1, "17:38:00")...)
 		shortRow.StrategyPair.StrategySettings[0].Depths = SlowDeclineArmDepth - 1
-		cases = append(cases, armedCase{"a short row at its last depth", shortRow, false, true, false})
+		cases = append(cases, armedCase{"a short row at its last depth", shortRow, false, true, false, false})
 	}
-	for _, switches := range [][3]bool{{true, true, true}, {true, false, true}, {false, true, true}, {false, false, true}, {true, true, false}, {true, false, false}, {false, true, false}, {false, false, false}} {
+	for _, switches := range gridSwitches() {
 		withQuietSlowDeclineExit(t, switches[0])
 		withCapitalProtectionExit(t, switches[1])
 		withIndecisionDirection(t, switches[2])
+		withSlowPatternDeclineExit(t, switches[3])
 		for _, tc := range cases {
-			want := (switches[0] && tc.slowDecline) || (switches[1] && tc.capitalProtection) || (switches[2] && tc.indecision)
+			want := (switches[0] && tc.slowDecline) || (switches[1] && tc.capitalProtection) || (switches[2] && tc.indecision) || (switches[3] && tc.slowPattern)
 			if got := Armed(tc.trade); got != want {
 				t.Errorf("switches %v, %s: armed %v, want %v", switches, tc.name, got, want)
 			}
@@ -98,6 +106,7 @@ func TestArmed(t *testing.T) {
 func TestArmedLadderGetsTheIndecisionRowFromTheDeadZone(t *testing.T) {
 	withQuietSlowDeclineExit(t, false)
 	withCapitalProtectionExit(t, false)
+	withSlowPatternDeclineExit(t, false)
 	trade := testutil.LadderTrade(false, fills(IndecisionArmDepth, "17:38:00")...)
 	if !Armed(trade) {
 		t.Fatal("the indecision direction alone must arm the ladder from IndecisionArmDepth")
@@ -177,7 +186,7 @@ func TestAHeldLadderStaysArmedAndApplyPausesIt(t *testing.T) {
 			t.Fatalf("an event stamped %v holds nothing", at)
 		}
 	}
-	markers := []string{SlowDeclineMarker, SlowDeclineCancelMarker, SlowDeclineResetMarker, IndecisionMarker, cooldown.DepthPriorityHoldMarker}
+	markers := []string{SlowDeclineMarker, SlowDeclineCancelMarker, SlowDeclineResetMarker, IndecisionMarker, SlowPatternMarker, SlowPatternCancelMarker, cooldown.DepthPriorityHoldMarker}
 	for _, one := range markers {
 		for _, other := range markers {
 			if one != other && strings.Contains(one, other) {

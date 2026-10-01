@@ -155,6 +155,8 @@ func rowFiling(message string) (gate, kind string) {
 		{SlowDeclineCancelMarker, GateSlowDecline, EventCancelled},
 		{SlowDeclineResetMarker, GateSlowDecline, EventReset},
 		{IndecisionMarker, GateIndecision, EventLatched},
+		{SlowPatternMarker, GateSlowPattern, EventPending},
+		{SlowPatternCancelMarker, GateSlowPattern, EventCancelled},
 	} {
 		if strings.Contains(message, filing.marker) {
 			return filing.gate, filing.kind
@@ -214,6 +216,18 @@ func withQuietSlowDeclineExit(t *testing.T, on bool) {
 	previous := quietSlowDeclineExit
 	quietSlowDeclineExit = on
 	t.Cleanup(func() { quietSlowDeclineExit = previous })
+}
+
+// withSlowPatternDeclineExit is withQuietSlowDeclineExit for the slow pattern
+// decline. The package's tests run with it as shipped (on), like every other
+// switch: a test that assumes no rule watches a deep long ladder switches it
+// off for itself, a pattern test that needs the off-to-on contrast switches it
+// on, and it is put back to whatever it was.
+func withSlowPatternDeclineExit(t *testing.T, on bool) {
+	t.Helper()
+	previous := slowPatternDeclineExit
+	slowPatternDeclineExit = on
+	t.Cleanup(func() { slowPatternDeclineExit = previous })
 }
 
 // withCapitalProtectionExit is withQuietSlowDeclineExit for the capital

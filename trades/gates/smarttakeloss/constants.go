@@ -1,5 +1,7 @@
 package smarttakeloss
 
+import "github.com/giovani-sirbu/mercury/trades/gates/slowpattern"
+
 const (
 	// QuietSlowDeclineExit switches the quiet slow-decline exit as a whole:
 	// its watch (slowDeclineWatched), its marker and cancel rows, its sale at
@@ -54,11 +56,31 @@ const (
 	// hold, and a latched ladder's take profit reads its position price.
 	// Switched off, the hold rows are ignored.
 	DepthPriorityHoldPausesSmartTakeLoss = true
+	// SlowPatternDeclineExit switches the slow pattern decline as a whole: its
+	// watch (slowPatternWatched), its pending, confirming and cancelled rows,
+	// its sale at the sell band, the indecision latch it writes and the take
+	// profit it reads from the newest fill (TakeProfitPercentage). Switched off
+	// it watches no ladder: no row is written, nothing is sold, the take profit
+	// reads the average entry price alone, and the rows it wrote earlier are
+	// ignored. The shape it reads, its thresholds and its read window are the
+	// constants of gates/slowpattern; the two headline knobs of the rule are
+	// there too, slowpattern.SlowPatternMinDepthsBetween and
+	// slowpattern.SlowPatternMinWeight.
+	SlowPatternDeclineExit = true
+	// SlowPatternArmDepth is the least number of filled entries
+	// (ladder.CountFilledEntries) a long spot ladder holds before the slow
+	// pattern decline watches it (slowPatternWatched): Armed reports it and its
+	// rows go out for it, and a pattern row already on a shallower ladder makes
+	// nothing pending. It is one more than
+	// slowpattern.SlowPatternMinDepthsBetween — the fewest fills a window
+	// between two of them is ever read on — so it follows that knob and never
+	// arms a ladder that Trigger cannot yet read.
+	SlowPatternArmDepth = 1 + slowpattern.SlowPatternMinDepthsBetween
 )
 
 // quietSlowDeclineExit, capitalProtectionExit, indecisionDirection,
-// slowDeclineNeedsRecentFill and depthPriorityHoldPauses are the switches as
-// the package reads them. They are variables only so the rules' own tests can
+// slowDeclineNeedsRecentFill, depthPriorityHoldPauses and
+// slowPatternDeclineExit are the switches as the package reads them. They are variables only so the rules' own tests can
 // run them switched off; nothing else assigns them.
 var (
 	quietSlowDeclineExit       = QuietSlowDeclineExit
@@ -66,4 +88,5 @@ var (
 	indecisionDirection        = IndecisionDirection
 	slowDeclineNeedsRecentFill = SlowDeclineNeedsRecentFill
 	depthPriorityHoldPauses    = DepthPriorityHoldPausesSmartTakeLoss
+	slowPatternDeclineExit     = SlowPatternDeclineExit
 )

@@ -1,7 +1,8 @@
-// Package smarttakeloss is the SmartTakeLoss flag: three rules read off the
-// closed window of sophos' smart take loss, each behind its own switch. Two
-// turn a long ladder into a seller instead of a buyer; the third moves where
-// it takes profit.
+// Package smarttakeloss is the SmartTakeLoss flag: four rules read off the
+// closed window of sophos' smart take loss, each behind its own switch. Three
+// turn a long ladder into a seller instead of a buyer — the quiet slow decline
+// and the slow pattern decline at the sell band, capital protection at the
+// upper band; the indecision direction moves where it takes profit.
 //
 // QuietSlowDeclineExit switches the quiet slow-decline exit. Sophos reads an
 // early down leg on that window, still down sophos' SlowDeclineMinLegFallPct
@@ -71,6 +72,31 @@
 // (EntryHold, asked by ShouldHold, which writes its held event), so no new
 // ladder opens into the decline.
 //
+// SlowPatternDeclineExit switches the slow pattern decline: the same exit at
+// the same sell band, decided by the SHAPE of the decline between the ladder's
+// fills instead of a market vote, with no prediction claimed. A long spot
+// ladder is WATCHED for it from SlowPatternArmDepth filled entries
+// (slowPatternWatched). Sophos serves the closed 1h bars (slowpattern.Series,
+// the block's SlowPatternOpens and SlowPatternCloses), ladder-agnostic; the
+// gate cuts the windows between the ladder's fills out of them and
+// slowpattern.Trigger reads them. It reads at a NEW FILL, once the bar that
+// holds the fill has closed and no more than slowpattern.SlowPatternReadBars
+// bars after: a watched ladder not pending goes pending when any window from an
+// earlier fill, at least slowpattern.SlowPatternMinDepthsBetween depths back,
+// holds (slowPatternGoesPending) — one row (a pending event of GateSlowPattern
+// beside the text SlowPatternMarker frames, carrying the newest fill's price
+// and naming the window), and, when the indecision direction watches the ladder
+// and has not latched it, one latched row beside it naming the pattern. A fill a
+// pending ladder takes is judged once the series has closed its bar
+// (slowPatternJudge): the window read again holding confirms the exit — the
+// pending row again at the new fill — and anything else cancels it with one row
+// (SlowPatternCancelMarker, naming what missed); the latch stays. The last-depth
+// fill is never judged. A pending ladder sells at the sell band, under its own
+// reason, once its newest fill is judged (slowPatternSells), and its take
+// profit reads the newest fill from break even up. The quiet slow decline
+// keeps the slot of its row on a tick it wrote one, and the pattern lands later;
+// the rule has no reset kind and folds its events apart from the quiet rule's.
+//
 // CapitalProtectionExit switches the capital protection exit. A long spot
 // ladder outside an impasse strategy is WATCHED for it once it has filled its
 // last configured depth (capitalProtectionWatched, lastDepthFilled). Sophos
@@ -89,46 +115,56 @@
 // on a window whose leg is on and still down its SlowDeclineMinLegFallPct,
 // whose vote fails even with a ladder's own smoothness counted while at least
 // its SlowDeclineIndecisionVoteShare of the enabled readings hold — one short
-// of the need at the shipped shares — with the SMC trend dashboard bearish on
-// every timeframe sophos' SmcTrendTimeframes names while that condition is
-// on. Sophos also serves it on any window it read, whatever the leg and the
-// vote, when its SMC trend dashboard reads the whole table bearish — the
-// Trend Direction row down and at least its IndecisionSmcTrendShare of every
-// timeframe's reads bearish, while its IndecisionSmcTrend is on — so a
-// watched ladder that is not pending, or that sophos reads as a leg on and
-// quiet, is latched too; on a leg on and quiet the row names only that
-// reading. The first tick a watched ladder is served it on writes one row (a
-// latched event beside the text IndecisionMarker frames, carrying the newest
-// fill's price, naming SlowDeclineBreakReasons), and the ladder is LATCHED
-// until it closes: no event takes the latch away. From break even up a
-// latched ladder's take profit is measured from its position price — the
-// `buy` row's own `percentage` — as well as from its average entry price: the
-// engines hand strategies.GetPosition the larger of the moves
-// (TakeProfitPercentage), so the take profit arms once the profit is zero or
-// more instead of waiting for the average's take profit, and hasProfit still
-// gates that arming. The trailing take profit's sale runs the engines' own
-// `sell` chain, hasProfit included, as on every ladder: a close under the
-// minimum profit is refused, and the trade stays in takeProfit and retries on
-// the next print. Under break even nothing changes, and the rule sells
-// nothing of its own.
+// of the need at the shipped shares — while the SMC trend condition is on,
+// with the dashboard bearish on every timeframe sophos' SmcTrendTimeframes
+// names, or failing that only within its SmcTrendIndecisionShare, which keeps
+// the indecision. It serves it, under the same condition, for a window that
+// misses the leg on and quiet by a hair: sophos' near miss, every threshold
+// within its SlowDeclineNearMissShare. It serves it in the verdict's place as
+// well, on a leg on and quiet whose SMC trend condition fails while every
+// timeframe it names is still over its SmcTrendIndecisionShare of the reads
+// bearish. Sophos also serves it on any
+// window it read, whatever the leg and the vote, when its SMC trend dashboard
+// reads the whole table bearish — the Trend Direction row down and at least
+// its IndecisionSmcTrendShare of every timeframe's reads bearish, while its
+// IndecisionSmcTrend is on — so a watched ladder that is not pending, or that
+// sophos reads as a leg on and quiet, is latched too; on a leg on and quiet
+// the row names only that reading. The first tick a watched ladder is served
+// it on writes one row (a latched event beside the text IndecisionMarker
+// frames, carrying the newest fill's price, naming SlowDeclineBreakReasons),
+// and the ladder is LATCHED until it closes: no event takes the latch away.
+// From break even up a latched ladder's take profit is measured from its
+// position price — the `buy` row's own `percentage` — as well as from its
+// average entry price: the engines hand strategies.GetPosition the larger of
+// the moves (TakeProfitPercentage), so the take profit arms once the profit
+// is zero or more instead of waiting for the average's take profit, and
+// hasProfit still gates that arming. The trailing take profit's sale runs the
+// engines' own `sell` chain, hasProfit included, as on every ladder: a close
+// under the minimum profit is refused, and the trade stays in takeProfit and
+// retries on the next print. Under break even nothing changes, and the rule
+// sells nothing of its own.
 //
 // DepthPriorityHoldPausesSmartTakeLoss switches the pause a depth priority
-// hold puts on the two exits, the quiet slow decline and capital protection.
+// hold puts on the three exits, the quiet slow decline, the slow pattern
+// decline and capital protection.
 // A ladder is HELD while it carries an event of the cooldown depth priority
 // gate (cooldown.GateDepthPriority) stamped after its newest fill
-// (depthPriorityHeld), and its next fill ends the hold. While held, neither
-// exit reads it: it goes pending on no reading, a new fill is judged on
-// none, and it sells at neither band. A pending ladder is reset on its first
-// held tick with one row (a reset event beside the text
+// (depthPriorityHeld), and its next fill ends the hold. While held, no exit
+// reads it: it goes pending on no reading, a new fill is judged on none, and
+// it sells at no band. A pending ladder of the quiet slow decline is reset on
+// its first held tick with one row (a reset event beside the text
 // SlowDeclineResetMarker frames, carrying the newest fill's price), which
 // rebuildState folds like a cancelled event, so the ladder goes pending again
-// only as above once the hold has ended. The indecision direction is not
-// paused: a held ladder is latched on a reading as on any other tick, and a
+// only as above once the hold has ended. The slow pattern decline has no reset
+// row: a pending pattern survives the hold untouched, sells nothing while it
+// lasts, and its next fill is judged once the hold has ended. The indecision
+// direction is not paused: a held ladder is latched on a reading as on any other tick, and a
 // latched ladder's take profit reads its position price while the hold lasts;
 // only the pending reading, from the newest fill, waits for the next fill.
 //
-// The two exits' sales — at the sell band and at the upper band — are the
-// engines' existing sellLoss chain (cancelPendingOrder, acceptLoss, sell,
+// The exits' sales — at the sell band, whichever of the two pending rules made
+// the ladder pending, and at the upper band — are the engines' existing
+// sellLoss chain (cancelPendingOrder, acceptLoss, sell,
 // updateTrade): a limit at the tick price, re-placed one tolerance lower by
 // the sellLoss logic row on a further dip. A pending ladder's sell band is
 // read first, so it names a sale both rules reach on one tick. Neither ever
@@ -141,8 +177,8 @@
 //
 // State lives in the trade's own strategy events (trade.StrategyEvents) and
 // its history: the smartTakeLoss events of the slow-decline gate (pending,
-// cancelled, reset) and of the indecision gate (latched), folded in slice
-// order, the cooldown depth priority gate's events, read by their stamps, and
+// cancelled, reset), of the slow pattern gate (pending, cancelled) and of the
+// indecision gate (latched), folded in slice order, the cooldown depth priority gate's events, read by their stamps, and
 // trade.History for the fills. It is rebuilt on every tick (rebuildState);
 // there is no Redis key, no column and nothing on trade.PositionPrice. The
 // trade's log rows are the output an operator reads and nothing reads them

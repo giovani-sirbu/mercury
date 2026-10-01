@@ -13,11 +13,12 @@ import (
 //
 // The rows Apply hands back are the slow-decline pending row — going pending,
 // or a new fill confirming the exit —, its cancelled row and its reset row,
-// and the indecision latched row: PendingRow, CancelledRow, ResetRow and
-// LatchedRow build them, for Apply and for a fixture alike, and ExitRow
-// builds the sold row of a forced sale. A Row built by hand, without a Gate,
-// files its event under no gate, which no fold reads, so callers build every
-// Row with those builders. Message is human-readable text, byte-stable for cp
+// the slow pattern decline's pending row and cancelled row, and the indecision
+// latched row: PendingRow, CancelledRow, ResetRow, SlowPatternPendingRow,
+// SlowPatternCancelledRow and LatchedRow build them, for Apply and for a
+// fixture alike, and ExitRow builds the sold row of a forced sale. A Row built
+// by hand, without a Gate, files its event under no gate, which no fold reads,
+// so callers build every Row with those builders. Message is human-readable text, byte-stable for cp
 // and the notification filter, and nothing reads it back.
 // Price is the newest fill's price, never trade.PositionPrice — rebuildState
 // locates the fill a ladder is pending from by it — and the level of the sale
@@ -32,14 +33,16 @@ type Row struct {
 
 // Result is the overlay's answer. Position is the ladder's proposal, or
 // "sellLoss" when a rule forced the exit — then Reason names the rule that
-// sold (reasonSellBand, reasonCapitalProtection) for the engine's ExitRow,
-// and is empty otherwise. SlowDecline is non-nil on the tick a watched
-// ladder goes pending, on the tick a new fill on a pending ladder is judged —
-// the pending row again, or the cancelled row — and on the first tick a depth
-// priority holds a pending ladder — the reset row. Indecision is non-nil on
-// the tick a ladder the indecision direction watches is latched
-// (indecisionRow). The engine writes each through Rows, the slow-decline row
-// first. Capital protection hands back no row.
+// sold (reasonSellBand, reasonSlowPatternBand, reasonCapitalProtection) for
+// the engine's ExitRow, and is empty otherwise. SlowDecline is non-nil on the
+// tick a watched ladder goes pending, on the tick a new fill on a pending
+// ladder is judged — the pending row again, or the cancelled row — and on the
+// first tick a depth priority holds a pending ladder — the reset row; it holds
+// the slow pattern decline's pending or cancelled row too, on a tick the quiet
+// slow decline wrote none (slowPatternRows). Indecision is non-nil on the tick
+// a ladder the indecision direction watches is latched (indecisionRow, or the
+// slow pattern going pending). The engine writes each through Rows, the
+// slow-decline slot first. Capital protection hands back no row.
 type Result struct {
 	Position    string
 	Reason      string
@@ -51,21 +54,28 @@ type Result struct {
 // It returns the proposal untouched — and proposes no row — without the
 // flag, on an impasse child, without a price or without settings, and on any
 // trade no rule watches (slowDeclineWatched, capitalProtectionWatched,
-// indecisionWatched).
+// indecisionWatched, slowPatternWatched).
 //
 // A ladder a depth priority holds (depthPriorityHeld) is paused, the latch
 // excepted: a pending exit is reset with one row (slowDeclineReset), a
 // watched ladder the indecision direction reads is latched as on any other
 // tick (indecisionRow), and past those two rows the proposal comes back
 // untouched — no slow-decline marker, no judgement of a new fill, no sale at
-// either band — until the ladder's next fill ends the hold.
+// either band — until the ladder's next fill ends the hold. The slow pattern
+// decline is paused the same way and never reset: no trigger, no judgement of
+// a new fill and no sale while held, and a pending pattern survives the hold
+// as it was, to be judged on the ladder's next fill.
 //
-// The slow-decline row and the indecision row go out first, before the
-// protected return: a ladder resting in its trailing take profit when the
-// verdict arrives is pending all the same, a new fill on it is judged all the
-// same (slowDeclineRow), and it is latched all the same (indecisionRow).
-// Neither row changes the sale: the indecision direction sells nothing of its
-// own, it moves the take profit (TakeProfitPercentage) and nothing else.
+// The slow-decline row, the indecision row and the slow pattern's rows go out
+// first, before the protected return: a ladder resting in its trailing take
+// profit when the verdict arrives is pending all the same, a new fill on it is
+// judged all the same (slowDeclineRow, slowPatternRows), and it is latched all
+// the same (indecisionRow). No row changes the sale: the indecision direction
+// sells nothing of its own, it moves the take profit (TakeProfitPercentage) and
+// nothing else. The slow pattern reads after the other two: when the quiet
+// slow decline wrote its own row the slot is its, and the pattern lands on a
+// later tick; a pattern going pending latches a ladder the indecision
+// direction watches that is not latched yet.
 //
 // The ladder's own closes are never replaced: a proposal in the protected set
 // (protectedPosition) passes through, and so does every tick of a trade whose
@@ -87,7 +97,7 @@ func Apply(trade aggragates.Trades, position string, price float64, ai aggragate
 	}
 
 	st := rebuildState(trade)
-	if !st.slowDeclineWatched && !st.capitalProtectionWatched && !st.indecisionWatched {
+	if !st.slowDeclineWatched && !st.capitalProtectionWatched && !st.indecisionWatched && !st.slowPatternWatched {
 		return result
 	}
 	if st.depthPriorityHeld {
@@ -97,6 +107,7 @@ func Apply(trade aggragates.Trades, position string, price float64, ai aggragate
 	}
 	st, result.SlowDecline = slowDeclineRow(trade, st, ai.SmartTakeLoss)
 	st, result.Indecision = indecisionRow(trade, st, ai.SmartTakeLoss)
+	st, result = slowPatternRows(trade, st, ai.SmartTakeLoss, result)
 	if protectedPosition(gates.PositionType(position)) || protectedPosition(gates.PositionType(trade.PositionType)) {
 		return result
 	}
@@ -108,6 +119,9 @@ func Apply(trade aggragates.Trades, position string, price float64, ai aggragate
 	// this tick cancelled is no longer pending here.
 	if st.slowDeclinePending && sellBandReached(price, ai.SmartTakeLoss) {
 		return forced(result, reasonSellBand)
+	}
+	if slowPatternSells(trade, st) && sellBandReached(price, ai.SmartTakeLoss) {
+		return forced(result, reasonSlowPatternBand)
 	}
 	if st.capitalProtectionWatched && capitalProtectionReached(price, ai.SmartTakeLoss) {
 		return forced(result, reasonCapitalProtection)

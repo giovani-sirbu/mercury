@@ -4,8 +4,8 @@ import "github.com/giovani-sirbu/mercury/trades/aggragates"
 
 // state is what the trade's own strategy events say about the smart take
 // loss: the entry fills, where the ladder stands with the quiet slow-decline
-// exit, whether capital protection watches it, and where it stands with the
-// indecision direction. It is rebuilt from trade.StrategyEvents and
+// exit, whether capital protection watches it, where it stands with the
+// indecision direction, and where it stands with the slow pattern decline. It is rebuilt from trade.StrategyEvents and
 // trade.History on every tick, the way cooldown.firstFillState rebuilds the
 // first-fill gate: the events are the only state. Nothing is kept in Redis, in
 // a column or on trade.PositionPrice, and the log rows beside the events are
@@ -31,6 +31,18 @@ type state struct {
 	// until the trade closes.
 	indecisionWatched bool
 	indecision        bool
+	// slowPatternWatched: the slow pattern decline watches this ladder
+	// (slowPatternWatched). slowPatternPending: the last event of the slow
+	// pattern gate of a watched ladder is a pending event, so Apply sells it at
+	// the sell band; a cancelled event after it takes that away until the next
+	// pending event. slowPatternPendingFrom is that event's Price: the fill the
+	// ladder is pending from, the one slowPatternFillUnjudged compares its
+	// newest fill with. Zero while not pending. The pattern is its own state,
+	// apart from the quiet slow decline's: either can be pending without the
+	// other, and a depth priority hold ends neither (there is no reset kind).
+	slowPatternWatched     bool
+	slowPatternPending     bool
+	slowPatternPendingFrom float64
 	// depthPriorityHeld: a depth priority holds this ladder
 	// (depthPriorityHeld), which pauses the quiet slow-decline exit and capital
 	// protection on it until its next fill; the indecision direction goes on.
@@ -51,7 +63,10 @@ func (st state) lastFill() entryFill {
 // names (the pending kind), and a cancelled or reset event makes it not
 // pending — the last of them wins, the sold kind changes nothing, and none
 // touches a ladder the exit does not watch, so while QuietSlowDeclineExit is
-// off every such event is ignored. The depth priority hold is read apart, on
+// off every such event is ignored. The slow pattern gate folds apart
+// (foldSlowPattern): pending makes a ladder the slow pattern decline watches
+// pending, cancelled makes it not pending, and the sold kind changes nothing —
+// while SlowPatternDeclineExit is off every such event is ignored. The depth priority hold is read apart, on
 // every trade, off the cooldown events' stamps and the newest fill
 // (depthPriorityHeld). A latched event of the indecision gate latches a
 // ladder the indecision direction watches, and nothing takes the latch away;
@@ -68,8 +83,8 @@ func (st state) lastFill() entryFill {
 //
 // Every watch is read off the fills already folded here: entryFills counts
 // them the way ladder.CountFilledEntries does, row for row, so they agree
-// with slowDeclineWatched, capitalProtectionWatched and indecisionWatched
-// exactly.
+// with slowDeclineWatched, capitalProtectionWatched, indecisionWatched and
+// slowPatternWatched exactly.
 func rebuildState(trade aggragates.Trades) state {
 	fills := entryFills(trade)
 	st := state{
@@ -77,9 +92,10 @@ func rebuildState(trade aggragates.Trades) state {
 		slowDeclineWatched:       quietSlowDeclineExit && !trade.Inverse && len(fills) >= SlowDeclineArmDepth,
 		capitalProtectionWatched: capitalProtectionEligible(trade) && lastDepthFilled(trade, len(fills)),
 		indecisionWatched:        indecisionEligible(trade) && len(fills) >= IndecisionArmDepth,
+		slowPatternWatched:       slowPatternEligible(trade) && len(fills) >= SlowPatternArmDepth,
 	}
 	st.depthPriorityHeld = depthPriorityHeld(trade, st.lastFill())
-	if !st.slowDeclineWatched && !st.indecisionWatched {
+	if !st.slowDeclineWatched && !st.indecisionWatched && !st.slowPatternWatched {
 		return st
 	}
 	for _, event := range trade.StrategyEvents {
@@ -91,6 +107,8 @@ func rebuildState(trade aggragates.Trades) state {
 			st = foldSlowDecline(st, event)
 		case st.indecisionWatched && event.Gate == GateIndecision:
 			st = foldIndecision(st, event)
+		case st.slowPatternWatched && event.Gate == GateSlowPattern:
+			st = foldSlowPattern(st, event)
 		}
 	}
 	return st
@@ -112,6 +130,26 @@ func foldSlowDecline(st state, event aggragates.TradesStrategyEvents) state {
 	case EventCancelled, EventReset:
 		st.slowDeclinePending = false
 		st.slowDeclinePendingFrom = 0
+	}
+	return st
+}
+
+// foldSlowPattern is the state after one event of the slow pattern gate:
+// pending makes the ladder pending from the price it carries, cancelled makes
+// it not pending, and every other kind — the sale included, and a reset kind
+// this gate never writes — changes nothing.
+func foldSlowPattern(st state, event aggragates.TradesStrategyEvents) state {
+	data, ok := readEvent(event)
+	if !ok {
+		return st
+	}
+	switch data.Event {
+	case EventPending:
+		st.slowPatternPending = true
+		st.slowPatternPendingFrom = data.Price
+	case EventCancelled:
+		st.slowPatternPending = false
+		st.slowPatternPendingFrom = 0
 	}
 	return st
 }

@@ -17,23 +17,31 @@ const (
 	// GateEntryHold is the first-fill hold while the verdict stands. Its only
 	// kind is gates.EventHeld.
 	GateEntryHold = "entryHold"
+	// GateSlowPattern is the slow pattern decline: a ladder going pending on
+	// the shape of its decline between its fills, a new fill confirming or
+	// cancelling it, and the sale at the sell band. It has no reset kind — a
+	// depth priority hold neither resets nor cancels it — and its own fold
+	// (foldSlowPattern), apart from the quiet slow decline's.
+	GateSlowPattern = "slowPattern"
 )
 
 // The kinds of the events of the gates above, the "event" key of their
 // document (EventData.Event).
 const (
 	// EventPending: a ladder goes pending from a fill, or a new fill confirms
-	// a pending one. Price is that fill.
+	// a pending one, on the slow decline's gate and the slow pattern's. Price
+	// is that fill.
 	EventPending = "pending"
 	// EventCancelled: the judgement of a pending ladder's new fill broke the
-	// exit. Price is that fill.
+	// exit, on the slow decline's gate and the slow pattern's. Price is that
+	// fill.
 	EventCancelled = "cancelled"
 	// EventReset: a depth priority hold took a pending ladder's exit away.
 	// Price is the newest fill.
 	EventReset = "reset"
-	// EventSold: the exit forced the sale, on the slow decline's gate or on
-	// capital protection's. Price is the level the sellLoss chain places its
-	// limit at.
+	// EventSold: the exit forced the sale, on the slow decline's gate, the slow
+	// pattern's or capital protection's. Price is the level the sellLoss chain
+	// places its limit at.
 	EventSold = "sold"
 	// EventLatched: the indecision direction latched a ladder. Price is the
 	// newest fill.
@@ -45,8 +53,9 @@ const (
 //
 // Price is the row's own price, never trade.PositionPrice: the newest fill for
 // the events that read a fill, the level of the sale for EventSold, and none
-// for a hold. The pending event's price is what slowDeclineFillUnjudged
-// compares the newest fill with, so it must stay the fill's exact price.
+// for a hold. The pending event's price is what slowDeclineFillUnjudged and
+// slowPatternFillUnjudged compare the newest fill with, so it must stay the
+// fill's exact price.
 // Reasons is the reasons sophos served for the reading, in the order the
 // message names them; nothing reads them back.
 type EventData struct {

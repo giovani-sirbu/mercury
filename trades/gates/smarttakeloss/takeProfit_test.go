@@ -385,3 +385,43 @@ func TestTheHeldTakeProfitSkipsThePendingReadingAndKeepsTheLatchedOne(t *testing
 		t.Errorf("switched off, the held ladder reads as the unheld one %v, got %v", moveAgainst(price, newest), got)
 	}
 }
+
+// A ladder the slow pattern decline made pending reads its newest fill from
+// break even up exactly as a quiet-pending one does, and nothing else does it
+// for the pattern: a cancelled ladder, a switched-off rule and a depth priority
+// hold leave the input as it was, and the sale changes nothing. The take
+// profit's scan finds the pattern's events too, while the rule is on.
+func TestTakeProfitPercentageReadsTheNewestFillOnAPatternPendingTrade(t *testing.T) {
+	withQuietSlowDeclineExit(t, false)
+	withIndecisionDirection(t, false)
+	pending := withRows(watchedTrade(), SlowPatternPendingRow("buy", slowDeclineLastFill, slowPatternReasons))
+	price := betweenTheTakeProfits(t, pending)
+	handed := moveAgainst(price, ladder.AverageEntryPrice(pending))
+	fromNewestFill := moveAgainst(price, slowDeclineLastFill)
+	if !rebuildState(pending).slowPatternPending || !(handed < fromNewestFill) || !carriesTakeProfitEvent(pending) {
+		t.Fatalf("fixture drifted: pattern pending, the newest fill's move %v over the input %v, and found by the scan", fromNewestFill, handed)
+	}
+	if got := TakeProfitPercentage(pending, price, handed); got != fromNewestFill {
+		t.Fatalf("a pattern-pending trade must read the move against its newest fill %v, got %v", fromNewestFill, got)
+	}
+	sold := withRows(pending, ExitRow(pending, reasonSlowPatternBand, slowDeclineBand))
+	if got := TakeProfitPercentage(sold, price, handed); got != fromNewestFill {
+		t.Errorf("the sale changes nothing, got %v", got)
+	}
+	for name, trade := range map[string]aggragates.Trades{
+		"cancelled": withRows(pending, SlowPatternCancelledRow("buy", slowDeclineLastFill, nil)),
+		"held":      heldBy(pending, testutil.At("18:05:00")),
+	} {
+		if got := TakeProfitPercentage(trade, price, handed); got != handed {
+			t.Errorf("%s: the pending reading is gone, the input comes back, got %v", name, got)
+		}
+	}
+	under := math.Nextafter(ladder.AverageEntryPrice(pending), 0)
+	if input := moveAgainst(under, ladder.AverageEntryPrice(pending)); TakeProfitPercentage(pending, under, input) != input {
+		t.Error("under break even the input comes back")
+	}
+	withSlowPatternDeclineExit(t, false)
+	if got := TakeProfitPercentage(pending, price, handed); got != handed || carriesTakeProfitEvent(pending) {
+		t.Errorf("switched off, the input comes back and the scan finds nothing, got %v", got)
+	}
+}

@@ -54,24 +54,38 @@ type SophosFib struct {
 // no fill window, and while the recent-fill rule is on no ladder goes
 // pending; one without slowDeclineIndecision alone decodes to no indecision,
 // and the indecision direction latches no ladder.
+//
+// The slowPattern* keys are the closed 1h series of the slow pattern decline:
+// slowPatternOpens the open time in ms of each bar and slowPatternCloses its
+// close, parallel and oldest first, the last bars of the window sophos read
+// (slowpattern.SlowPatternBars). Sophos never learns a ladder's fills, so it
+// serves the series for every ladder and mercury cuts the window between two
+// fills out of it. A sophos without them, or one that could not read the
+// window, decodes to no series, and the slow pattern decline reads nothing —
+// it is inert; arrays of different lengths are read as no series too
+// (slowpattern.Series).
 type SophosSmartTakeLoss struct {
-	SlowDeclineExit             bool     `json:"slowDeclineExit"`
-	SlowDeclineLegQuiet         bool     `json:"slowDeclineLegQuiet"`
-	SlowDeclineSmoothFrom       int64    `json:"slowDeclineSmoothFrom"`
-	SlowDeclineFillBefore       int64    `json:"slowDeclineFillBefore"`
-	SlowDeclineSellBand         float64  `json:"slowDeclineSellBand"`
-	SlowDeclineExitReasons      []string `json:"slowDeclineExitReasons"`
-	SlowDeclineBreakReasons     []string `json:"slowDeclineBreakReasons"`
-	SlowDeclineIndecision       bool     `json:"slowDeclineIndecision"`
-	SlowDeclineRecentAt         int64    `json:"slowDeclineRecentAt"`
-	SlowDeclineRecentFrom       int64    `json:"slowDeclineRecentFrom"`
-	SlowDeclineRecentReasons    []string `json:"slowDeclineRecentReasons"`
-	SlowDeclineFillFrom         int64    `json:"slowDeclineFillFrom"`
-	CapitalProtectionUpperBB    float64  `json:"capitalProtectionUpperBB"`
-	CapitalProtectionSmcBearish bool     `json:"capitalProtectionSmcBearish"`
+	SlowDeclineExit             bool      `json:"slowDeclineExit"`
+	SlowDeclineLegQuiet         bool      `json:"slowDeclineLegQuiet"`
+	SlowDeclineSmoothFrom       int64     `json:"slowDeclineSmoothFrom"`
+	SlowDeclineFillBefore       int64     `json:"slowDeclineFillBefore"`
+	SlowDeclineSellBand         float64   `json:"slowDeclineSellBand"`
+	SlowDeclineExitReasons      []string  `json:"slowDeclineExitReasons"`
+	SlowDeclineBreakReasons     []string  `json:"slowDeclineBreakReasons"`
+	SlowDeclineIndecision       bool      `json:"slowDeclineIndecision"`
+	SlowDeclineRecentAt         int64     `json:"slowDeclineRecentAt"`
+	SlowDeclineRecentFrom       int64     `json:"slowDeclineRecentFrom"`
+	SlowDeclineRecentReasons    []string  `json:"slowDeclineRecentReasons"`
+	SlowDeclineFillFrom         int64     `json:"slowDeclineFillFrom"`
+	CapitalProtectionUpperBB    float64   `json:"capitalProtectionUpperBB"`
+	CapitalProtectionSmcBearish bool      `json:"capitalProtectionSmcBearish"`
+	SlowPatternOpens            []int64   `json:"slowPatternOpens"`
+	SlowPatternCloses           []float64 `json:"slowPatternCloses"`
 }
 
-// Indicators folds the flat wire keys into the block the gate reads.
+// Indicators folds the flat wire keys into the block the gate reads. The two
+// slow-pattern series map as they decode: a nil one stays nil, so a sophos
+// without them hands the gate no series at all.
 func (s SophosSmartTakeLoss) Indicators() SmartTakeLossIndicators {
 	return SmartTakeLossIndicators{
 		SlowDeclineExit:             s.SlowDeclineExit,
@@ -88,6 +102,8 @@ func (s SophosSmartTakeLoss) Indicators() SmartTakeLossIndicators {
 		SlowDeclineFillFrom:         s.SlowDeclineFillFrom,
 		CapitalProtectionUpperBB:    s.CapitalProtectionUpperBB,
 		CapitalProtectionSmcBearish: s.CapitalProtectionSmcBearish,
+		SlowPatternOpens:            s.SlowPatternOpens,
+		SlowPatternCloses:           s.SlowPatternCloses,
 	}
 }
 

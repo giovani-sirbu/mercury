@@ -8,11 +8,13 @@ import (
 )
 
 // The reasons a forced exit can name in Result.Reason: the quiet slow
-// decline's sale at the sell band sophos serves, and capital protection's at
-// the upper Bollinger band sophos serves beside its SMC trend reading. Both
-// rules watch long ladders only and have no inverse mirror.
+// decline's sale at the sell band sophos serves, the slow pattern decline's at
+// that same band, and capital protection's at the upper Bollinger band sophos
+// serves beside its SMC trend reading. The rules watch long ladders only and
+// have no inverse mirror.
 const (
 	reasonSellBand          = "slow-decline bollinger band"
+	reasonSlowPatternBand   = "slow-pattern bollinger band"
 	reasonCapitalProtection = "upper bollinger band (capital protection)"
 )
 

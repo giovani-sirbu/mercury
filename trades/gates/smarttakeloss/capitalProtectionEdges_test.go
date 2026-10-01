@@ -133,13 +133,15 @@ func capitalProtectionHolds(trade aggragates.Trades, price float64, block aggrag
 // the settings row the next fill would use, the base row past the table,
 // floored — against ladder.CountFilledEntries, which counts a legacy row
 // without an order id as a depth of its own and an accounting row as none.
-// capitalProtectionWatched, rebuildState's watch, Armed with the slow decline
-// and the indecision direction switched off and Apply's sale at the band all
-// read it so.
+// capitalProtectionWatched, rebuildState's watch, Armed with the slow decline,
+// the indecision direction and the slow pattern decline switched off — the
+// pattern watches every long spot ladder from SlowPatternArmDepth fills — and
+// Apply's sale at the band all read it so.
 func TestCapitalProtectionWatchIsTheLaddersOwnLastDepth(t *testing.T) {
 	withCapitalProtectionExit(t, true)
 	withQuietSlowDeclineExit(t, false)
 	withIndecisionDirection(t, false)
+	withSlowPatternDeclineExit(t, false)
 	ladderOf := func(depths int) aggragates.Trades {
 		return testutil.LadderTrade(false, fills(depths, "21:30:00")...)
 	}

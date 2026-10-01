@@ -222,7 +222,7 @@ func TestSwitchedOffTheDepthPriorityRowsAreIgnored(t *testing.T) {
 // is contained in either; no framed smart take loss row names the depth
 // priority marker, and the gate's framed row names no smart take loss marker.
 func TestNoRowIsReadAsAnother(t *testing.T) {
-	texts := []string{SlowDeclineMarker, SlowDeclineCancelMarker, SlowDeclineResetMarker, IndecisionMarker, SlowDeclineEntryHoldReason, cooldown.DepthPriorityHoldMarker}
+	texts := []string{SlowDeclineMarker, SlowDeclineCancelMarker, SlowDeclineResetMarker, IndecisionMarker, SlowPatternMarker, SlowPatternCancelMarker, SlowDeclineEntryHoldReason, cooldown.DepthPriorityHoldMarker}
 	for i, one := range texts {
 		for j, other := range texts {
 			if i != j && strings.Contains(one, other) {
@@ -230,15 +230,50 @@ func TestNoRowIsReadAsAnother(t *testing.T) {
 			}
 		}
 	}
-	for _, framed := range []string{SlowDeclineMessage("stopLoss", slowDeclineReasons), SlowDeclineCancelMessage("stopLoss", slowDeclineBreakReasons), SlowDeclineResetMessage("stopLoss"), IndecisionMessage("stopLoss", indecisionReasons)} {
+	latchedByThePattern := IndecisionMessage("stopLoss", append([]string{slowPatternLatchReason}, slowPatternReasons...))
+	for _, framed := range []string{SlowDeclineMessage("stopLoss", slowDeclineReasons), SlowDeclineCancelMessage("stopLoss", slowDeclineBreakReasons), SlowDeclineResetMessage("stopLoss"), IndecisionMessage("stopLoss", indecisionReasons),
+		SlowPatternMessage("stopLoss", slowPatternReasons), SlowPatternCancelMessage("stopLoss", slowPatternReasons), latchedByThePattern} {
 		if strings.Contains(framed, cooldown.DepthPriorityHoldMarker) {
 			t.Errorf("%q names the depth priority marker", framed)
 		}
 	}
+	for _, marker := range []string{SlowPatternMarker, SlowPatternCancelMarker} {
+		if strings.Contains(latchedByThePattern, marker) {
+			t.Errorf("the row that latches on the slow pattern names %q and would read as the pattern's own", marker)
+		}
+	}
 	gate := heldBy(watchedTrade(), testutil.At("18:05:00")).Logs[0].Message
-	for _, marker := range texts[:5] {
+	for _, marker := range texts[:len(texts)-1] {
 		if strings.Contains(gate, marker) {
 			t.Errorf("the gate's row %q names %q", gate, marker)
 		}
 	}
+}
+
+// A depth priority hold pauses the slow pattern decline as it does the quiet
+// rule, and never resets it: a pending pattern stays pending through the hold
+// with no row and no sale at the band — the unheld control sells — a ladder not
+// yet pending is not read, and the ladder's next fill, which ends the hold, is
+// judged on the series that has closed its bar.
+func TestAHeldLadderIsNotReadBySlowPatternAndItsPendingSurvives(t *testing.T) {
+	pending := stairPending(t)
+	held := heldBy(pending, stairOpen(25))
+	if st := rebuildState(held); !st.slowPatternPending || !st.indecision || !st.depthPriorityHeld {
+		t.Fatalf("fixture drifted: pending, latched and held, got %+v", st)
+	}
+	block := withBlock(stairBlock(stairTurns, 24))
+	assertForced(t, Apply(pending, "", slowDeclineBand+1, block), reasonSlowPatternBand)
+	for _, price := range []float64{slowDeclineBand - 1, slowDeclineBand + 1} {
+		assertUntouched(t, Apply(held, "", price, block), "")
+	}
+	assertUntouched(t, Apply(heldBy(stairLadder(0, 9, 15, 24), stairOpen(25)), "", slowDeclineBand-1, block), "")
+	if st := rebuildState(held); !st.slowPatternPending || st.slowPatternPendingFrom != stairPrices[3] {
+		t.Fatalf("no row resets the pattern, it is pending from where it was, got %+v", st)
+	}
+
+	refilled := withFill(held, stairPrices[4], stairOpen(30).Add(time.Minute))
+	if st := rebuildState(refilled); st.depthPriorityHeld || !st.slowPatternPending {
+		t.Fatalf("the next fill ends the hold and the pattern is still pending, got %+v", st)
+	}
+	assertRow(t, Apply(refilled, "", slowDeclineBand-1, withBlock(stairBlock(stairTurns, 30))).SlowDecline, SlowPatternMessage("buy", patternReasonsAt30), stairPrices[4])
 }

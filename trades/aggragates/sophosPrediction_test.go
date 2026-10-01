@@ -349,3 +349,40 @@ func TestSophosPredictionCarriesNoDynamicParams(t *testing.T) {
 		t.Fatalf("the pattern leg must carry no reads, got %+v", got)
 	}
 }
+
+// The slow pattern decline's two keys decode as the parallel arrays sophos
+// serves — the open time in ms and the close of each closed 1h bar, oldest
+// first — and map onto the block untouched.
+func TestSophosPredictionMapsTheSlowPatternSeries(t *testing.T) {
+	raw := `{"smartTakeLoss":{"slowPatternOpens":[1633680000000,1633683600000,1633687200000],"slowPatternCloses":[168.2,167.9,167.4]}}`
+	var prediction SophosPrediction
+	if err := json.Unmarshal([]byte(raw), &prediction); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	want := SmartTakeLossIndicators{
+		SlowPatternOpens:  []int64{1633680000000, 1633683600000, 1633687200000},
+		SlowPatternCloses: []float64{168.2, 167.9, 167.4},
+	}
+	if got := prediction.Indicators().SmartTakeLoss; !reflect.DeepEqual(got, want) {
+		t.Fatalf("the series must map as it decodes, got %+v, want %+v", got, want)
+	}
+}
+
+// A sophos that serves the keys null — the window was not read — and one that
+// does not serve them at all both decode to no series: the block stays nil,
+// not empty, so the zero block comparison of every older reader still holds.
+func TestSophosPredictionWithoutTheSlowPatternSeriesIsInert(t *testing.T) {
+	for name, raw := range map[string]string{
+		"keys null":   `{"smartTakeLoss":{"slowPatternOpens":null,"slowPatternCloses":null}}`,
+		"keys absent": `{"smartTakeLoss":{"slowDeclineSellBand":186.4}}`,
+	} {
+		var prediction SophosPrediction
+		if err := json.Unmarshal([]byte(raw), &prediction); err != nil {
+			t.Fatalf("%s: unmarshal: %v", name, err)
+		}
+		block := prediction.Indicators().SmartTakeLoss
+		if block.SlowPatternOpens != nil || block.SlowPatternCloses != nil {
+			t.Fatalf("%s must decode to no series, got %+v", name, block)
+		}
+	}
+}

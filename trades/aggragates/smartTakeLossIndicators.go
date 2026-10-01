@@ -59,18 +59,27 @@ type SmartTakeLossIndicators struct {
 	SlowDeclineSellBand     float64
 	SlowDeclineExitReasons  []string
 	SlowDeclineBreakReasons []string
-	// SlowDeclineIndecision is sophos' indecision, read one of two ways. The
+	// SlowDeclineIndecision is sophos' indecision, read four ways. The
 	// vote's, served only while the leg is not on and quiet: the leg on and
 	// still down sophos' SlowDeclineMinLegFallPct from its high close, the vote
 	// failing even with a ladder's own smoothness counted, and at least sophos'
 	// SlowDeclineIndecisionVoteShare of the enabled readings holding with it —
 	// one short of the need at the shipped shares, the count the break reasons
-	// name — with the SMC trend dashboard bearish on every timeframe sophos'
-	// SmcTrendTimeframes names while that condition is on. The dashboard's,
-	// while sophos' IndecisionSmcTrend is on: the whole table bearish, its
-	// Trend Direction row down and at least sophos' IndecisionSmcTrendShare of
-	// every timeframe's reads bearish, on any window sophos read whatever the
-	// leg, the vote and the SMC trend condition say, SlowDeclineLegQuiet and
+	// name — while the SMC trend condition is on, with the dashboard bearish
+	// on every timeframe sophos' SmcTrendTimeframes names, or failing that only
+	// within sophos' SmcTrendIndecisionShare of the reads bearish, which keeps
+	// the indecision. The near miss's, under the same condition: a window that
+	// is not a leg on and quiet, yet would be with every sophos threshold
+	// relaxed by its SlowDeclineNearMissShare. The SMC trend tolerance's, in
+	// the verdict's place: a leg that was on and quiet whose SMC trend
+	// condition failed while every timeframe sophos'
+	// SmcTrendTimeframes names is still over sophos' SmcTrendIndecisionShare
+	// of its reads bearish, served with SlowDeclineLegQuiet and
+	// SlowDeclineExit false. The whole table's, while sophos'
+	// IndecisionSmcTrend is on: the whole table bearish, its Trend Direction
+	// row down and at least sophos' IndecisionSmcTrendShare of every
+	// timeframe's reads bearish, on any window sophos read whatever the leg,
+	// the vote and the SMC trend condition say, SlowDeclineLegQuiet and
 	// SlowDeclineExit included. gates/smarttakeloss latches a long spot parent
 	// ladder the indecision direction watches (from IndecisionArmDepth filled
 	// entries) on the first tick it is served, from the flag alone: one row
@@ -123,4 +132,17 @@ type SmartTakeLossIndicators struct {
 	// depth on the first tick at or over the band while it is true.
 	CapitalProtectionUpperBB    float64
 	CapitalProtectionSmcBearish bool
+	// SlowPatternOpens and SlowPatternCloses are the closed 1h bars of the
+	// window sophos read, as two parallel arrays, oldest first: the open time
+	// in ms of each bar and its close. They are the slow pattern decline's
+	// input, ladder-agnostic on purpose — sophos never learns a ladder's fills
+	// — and gates/slowpattern cuts the window between two of a ladder's fills
+	// out of them. A fill's bar is found by its open time in SlowPatternOpens,
+	// never by arithmetic on the index. Nil — a sophos without the keys, a
+	// window it could not read, or arrays of different lengths — means no
+	// series, and gates/smarttakeloss reads nothing from it: it never triggers
+	// the exit and never judges a fill, as the leg-less zero reading does for
+	// the quiet slow decline.
+	SlowPatternOpens  []int64
+	SlowPatternCloses []float64
 }
