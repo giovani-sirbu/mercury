@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +26,16 @@ func depthEvent(trade aggragates.Trades, now time.Time) events.Events {
 	}
 }
 
+// depthRow is the log row the gate leaves for a depth, stamped when it first
+// held. The step it prints is wrong on purpose: the rule derives its own.
+func depthRow(depth int, at time.Time) aggragates.TradesLogs {
+	return aggragates.TradesLogs{
+		Type:      aggragates.LOG_INFO,
+		Message:   fmt.Sprintf("Hold stopLoss: cooldown: depths too close (depth %d, step 99), next add parked for 1h0m0s", depth),
+		CreatedAt: at,
+	}
+}
+
 // The second depth is gated from the first fill: that is the depth a fold
 // seeded at the first fill let through, minutes after the entry.
 func TestDepthSpacingHoldsTheSecondDepthFromTheFirstFill(t *testing.T) {
@@ -42,20 +53,25 @@ func TestDepthSpacingHoldsTheSecondDepthFromTheFirstFill(t *testing.T) {
 	}
 }
 
-// The escalated hold (a depth that filled the instant the first hold lifted)
-// still parks the next depth past the point an unescalated one would have
-// freed it, and it does lift eventually.
+// The escalated hold (a depth that filled the instant a hold lifted, after the
+// gate had activated at the depths before it) still parks the next depth past the point an unescalated one would
+// have freed it, and it does lift eventually.
 //
 // The exact escalated duration is NOT asserted here: it is base * factor, and
 // the factor is unexported — the schedule itself is pinned in the cooldown
 // package (TestDepthSpacingClampsTheHoldAtTheCeiling). What this test owns is
 // the wiring: that ShouldHold honours the escalation at all. Still parked one
-// base hold past the expiry is exactly that evidence, since step 1 would have
-// freed it there under any factor above one.
+// base hold past the expiry is exactly that evidence, since the first level
+// would have freed it there under any factor above one.
 func TestDepthSpacingEscalatesWhenADepthFillsTheInstantTheHoldLifts(t *testing.T) {
 	first := testutil.At("09:00:00")
-	expiry := first.Add(cooldown.DepthSpacingBaseHold)
-	trade := testutil.DepthTrade(first, expiry)
+	inside := first.Add(time.Minute) // starts the cascade
+	expiry := inside.Add(cooldown.DepthSpacingBaseHold)
+	trade := testutil.DepthTrade(first, inside, expiry)
+	trade.Logs = []aggragates.TradesLogs{
+		depthRow(1, first.Add(time.Minute)),
+		depthRow(2, inside.Add(time.Minute)),
+	}
 
 	if _, err := ShouldHold(depthEvent(trade, expiry.Add(cooldown.DepthSpacingBaseHold))); err == nil {
 		t.Fatal("the escalated hold must park the next depth past one base hold")
@@ -173,7 +189,7 @@ func TestDepthSpacingWritesOneStableCooldownRow(t *testing.T) {
 	// schedule the cooldown package already tests — and this test is about
 	// the row, not the calibration. That it stays byte-identical tick to tick
 	// is asserted below, which is the property SaveHoldLog depends on.
-	want := "Hold stopLoss: cooldown: depths too close (depth 2, step 2), next add parked for "
+	want := "Hold stopLoss: cooldown: depths too close (depth 2, step 1), next add parked for "
 	if !strings.HasPrefix(row.Message, want) {
 		t.Fatalf("row = %q, want the prefix %q", row.Message, want)
 	}
@@ -209,17 +225,15 @@ func TestDepthSpacingReadsTheInverseEntrySide(t *testing.T) {
 	}
 }
 
-// The depth in the row is the trade's depth, not the escalation counter. They
-// coincide only on a ladder where every entry after the first was fast — which
-// is what every other test here builds, and why the bug survived. A ladder with
-// one real pause separates them: five filled entries, a lower escalation step.
+// The depth in the row is the trade's depth, not the step. They coincide only
+// on a ladder the gate held at every entry — which is what every other test
+// here builds, and why the bug survived. A ladder with one real pause separates
+// them: five filled entries, two activations.
 //
 // It matters because the row is the only operator-visible output of this gate,
 // and the depth an operator reads it against is ladder.CountFilledEntries for
 // the same trade on the same tick.
-func TestDepthSpacingRowReportsTheLadderDepthNotTheEscalationStep(t *testing.T) {
-	// One real pause — a full window past the first hold's expiry, which is
-	// what resets the escalation — then three fast depths behind it.
+func TestDepthSpacingRowReportsTheLadderDepthNotTheStep(t *testing.T) {
 	start := testutil.At("09:00:00")
 	pause := start.Add(cooldown.DepthSpacingBaseHold + cooldown.DepthSpacingWindow)
 	ladder := []time.Time{
@@ -227,16 +241,18 @@ func TestDepthSpacingRowReportsTheLadderDepthNotTheEscalationStep(t *testing.T) 
 		pause.Add(5 * time.Minute), pause.Add(10 * time.Minute), pause.Add(15 * time.Minute),
 	}
 	trade := testutil.DepthTrade(ladder...)
+	// The gate held the fourth entry; the fifth is the tick under test.
+	trade.Logs = []aggragates.TradesLogs{depthRow(4, pause.Add(11*time.Minute))}
 
 	held, err := ShouldHold(depthEvent(trade, pause.Add(16*time.Minute)))
 	if err == nil {
 		t.Fatal("expected the sixth entry to be parked")
 	}
-	row := held.Trade.Logs[0].Message
+	row := held.Trade.Logs[len(held.Trade.Logs)-1].Message
 	if !strings.Contains(row, "(depth 5,") {
 		t.Errorf("row = %q, want the ladder depth 5", row)
 	}
-	if !strings.Contains(row, "step 4)") {
-		t.Errorf("row = %q, want the escalation step 4 beside it — the pause reset it", row)
+	if !strings.Contains(row, "step 2)") {
+		t.Errorf("row = %q, want step 2 beside it — two activations on a five-depth ladder", row)
 	}
 }

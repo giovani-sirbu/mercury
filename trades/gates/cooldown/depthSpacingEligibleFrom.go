@@ -1,50 +1,67 @@
 package cooldown
 
-import "time"
+import (
+	"sort"
+	"time"
+
+	"github.com/giovani-sirbu/mercury/trades/aggragates"
+)
 
 // depthSpacingEligibleFrom folds a trade's ladder into the instant the next
 // depth may arm.
 //
-// EVERY depth carries a hold, starting from the first fill — not only the ones
-// that follow a fast pair. The earlier shape seeded the fold at fills[0], so
-// the second depth could never be held: the gate had nothing to measure until
-// two entries existed, and the first fast pair was spent proving the ladder
-// was cascading rather than being stopped. That unheld second depth is the
-// fill the rest of a cascade is built on. Seeding at fills[0]+base makes the
-// rule a minimum spacing: no two entries closer than the current hold.
+// EVERY depth carries a hold from its own fill, whether or not the ladder is
+// cascading: the rule is a minimum spacing and no two entries land closer than
+// the current hold. What escalates is `step`, and it counts ACTIVATIONS of this
+// gate, not fills: a depth the gate never held does not deepen the cascade, and
+// a depth it held does, however long after the fill the hold was noticed.
 //
-// This costs nothing on a slow ladder — depths naturally spaced wider than the
-// hold are already past the expiry — and bites exactly where it was meant to.
+// Step is 1 at the first activation and at the first one after a reset. The
+// next activation adds one when it lands less than DepthSpacingWindow past the
+// previous activation's hold expiry, measured from the fill of the depth that
+// activated, not from the row. Measured from the previous fill the gap would be
+// >= the hold by construction and the rule could never escalate. An activation
+// DepthSpacingWindow or more past that expiry is a genuine pause: the count
+// goes back to 1. It is never zero and never capped; only the hold is, by
+// depthSpacingHoldFor.
 //
-// The escalation still measures against the PREVIOUS hold's expiry, not the
-// previous fill: a depth that lands the instant a hold lifts is still part of
-// the same drop, so the next hold doubles. Measured from the previous fill the
-// gap would be >= the hold by construction and the rule could never escalate.
+// The tick being evaluated is itself the activation of the newest depth: its
+// time is the first row logged for that depth, else `now`. Folding it in means
+// the first held tick already reports the step its row will keep, so the
+// message stays byte-stable while the hold stands.
 //
-// A genuine pause RESETS the escalation. `step` means "how deep into one
-// cascade are we", and a ladder that waited out a full window is no longer in
-// that cascade; carrying the count forever would hand an escalated hold to a
-// trade whose only fast pair happened long before.
-func depthSpacingEligibleFrom(fills []depthFill) depthSpacingState {
+// Unreadable history (no fills) leaves the state zero and the gate open.
+func depthSpacingEligibleFrom(logs []aggragates.TradesLogs, fills []depthFill, now time.Time) depthSpacingState {
 	if len(fills) == 0 {
 		return depthSpacingState{}
 	}
 
-	state := depthSpacingState{
-		step:         1,
-		hold:         depthSpacingHoldFor(1),
-		eligibleFrom: fills[0].At.Add(depthSpacingHoldFor(1)),
+	current := len(fills)
+	activations := depthSpacingActivations(logs)
+	if _, logged := activations[current]; !logged {
+		activations[current] = now.UTC()
 	}
-	for _, fill := range fills[1:] {
-		if fill.At.Sub(state.eligibleFrom) < DepthSpacingWindow {
-			// Landed at or right after the expiry: the drop is still running.
-			state.step++
-		} else {
+	depths := make([]int, 0, len(activations))
+	for depth := range activations {
+		if depth <= current {
+			depths = append(depths, depth)
+		}
+	}
+	sort.Ints(depths)
+
+	var state depthSpacingState
+	var expiry time.Time
+	for _, depth := range depths {
+		at := activations[depth]
+		if state.step == 0 || at.Sub(expiry) >= DepthSpacingWindow {
 			state.step = 1
+		} else {
+			state.step++
 		}
 		state.hold = depthSpacingHoldFor(state.step)
-		state.eligibleFrom = fill.At.Add(state.hold)
+		expiry = fills[depth-1].At.Add(state.hold)
 	}
+	state.eligibleFrom = expiry
 	return state
 }
 

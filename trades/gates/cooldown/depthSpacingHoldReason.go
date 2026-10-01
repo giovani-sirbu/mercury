@@ -10,8 +10,8 @@ import (
 
 // Depth spacing is the Cooldown flag's second gate: a gate on the ladder
 // cascading through every depth during one fast drop. It reads nothing but
-// the trade's own fill history — no indicator, no sophos call, no persisted
-// state — so it costs a fold over rows already in memory.
+// the trade's own fill history and log rows — no indicator, no sophos call, no
+// state of its own — so it costs a fold over rows already in memory.
 //
 // It is therefore only as good as the clocks the calling engine supplies, and
 // it fails OPEN when either is missing. sisyphus backtesting and hermes both
@@ -61,8 +61,8 @@ type depthSpacingState struct {
 	// eligibleFrom is the instant the next depth may arm. Zero means the
 	// history could not be read and the gate stays open.
 	eligibleFrom time.Time
-	// step is k: how many depths in a row arrived before the previous hold
-	// had been expired for a full window.
+	// step is k: how many activations deep into one cascade the ladder is,
+	// never below 1; see depthSpacingEligibleFrom for when it starts and ends.
 	step int
 	// hold is the wait the last fast depth earned, already capped.
 	hold time.Duration
@@ -88,7 +88,7 @@ func DepthSpacingHoldReason(event events.Events, position string) string {
 	}
 
 	fills := depthFills(event.Trade)
-	state := depthSpacingEligibleFrom(fills)
+	state := depthSpacingEligibleFrom(event.Trade.Logs, fills, now)
 	if state.eligibleFrom.IsZero() || !now.UTC().Before(state.eligibleFrom) {
 		return ""
 	}
@@ -105,12 +105,14 @@ func DepthSpacingHoldReason(event events.Events, position string) string {
 	// add is held (a held add is precisely one that has not filled); the
 	// remaining time is not, and is left out.
 	//
-	// The depth is len(fills), NOT step+1. `step` counts only the entries that
-	// arrived fast, so on any ladder containing one real pause it lags the
+	// The depth is len(fills), NOT step: `step` counts activations of this
+	// gate, so on any ladder the gate did not hold at every depth it lags the
 	// trade's actual depth and would under-report how many entries are being
-	// held. len(fills) is ladder.CountFilledEntries by
-	// construction (depthFillTimes mirrors it row for row), the trade's own
-	// depth on the same tick.
+	// held. len(fills) is ladder.CountFilledEntries by construction
+	// (depthFillTimes mirrors it row for row), the trade's own depth on the
+	// same tick. The step printed is never below 1, and the first held tick
+	// already reports the step the row will keep, because the tick is folded
+	// in as the newest activation.
 	// The release price is in the row because it is the other half of the
 	// decision: an operator reading the parked duration alone cannot tell how
 	// far the price would have to move to lift it. It is derived from the last
