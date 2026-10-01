@@ -8,6 +8,7 @@ import (
 
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/gates"
 	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 )
@@ -28,12 +29,23 @@ func depthEvent(trade aggragates.Trades, now time.Time) events.Events {
 
 // depthRow is the log row the gate leaves for a depth, stamped when it first
 // held. The step it prints is wrong on purpose: the rule derives its own.
-func depthRow(depth int, at time.Time) aggragates.TradesLogs {
+func depthRow(trade aggragates.Trades, depth int, at time.Time) aggragates.TradesLogs {
 	return aggragates.TradesLogs{
+		TradeID:   trade.ID,
 		Type:      aggragates.LOG_INFO,
 		Message:   fmt.Sprintf("Hold stopLoss: cooldown: depths too close (depth %d, step 99), next add parked for 1h0m0s", depth),
 		CreatedAt: at,
 	}
+}
+
+// heldDepth is the trade with the pair the gate leaves behind when it holds a
+// depth, stamped at: the row an operator reads and the depth-spacing event the
+// later depths count the activation from. The event carries the same wrong
+// step as the row: the rule derives its own.
+func heldDepth(trade aggragates.Trades, depth int, at time.Time) aggragates.Trades {
+	data := cooldown.DepthSpacingEvent{Event: gates.EventHeld, Depth: depth, Step: 99, Hold: time.Hour}
+
+	return aggragates.AppendStrategyRow(trade, depthRow(trade, depth, at), cooldown.NewDepthSpacingEvent(trade.ID, data, at))
 }
 
 // The second depth is gated from the first fill: that is the depth a fold
@@ -54,8 +66,9 @@ func TestDepthSpacingHoldsTheSecondDepthFromTheFirstFill(t *testing.T) {
 }
 
 // The escalated hold (a depth that filled the instant a hold lifted, after the
-// gate had activated at the depths before it) still parks the next depth past the point an unescalated one would
-// have freed it, and it does lift eventually.
+// gate had activated at the depths before it) still parks the next depth past
+// the point an unescalated one would have freed it, and it does lift
+// eventually.
 //
 // The exact escalated duration is NOT asserted here: it is base * factor, and
 // the factor is unexported — the schedule itself is pinned in the cooldown
@@ -63,21 +76,33 @@ func TestDepthSpacingHoldsTheSecondDepthFromTheFirstFill(t *testing.T) {
 // the wiring: that ShouldHold honours the escalation at all. Still parked one
 // base hold past the expiry is exactly that evidence, since the first level
 // would have freed it there under any factor above one.
+//
+// The activations are the depth-spacing events the trade carries. The rows
+// beside them are text: the same ladder with its rows alone has no activation
+// to count, reads as a first activation at every tick and is freed there.
 func TestDepthSpacingEscalatesWhenADepthFillsTheInstantTheHoldLifts(t *testing.T) {
 	first := testutil.At("09:00:00")
 	inside := first.Add(time.Minute) // starts the cascade
 	expiry := inside.Add(cooldown.DepthSpacingBaseHold)
 	trade := testutil.DepthTrade(first, inside, expiry)
-	trade.Logs = []aggragates.TradesLogs{
-		depthRow(1, first.Add(time.Minute)),
-		depthRow(2, inside.Add(time.Minute)),
-	}
+	trade = heldDepth(trade, 1, first.Add(time.Minute))
+	trade = heldDepth(trade, 2, inside.Add(time.Minute))
+	atBase := expiry.Add(cooldown.DepthSpacingBaseHold)
 
-	if _, err := ShouldHold(depthEvent(trade, expiry.Add(cooldown.DepthSpacingBaseHold))); err == nil {
+	if _, err := ShouldHold(depthEvent(trade, atBase)); err == nil {
 		t.Fatal("the escalated hold must park the next depth past one base hold")
 	}
 	if _, err := ShouldHold(depthEvent(trade, expiry.Add(30*24*time.Hour))); err != nil {
 		t.Fatalf("the escalated hold must lift, got %v", err)
+	}
+
+	rowsOnly := testutil.DepthTrade(first, inside, expiry)
+	rowsOnly.Logs = []aggragates.TradesLogs{
+		depthRow(rowsOnly, 1, first.Add(time.Minute)),
+		depthRow(rowsOnly, 2, inside.Add(time.Minute)),
+	}
+	if _, err := ShouldHold(depthEvent(rowsOnly, atBase)); err != nil {
+		t.Fatalf("rows without their events count no activation, so the base hold lifts here, got %v", err)
 	}
 }
 
@@ -138,8 +163,8 @@ func TestDepthSpacingIsInertWithoutTheCooldownFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("depth spacing must not fire without params.Cooldown, got %v", err)
 	}
-	if len(held.Trade.Logs) != 0 {
-		t.Fatalf("no row may be written with the flag off, got %v", messages(held.Trade.Logs))
+	if len(held.Trade.Logs) != 0 || len(held.Trade.StrategyEvents) != 0 {
+		t.Fatalf("no row and no event may be written with the flag off, got %v and %d events", messages(held.Trade.Logs), len(held.Trade.StrategyEvents))
 	}
 }
 
@@ -196,14 +221,21 @@ func TestDepthSpacingWritesOneStableCooldownRow(t *testing.T) {
 	if held.Trade.PositionType != "active" {
 		t.Errorf("position restored to %q, want the old position", held.Trade.PositionType)
 	}
+	// The event is written beside the row, and the standing hold collapses
+	// the pair together: one event, not one per tick.
+	assertNewestPair(t, held.Trade, aggragates.StrategyParamCooldown, cooldown.GateDepthSpacing, gates.EventHeld)
+	if len(held.Trade.StrategyEvents) != 1 {
+		t.Fatalf("expected one event, got %d", len(held.Trade.StrategyEvents))
+	}
 
 	held.Trade.PositionType = "stopLoss"
 	again, err := ShouldHold(depthEvent(held.Trade, trade25858[1].Add(2*time.Minute)))
 	if err == nil {
 		t.Fatal("expected the depth to still be parked on the next tick")
 	}
-	if len(again.Trade.Logs) != 1 {
-		t.Fatalf("a standing hold must not write a row per tick, got %v", messages(again.Trade.Logs))
+	if len(again.Trade.Logs) != 1 || len(again.Trade.StrategyEvents) != 1 {
+		t.Fatalf("a standing hold must not write a row or an event per tick, got %v and %d events",
+			messages(again.Trade.Logs), len(again.Trade.StrategyEvents))
 	}
 	for _, prefix := range []string{"pattern:", "smartTakeLoss:"} {
 		if strings.Contains(row.Message, prefix) {
@@ -240,9 +272,8 @@ func TestDepthSpacingRowReportsTheLadderDepthNotTheStep(t *testing.T) {
 		start, pause,
 		pause.Add(5 * time.Minute), pause.Add(10 * time.Minute), pause.Add(15 * time.Minute),
 	}
-	trade := testutil.DepthTrade(ladder...)
 	// The gate held the fourth entry; the fifth is the tick under test.
-	trade.Logs = []aggragates.TradesLogs{depthRow(4, pause.Add(11*time.Minute))}
+	trade := heldDepth(testutil.DepthTrade(ladder...), 4, pause.Add(11*time.Minute))
 
 	held, err := ShouldHold(depthEvent(trade, pause.Add(16*time.Minute)))
 	if err == nil {

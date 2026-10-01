@@ -11,10 +11,10 @@ import "github.com/giovani-sirbu/mercury/trades/aggragates"
 // The ceiling and both costs are measured on the rows the ladder TRADES
 // (tradedSettings): a ladder that opened with a raise reads the raised rows,
 // the ones its first entry was sized for, so it is not full at the stored
-// ceiling and keeps the wallet for the depths its opened row added. The trade
-// carries that raise in its own logs, which is why the view needs nothing but
-// the trade — the two sisyphus engines from their own memory and agora from
-// the database read it alike.
+// ceiling and keeps the wallet for the depths its opened event added. The
+// trade carries that raise in its own strategy events, which is why the view
+// needs nothing but the trade — the two sisyphus engines from their own memory
+// and agora from the database read it alike.
 //
 // Every surface that builds that view maps through this one helper — both
 // sisyphus engines from their own memory, agora from the database for hermes
@@ -25,7 +25,7 @@ import "github.com/giovani-sirbu/mercury/trades/aggragates"
 func DepthOf(trade aggragates.Trades) aggragates.LadderDepth {
 	// Counted and read once, then handed to both costs: the wallet view is
 	// built for every ladder of a wallet on every gated tick, and folding the
-	// same history, or the same logs, once per field is the kind of cost that
+	// same history, or the same events, once per field is the kind of cost that
 	// only shows up as a slow engine.
 	settings := tradedSettings(trade)
 	filled := CountFilledEntries(trade)

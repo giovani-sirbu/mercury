@@ -3,11 +3,11 @@ package smarttakeloss
 import "github.com/giovani-sirbu/mercury/trades/aggragates"
 
 // SlowDeclineCancelMarker is the text every row carries that cancels a
-// pending ladder's quiet slow-decline exit. Like SlowDeclineMarker it is the
-// schema: rebuildState finds the row by this marker anywhere in the message
-// (strings.Contains), never by parsing it, so the text must stay byte-stable
-// across releases. No marker rebuildState reads contains another, so a row is
-// always found as the one it is.
+// pending ladder's quiet slow-decline exit. Like SlowDeclineMarker it is
+// human-readable, byte-stable for cp and the notification filter, and never a
+// schema: the cancellation is the cancelled event beside the row
+// (EventCancelled). No marker contains another, so a filter that finds a row
+// by its text finds it as the one it is.
 const SlowDeclineCancelMarker = "smartTakeLoss: quiet slow decline broken at the new fill, exit cancelled"
 
 // SlowDeclineCancelMessage frames the cancel marker exactly as
@@ -18,9 +18,20 @@ func SlowDeclineCancelMessage(positionType string, reasons []string) string {
 	return slowDeclineRowMessage(positionType, SlowDeclineCancelMarker, reasons)
 }
 
+// CancelledRow is the slowDecline gate's cancelled row at fill: the cancel marker framed with positionType, naming what broke.
+func CancelledRow(positionType string, fill float64, reasons []string) Row {
+	return Row{
+		Message: SlowDeclineCancelMessage(positionType, reasons),
+		Price:   fill,
+		Gate:    GateSlowDecline,
+		Event:   EventCancelled,
+		Reasons: reasons,
+	}
+}
+
 // slowDeclineRow is the one slow-decline row a tick hands back, if any, and
 // the state as that row leaves it: the judgement of a pending ladder's new
-// fill (judgeTheNewestFill), or else the marker of a watched ladder going
+// fill (judgeTheNewestFill), or else the pending row of a watched ladder going
 // pending (slowDeclineGoesPending), carrying its newest fill's price.
 func slowDeclineRow(trade aggragates.Trades, st state, block aggragates.SmartTakeLossIndicators) (state, *Row) {
 	if judged, row := judgeTheNewestFill(trade, st, block); row != nil {
@@ -32,10 +43,8 @@ func slowDeclineRow(trade aggragates.Trades, st state, block aggragates.SmartTak
 	}
 	st.slowDeclinePending = true
 	st.slowDeclinePendingFrom = st.lastFill().Price
-	return st, &Row{
-		Message: SlowDeclineMessage(trade.PositionType, reasons),
-		Price:   st.slowDeclinePendingFrom,
-	}
+	row := PendingRow(trade.PositionType, st.slowDeclinePendingFrom, reasons)
+	return st, &row
 }
 
 // judgeTheNewestFill judges a pending ladder's unjudged newest fill
@@ -46,15 +55,15 @@ func slowDeclineRow(trade aggragates.Trades, st state, block aggragates.SmartTak
 // — never sells on a fill that is not judged yet.
 //
 // The leg on and quiet, or the decline read recently for the ladder
-// (slowDeclineConfirms), CONFIRMS the exit: the marker row again, with the
+// (slowDeclineConfirms), CONFIRMS the exit: the pending row again, with the
 // reasons of the reading that confirmed it, carrying the new fill's price,
 // and the ladder is pending from that fill. Anything else CANCELS it: the
-// cancel row, naming what broke (SlowDeclineBreakReasons), carrying the new
-// fill's price, and the ladder is watched and not pending; only
+// cancelled row, naming what broke (SlowDeclineBreakReasons), carrying the
+// new fill's price, and the ladder is watched and not pending; only
 // slowDeclineGoesPending makes it pending again. The band stops selling on
 // the cancel tick itself, because Apply reads it after the judgement. The
 // take profit goes back to the average entry price alone from the next tick:
-// the engines read TakeProfitPercentage before Apply, so the cancel row
+// the engines read TakeProfitPercentage before Apply, so the cancelled event
 // reaches it from the tick after the one that wrote it. The row goes back in
 // Result.SlowDecline, which every engine already writes.
 //
@@ -70,21 +79,17 @@ func judgeTheNewestFill(trade aggragates.Trades, st state, block aggragates.Smar
 	newest := st.lastFill()
 	if reasons, confirmed := slowDeclineConfirms(newest, block); confirmed {
 		st.slowDeclinePendingFrom = newest.Price
-		return st, &Row{
-			Message: SlowDeclineMessage(trade.PositionType, reasons),
-			Price:   newest.Price,
-		}
+		row := PendingRow(trade.PositionType, newest.Price, reasons)
+		return st, &row
 	}
 	st.slowDeclinePending = false
 	st.slowDeclinePendingFrom = 0
-	return st, &Row{
-		Message: SlowDeclineCancelMessage(trade.PositionType, block.SlowDeclineBreakReasons),
-		Price:   newest.Price,
-	}
+	row := CancelledRow(trade.PositionType, newest.Price, block.SlowDeclineBreakReasons)
+	return st, &row
 }
 
 // slowDeclineConfirms is whether a pending ladder's new fill confirms its
-// exit, and the reasons the marker row names then: the leg on and quiet on
+// exit, and the reasons the pending row names then: the leg on and quiet on
 // the last closed bar (SlowDeclineLegQuiet), naming SlowDeclineExitReasons,
 // or else the decline read recently for the ladder from that fill
 // (slowDeclineReadsRecently), naming SlowDeclineRecentReasons, whatever the
@@ -109,8 +114,8 @@ func slowDeclineConfirms(newest entryFill, block aggragates.SmartTakeLossIndicat
 // judged: the ladder stays pending from where it was, its band live — and
 // capital protection watches it from that fill on.
 //
-// The rows hold prices, not fills, so a later fill at exactly the price the
-// ladder is pending from reads as judged. That limit is accepted.
+// The pending events hold prices, not fills, so a later fill at exactly the
+// price the ladder is pending from reads as judged. That limit is accepted.
 func slowDeclineFillUnjudged(trade aggragates.Trades, st state) bool {
 	if !st.slowDeclinePending || st.lastFill().Price == st.slowDeclinePendingFrom {
 		return false

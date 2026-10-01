@@ -8,9 +8,9 @@ package aggragates
 //
 // The row is the one the ladder TRADES: a ladder that opened with a raise
 // reads its raised rows, so its ceiling and its costs are the raised ones and
-// it is full only there. The raise travels in the trade's own logs, which is
-// why every surface that builds the view from a trade — ladder.DepthOf —
-// reads it alike.
+// it is full only there. The raise travels in the trade's own strategy events,
+// as its opened event, which is why every surface that builds the view from a
+// trade — ladder.DepthOf — reads it alike.
 //
 // The cost travels with the depths because the gate is a RESERVE, not a
 // ranking: a ladder in the view has to say what it still needs and in which
@@ -25,8 +25,8 @@ type LadderDepth struct {
 	Symbol  string `json:"symbol"`
 	Depth   int    `json:"depth"`
 	// MaxDepth is the ladder's own ceiling: the depths of the row its next
-	// fill reads, floored, on the rows it trades — raised when its opened row
-	// raises them. Zero when no ceiling is known.
+	// fill reads, floored, on the rows it trades — raised when its opened
+	// event raises them. Zero when no ceiling is known.
 	MaxDepth int `json:"maxDepth"`
 	// Asset is what this ladder's next entry SPENDS: the quote side of the
 	// pair for a long ladder, the base side for an inverse one. Ladders are

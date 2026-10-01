@@ -15,22 +15,25 @@
 //
 // The reads are consulted once per ladder, when it opens (Opening): on the
 // ticks that judge a trade the flag shapes before its first entry fills and
-// before it carries an opened row. When the increase raises something the
-// engine writes ONE INFO row on the trade, the opened row (OpenedMessage),
-// carrying the amounts the ladder trades: BearPercentagePoints added to every
-// row's percentage and BearDepths to every row's depths, only the parts the
-// increase names. A first entry that is held or refused funds is judged
-// again on later ticks, the reads with it, until the ladder opens; once the
-// trade carries its row, no second one is written.
+// before it carries an opened event. When the increase raises something the
+// engine writes ONE opened pair on the trade (Opened.Rows): the opened
+// strategy event (OpenedEvent), carrying the amounts the ladder trades —
+// BearPercentagePoints added to every row's percentage and BearDepths to every
+// row's depths, only the parts the increase names — and beside it an INFO row
+// (OpenedMessage), the same amounts as text for the operator. A first entry
+// that is held or refused funds is judged again on later ticks, the reads with
+// it, until the ladder opens; once the trade carries its event, no second pair
+// is written.
 //
-// From then on every tick rebuilds the ladder's rows from its own opened row
+// From then on every tick rebuilds the ladder's rows from its own opened event
 // (OpenedRaise, RaisedSettings), the way smarttakeloss.rebuildState rebuilds
-// its state: the stored rows raised by the amounts the row carries (RaiseBy),
-// with no reads and nothing kept anywhere but the row. A change of the reads
-// while the ladder is open changes nothing and writes nothing, a retune of
-// the constants reaches only the next ladder that opens, and a ladder that
-// opened without an opened row trades its configured rows until it closes.
-// The next ladder consults the reads again when it opens.
+// its state: the stored rows raised by the amounts the event carries
+// (RaiseBy), with no reads and nothing kept anywhere but the event. The row's
+// text is never read back. A change of the reads while the ladder is open
+// changes nothing and writes nothing, a retune of the constants reaches only
+// the next ladder that opens, and a ladder that opened without an opened event
+// trades its configured rows until it closes. The next ladder consults the
+// reads again when it opens.
 //
 // The raised rows reach two kinds of reader. The engines hand them per tick
 // from RaisedSettings to the strategies.Strategy.Settings the position is
@@ -38,15 +41,15 @@
 // of a ladder that opens raised is sized with (aggragates.Params.SizingTrade):
 // the extra depths therefore exist only for such a ladder, a running one
 // gains no funding. And the readers of the ladder's DEPTHS take them off the
-// trade's own logs, by calling RaisedSettings themselves:
+// trade's own opened event, by calling RaisedSettings themselves:
 // ladder.ConfiguredDepths is the ceiling of the raised rows, ladder.RemainingCost
-// walks the depths the row added at the raised percentage, and ladder.DepthOf
+// walks the depths the event added at the raised percentage, and ladder.DepthOf
 // carries both into the wallet view of the cooldown depth priority, which every
 // surface builds with it — the managed trade's own reading, sisyphus's
 // backtest and live-testing engines, agora for hermes.
 //
 // A ladder that opened raised is therefore full only at its raised ceiling and
-// keeps the wallet for the depths its row added, on whichever surface asks.
+// keeps the wallet for the depths its event added, on whichever surface asks.
 // Measured against the stored rows it would read as full at the depth its own
 // first entry was sized to go past, reserve nothing for its largest entries,
 // and be funds-blocked on them once its siblings have spent the wallet. The
@@ -66,5 +69,5 @@
 // rows carrying RowPrefix off the users' notifications.
 //
 // Vocabulary: row, depth, percentage, timeframe, read, tier, increase,
-// raised, configured rows, opened row.
+// raised, configured rows, opened event, opened row.
 package dynamicparams

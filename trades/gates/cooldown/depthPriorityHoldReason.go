@@ -1,8 +1,6 @@
 package cooldown
 
 import (
-	"fmt"
-
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/helpers"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
@@ -51,11 +49,11 @@ import (
 // it is asked about, never from the view.
 //
 // Every ladder's depth, ceiling and costs are read on the rows it TRADES
-// (ladder.DepthOf): a ladder that opened with a raise — its opened row, read
-// off its own logs — is full only at its raised ceiling and keeps the wallet
-// for the depths that row added, on the managed trade's side of the gate and
-// in every surface's view of the wallet alike. The rows the chain hands the
-// gate are the stored ones; the raise reaches the gate through the logs.
+// (ladder.DepthOf): a ladder that opened with a raise — its opened event, read
+// off its own strategy events — is full only at its raised ceiling and keeps
+// the wallet for the depths that event added, on the managed trade's side of
+// the gate and in every surface's view alike. The rows the chain hands the gate
+// are the stored ones; the raise reaches it through the trade's events.
 //
 // Ladders are compared only against the ones spending the same asset: a long
 // ladder spends the quote side of its pair and an inverse one the base side,
@@ -70,10 +68,10 @@ import (
 // whole package. A hermes fetch that fails yields nil for the same reason: no
 // wallet is held on a guess.
 //
-// The hold row names both ladders and never the balance. The balance moves on
-// every tick and gates.SaveHoldLog deduplicates on the full string, so a row
-// carrying it would be a new row per tick for as long as the reservation
-// stood.
+// The hold row names both ladders and never the balance, and so does the
+// event beside it (DepthPriorityEvent). The balance moves on every tick and
+// gates.SaveHoldLog deduplicates on the full string, so a row carrying it
+// would be a new row per tick for as long as the reservation stood.
 
 // DepthPriorityApplies reports whether this tick can consume the wallet view
 // at all, so an engine knows whether to build or fetch one. It is the gate's
@@ -98,30 +96,33 @@ func DepthPriorityApplies(params aggragates.StrategyParams, oldPosition, positio
 	return oldPosition == "new" || gates.PositionType(position) == "stopLoss"
 }
 
-// DepthPriorityHoldMarker opens every depth priority hold reason
-// (depthPriorityHoldMessage). The smart take loss finds the gate's rows by it
-// anywhere in the message (strings.Contains), so it must stay byte-stable.
+// DepthPriorityHoldMarker opens every depth priority hold message
+// (depthPriorityHoldMessage). It is human-readable text, byte-stable for cp
+// and the notification filter, never a schema: the gate's record is the
+// DepthPriorityEvent that goes beside the row.
 const DepthPriorityHoldMarker = "cooldown: depth priority"
 
-// DepthPriorityHoldReason is the gate. Empty means the chain may proceed.
-// The caller owns the flag, exactly like DepthSpacingHoldReason.
+// DepthPriorityHold is the gate. The zero Hold means the chain may proceed; a
+// refusal names the text of its row and the DepthPriorityEvent that goes
+// beside it (gates.SaveHoldLog writes both). The caller owns the flag,
+// exactly like DepthSpacingHold.
 //
 // Impasse children are out of it on both sides: they belong to their impasse
 // chain and spend what the parent's close freed, not the wallet the parent
 // competes for — the same exclusion the smart take loss makes.
-func DepthPriorityHoldReason(event events.Events, position string) string {
+func DepthPriorityHold(event events.Events, position string) gates.Hold {
 	if !DepthPriorityApplies(event.Trade.Strategy.Params, event.Params.OldPosition, position) {
-		return ""
+		return gates.Hold{}
 	}
 	if event.Trade.ParentID != 0 {
-		return ""
+		return gates.Hold{}
 	}
 
 	own := ladder.DepthOf(event.Trade)
 
 	free, freeKnown := walletFreeFor(event, own.Asset)
 	if !freeKnown {
-		return ""
+		return gates.Hold{}
 	}
 
 	// Which ladder the wallet is kept for comes first, and the managed
@@ -132,7 +133,7 @@ func DepthPriorityHoldReason(event events.Events, position string) string {
 	// difference between a reserve and a tax on the tick path.
 	priority, found := depthPriorityFor(own, event.Params.WalletLadders)
 	if !found {
-		return ""
+		return gates.Hold{}
 	}
 
 	// The entry is priced as Buy will place it: a first entry on the rows the
@@ -142,36 +143,24 @@ func DepthPriorityHoldReason(event events.Events, position string) string {
 	// on the rows the ladder trades, a raise included.
 	_, ownCost := ladder.NextEntryCost(event.Params.SizingTrade(event.Trade), free)
 	if !depthPriorityHolds(ownCost, free, priority.RemainingCost) {
-		return ""
+		return gates.Hold{}
 	}
 
-	return depthPriorityHoldMessage(priority, own)
-}
-
-// depthPriorityHoldMessage says which ladder the wallet is in front of, and
-// what it is waiting on: a ladder with depths left is keeping what it still
-// needs, while a full one is keeping nothing and is simply not done with the
-// wallet until it closes. An operator reading the second row knows no further
-// entry will free the funds — only the close will.
-//
-// The message must stay byte-identical for as long as the hold stands:
-// gates.SaveHoldLog deduplicates on the full string, so anything that moves
-// tick by tick — the balance above all — would write a row per tick. Both
-// depths are frozen while the hold stands: a held entry is precisely one that
-// has not filled, and a priority that is keeping the wallet for its own next
-// entry has not placed it either.
-func depthPriorityHoldMessage(priority, own aggragates.LadderDepth) string {
-	if priority.Depth >= priority.MaxDepth {
-		return fmt.Sprintf(
-			DepthPriorityHoldMarker+", %s at depth %d of %d holds the wallet until it closes, this ladder waits at depth %d of %d",
-			priority.Symbol, priority.Depth, priority.MaxDepth, own.Depth, own.MaxDepth,
-		)
+	data := DepthPriorityEvent{
+		Event:            gates.EventHeld,
+		PrioritySymbol:   priority.Symbol,
+		PriorityDepth:    priority.Depth,
+		PriorityMaxDepth: priority.MaxDepth,
+		Depth:            own.Depth,
+		MaxDepth:         own.MaxDepth,
 	}
 
-	return fmt.Sprintf(
-		DepthPriorityHoldMarker+", %s at depth %d of %d keeps the wallet for its remaining depths, this ladder waits at depth %d of %d",
-		priority.Symbol, priority.Depth, priority.MaxDepth, own.Depth, own.MaxDepth,
-	)
+	return gates.Hold{
+		Reason: depthPriorityHoldMessage(data),
+		Param:  aggragates.StrategyParamCooldown,
+		Gate:   GateDepthPriority,
+		Data:   data,
+	}
 }
 
 // walletFreeFor is the balance the managed trade's next entry would be placed

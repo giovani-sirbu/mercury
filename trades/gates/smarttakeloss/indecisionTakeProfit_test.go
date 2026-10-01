@@ -112,7 +112,7 @@ func TestTakeProfitPercentageReadsThePositionPriceNotTheNewestFill(t *testing.T)
 		t.Fatalf("a re-anchored latched trade reads its position price: got %v, want %v", got, want)
 	}
 
-	marker := Row{Message: SlowDeclineMessage("buy", slowDeclineReasons), Price: newest}
+	marker := PendingRow("buy", newest, slowDeclineReasons)
 	both := latchedBy(withRow(shallowDecline(), marker, testutil.At("15:00:00")))
 	if st := rebuildState(both); !st.slowDeclinePending || !st.indecision {
 		t.Fatalf("fixture drifted: the trade must be pending and latched, got %+v", st)
@@ -129,33 +129,32 @@ func TestTakeProfitPercentageReadsThePositionPriceNotTheNewestFill(t *testing.T)
 	}
 }
 
-// Every trade the indecision row does not latch reads its input: an inverse
+// Every trade the latched event does not latch reads its input: an inverse
 // ladder, a child, a futures trade, a ladder one short of IndecisionArmDepth,
-// a strategy without the flag, a row without a price — and a latched trade on
-// no price at all, and every latched trade while IndecisionDirection is off.
+// a strategy without the flag, an indecision row without its event — and a
+// latched trade on no price at all, and every latched trade while
+// IndecisionDirection is off.
 func TestTakeProfitPercentageLeavesTheUnlatchedTradesAlone(t *testing.T) {
 	_, fromAverage := takeProfitLines(shallowDecline())
 	price := fromAverage - 0.01
-	row := latchedBy(shallowDecline()).Logs
-	inverse := testutil.LadderTrade(true, fills(watchedFills, "17:38:00")...)
-	inverse.Logs = row
+	wearing := latchedBy(shallowDecline())
+	inverse := carryingTheStateOf(testutil.LadderTrade(true, fills(watchedFills, "17:38:00")...), wearing)
 	child := latchedBy(shallowDecline())
 	child.ParentID = 7
 	futures := latchedBy(shallowDecline())
 	futures.Strategy.TradeType = aggragates.Futures
-	shallow := doublingLadder(declinePrices[:IndecisionArmDepth-1]...)
-	shallow.Logs = row
+	shallow := carryingTheStateOf(doublingLadder(declinePrices[:IndecisionArmDepth-1]...), wearing)
 	off := latchedBy(shallowDecline())
 	off.Strategy.Params.SmartTakeLoss = false
-	unpriced := shallowDecline()
-	unpriced.Logs = []aggragates.TradesLogs{{Message: IndecisionMessage("buy", indecisionReasons)}}
+	textOnly := shallowDecline()
+	textOnly.Logs = []aggragates.TradesLogs{{Message: IndecisionMessage("buy", indecisionReasons), Price: wearing.PositionPrice}}
 	for name, trade := range map[string]aggragates.Trades{
 		"an inverse ladder":               inverse,
 		"a child":                         child,
 		"a futures trade":                 futures,
 		"one short of IndecisionArmDepth": shallow,
 		"a strategy without the flag":     off,
-		"a row without a price":           unpriced,
+		"a row without its event":         textOnly,
 	} {
 		if got := TakeProfitPercentage(trade, price, breakEvenReading); got != breakEvenReading {
 			t.Errorf("%s must read its input, got %v", name, got)

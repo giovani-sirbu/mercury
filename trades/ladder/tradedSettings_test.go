@@ -8,34 +8,11 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/gates/dynamicparams"
 )
 
-// The amounts the opened rows below carry. They are this suite's own, apart
-// from the shipped constants, so a retune of BearPercentagePoints or
-// BearDepths moves no expectation here: the ladder trades whatever its own
-// row says.
-const (
-	raisePoints = 0.5
-	raiseDepths = 2
-)
-
-// withOpenedRow is the trade as the engine leaves it once its ladder opened
-// raised: the DynamicParams flag on for a long spot parent, and the one
-// opened row in its logs carrying these amounts. The rows the trade stores
-// are untouched.
-func withOpenedRow(trade aggragates.Trades, points float64, depths int) aggragates.Trades {
-	trade.Strategy.Params.DynamicParams = true
-	trade.Strategy.TradeType = aggragates.Spot
-	trade.Logs = append(append([]aggragates.TradesLogs(nil), trade.Logs...), aggragates.TradesLogs{
-		Message: dynamicparams.OpenedMessage(points, depths),
-		Type:    aggragates.LOG_INFO,
-	})
-
-	return trade
-}
-
-// Every amount form the opened row writes raises a COPY of every stored row by
-// exactly the amounts it carries — the rows the ladder trades — and the
-// stored rows stay as they were.
-func TestTradedSettingsRaisesEveryRowByTheOpenedRowsAmounts(t *testing.T) {
+// Every amount form the opened event carries raises a COPY of every stored row
+// by exactly the amounts it carries — the rows the ladder trades — and the
+// stored rows stay as they were. The raise is withOpenedEvent's: the opened
+// pair the engine's own writer appends, with the amounts of this suite.
+func TestTradedSettingsRaisesEveryRowByTheOpenedEventsAmounts(t *testing.T) {
 	cases := []struct {
 		name   string
 		points float64
@@ -47,7 +24,7 @@ func TestTradedSettingsRaisesEveryRowByTheOpenedRowsAmounts(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		trade := withOpenedRow(rowsLadder(1, 16, 4, rowsGrid()...), c.points, c.depths)
+		trade := withOpenedEvent(rowsLadder(1, 16, 4, rowsGrid()...), c.points, c.depths)
 		stored := trade.StrategyPair.StrategySettings
 		before := append([]aggragates.StrategySettings(nil), stored...)
 
@@ -73,24 +50,36 @@ func TestTradedSettingsRaisesEveryRowByTheOpenedRowsAmounts(t *testing.T) {
 	}
 }
 
-// A trade without an opened row, one the flag does not shape and one whose
+// A trade without an opened event, one the flag does not shape and one whose
 // ladder the flag leaves alone trade the stored rows — the very slice, so the
 // readings on top of it are byte-identical to what they were before the flag
-// existed.
+// existed. The shaped cases still carry their opened event: the event is not
+// enough where the flag does not apply.
 func TestTradedSettingsKeepsTheStoredRowsWhenNothingRaisesThem(t *testing.T) {
 	cases := []struct {
 		name   string
 		change func(*aggragates.Trades)
 	}{
-		{"no opened row", func(trade *aggragates.Trades) { trade.Logs = nil }},
-		{"the flag off", func(trade *aggragates.Trades) { trade.Strategy.Params.DynamicParams = false }},
-		{"an inverse ladder", func(trade *aggragates.Trades) { trade.Inverse = true }},
-		{"a futures strategy", func(trade *aggragates.Trades) { trade.Strategy.TradeType = aggragates.Futures }},
-		{"an impasse child", func(trade *aggragates.Trades) { trade.ParentID = 7 }},
+		{"no opened event", func(trade *aggragates.Trades) {
+			trade.Logs = nil
+			trade.StrategyEvents = nil
+		}},
+		{"the flag off", func(trade *aggragates.Trades) {
+			trade.Strategy.Params.DynamicParams = false
+		}},
+		{"an inverse ladder", func(trade *aggragates.Trades) {
+			trade.Inverse = true
+		}},
+		{"a futures strategy", func(trade *aggragates.Trades) {
+			trade.Strategy.TradeType = aggragates.Futures
+		}},
+		{"an impasse child", func(trade *aggragates.Trades) {
+			trade.ParentID = 7
+		}},
 	}
 
 	for _, c := range cases {
-		trade := withOpenedRow(rowsLadder(1, 16, 4, rowsGrid()...), raisePoints, raiseDepths)
+		trade := withOpenedEvent(rowsLadder(1, 16, 4, rowsGrid()...), raisePoints, raiseDepths)
 		c.change(&trade)
 		stored := trade.StrategyPair.StrategySettings
 
@@ -102,10 +91,31 @@ func TestTradedSettingsKeepsTheStoredRowsWhenNothingRaisesThem(t *testing.T) {
 	}
 }
 
+// The opened event is the raise and the opened row beside it is only the text
+// an operator reads: a trade whose logs carry the row but whose strategy events
+// carry no opened event trades its stored rows, the very slice, while the same
+// trade with its event beside the row trades the raised copy.
+func TestTradedSettingsReadsTheOpenedEventNeverTheRow(t *testing.T) {
+	paired := withOpenedEvent(rowsLadder(1, 16, 4, rowsGrid()...), raisePoints, raiseDepths)
+	textOnly := paired
+	textOnly.StrategyEvents = nil
+	stored := textOnly.StrategyPair.StrategySettings
+
+	if len(textOnly.Logs) != 1 {
+		t.Fatalf("fixture drifted: the trade carries %d rows, want the opened row", len(textOnly.Logs))
+	}
+	if got := tradedSettings(textOnly); len(got) != len(stored) || &got[0] != &stored[0] {
+		t.Errorf("tradedSettings = %+v, want the stored slice itself: a row without its event opens nothing", got)
+	}
+	if got := tradedSettings(paired); &got[0] == &stored[0] || got[0].Depths != stored[0].Depths+raiseDepths {
+		t.Errorf("tradedSettings = %+v, want the raised copy when the event stands beside the row", got)
+	}
+}
+
 // A trade whose pair carries no rows has nothing to raise: the answer is
 // empty, and every reading on top of it reads that as an unknown ceiling.
 func TestTradedSettingsOfATradeWithoutRowsIsEmpty(t *testing.T) {
-	trade := withOpenedRow(depthTrade(2), raisePoints, raiseDepths)
+	trade := withOpenedEvent(depthTrade(2), raisePoints, raiseDepths)
 
 	if got := tradedSettings(trade); len(got) != 0 {
 		t.Errorf("tradedSettings = %+v, want no rows", got)

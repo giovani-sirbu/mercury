@@ -190,6 +190,11 @@ func TestShouldHoldWritesInfoLogAndCollapsesRepeats(t *testing.T) {
 	if held.Trade.PositionType != "active" {
 		t.Errorf("expected position restored to old position, got %q", held.Trade.PositionType)
 	}
+	// The market families write the row alone: no strategy event, on this
+	// hold or on any later one.
+	if len(held.Trade.StrategyEvents) != 0 {
+		t.Errorf("a useAI hold writes no strategy event, got %d", len(held.Trade.StrategyEvents))
+	}
 
 	// Next tick holds the same position for a DIFFERENT reason: that is a new
 	// row. The old prefix dedup collapsed it and hid every reason change
@@ -206,6 +211,9 @@ func TestShouldHoldWritesInfoLogAndCollapsesRepeats(t *testing.T) {
 	}
 	if again.Trade.Logs[1].Message != "Hold stopLoss: AI recommends HOLD" {
 		t.Errorf("unexpected second hold message %q", again.Trade.Logs[1].Message)
+	}
+	if len(again.Trade.StrategyEvents) != 0 {
+		t.Errorf("a legacy AI hold writes no strategy event, got %d", len(again.Trade.StrategyEvents))
 	}
 
 	// The same reason again on the next tick still collapses.
@@ -263,4 +271,22 @@ func messages(logs []aggragates.TradesLogs) []string {
 		out = append(out, entry.Message)
 	}
 	return out
+}
+
+// assertNewestPair is the pairing of a gate's newest row and newest strategy
+// event: the event filed under this param, gate and kind, for the same trade
+// and with the very same stamp, so (TradeID, CreatedAt) finds the pair.
+func assertNewestPair(t *testing.T, trade aggragates.Trades, param, gate, kind string) {
+	t.Helper()
+	if len(trade.Logs) == 0 || len(trade.StrategyEvents) == 0 {
+		t.Fatalf("want a row and its event, got %d rows and %d events", len(trade.Logs), len(trade.StrategyEvents))
+	}
+	row := trade.Logs[len(trade.Logs)-1]
+	event := trade.StrategyEvents[len(trade.StrategyEvents)-1]
+	if event.Param != param || event.Gate != gate || event.Kind() != kind {
+		t.Fatalf("newest event is %q/%q/%q, want %q/%q/%q", event.Param, event.Gate, event.Kind(), param, gate, kind)
+	}
+	if event.TradeID != row.TradeID || !event.CreatedAt.Equal(row.CreatedAt) {
+		t.Fatalf("row (trade %d, %s) and event (trade %d, %s) are not a pair", row.TradeID, row.CreatedAt, event.TradeID, event.CreatedAt)
+	}
 }

@@ -10,10 +10,10 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
-// openedRaised is the flagged ladder carrying the opened row the shipped
+// openedRaised is the flagged ladder carrying the opened pair the shipped
 // constants write for both reads bearish.
 func openedRaised() aggragates.Trades {
-	return withRows(flaggedTrade(), dynamicparams.OpenedMessage(dynamicparams.BearPercentagePoints, dynamicparams.BearDepths))
+	return withOpened(flaggedTrade(), dynamicparams.BearPercentagePoints, dynamicparams.BearDepths)
 }
 
 // raisedByTheConstants is the three-row ladder raised by both amounts the
@@ -27,20 +27,23 @@ func raisedByTheConstants() []aggragates.StrategySettings {
 	return rows
 }
 
-// A trade without an opened row, a trade the flag does not shape whatever
-// row it carries, and a row whose amounts raise nothing hand back the stored
-// rows themselves and false: the engine then changes nothing.
+// A trade without an opened event, a trade the flag does not shape whatever
+// event it carries, and an event whose amounts raise nothing hand back the
+// stored rows themselves and false: the engine then changes nothing.
 func TestRaisedSettingsLeavesTheStoredRowsWhenNothingIsRaised(t *testing.T) {
 	cases := []struct {
 		name   string
 		change func(*aggragates.Trades)
 	}{
-		{"no opened row", func(trade *aggragates.Trades) { trade.Logs = nil }},
+		{"no opened event", func(trade *aggragates.Trades) {
+			trade.Logs = nil
+			trade.StrategyEvents = nil
+		}},
 		{"only the per-tick rows an earlier release wrote", func(trade *aggragates.Trades) {
 			*trade = withRows(*trade, "dynamic params: 1D Super Guppy bearish, BMSB bearish: both bearish, percentage +0.5 and depths +1 on every row")
 		}},
-		{"an opened row raising nothing", func(trade *aggragates.Trades) {
-			*trade = withRows(*trade, "dynamic params: opened raised, on every row")
+		{"an opened event raising nothing", func(trade *aggragates.Trades) {
+			*trade = withOpened(*trade, 0, 0)
 		}},
 		{"the flag off", func(trade *aggragates.Trades) { trade.Strategy.Params.DynamicParams = false }},
 		{"an inverse ladder", func(trade *aggragates.Trades) { trade.Inverse = true }},
@@ -73,11 +76,11 @@ func TestRaisedSettingsLeavesTheStoredRowsWhenNothingIsRaised(t *testing.T) {
 	}
 }
 
-// An opened row raises a copy of every row by the amounts it carries, only
+// An opened event raises a copy of every row by the amounts it carries, only
 // the parts it names, and the stored rows stay exactly as they were.
-func TestRaisedSettingsRaisesACopyOfEveryRowByTheRowsAmounts(t *testing.T) {
+func TestRaisedSettingsRaisesACopyOfEveryRowByTheEventsAmounts(t *testing.T) {
 	for name, amounts := range raiseAmounts {
-		trade := withRows(flaggedTrade(), dynamicparams.OpenedMessage(amounts.points, amounts.depths))
+		trade := withOpened(flaggedTrade(), amounts.points, amounts.depths)
 		stored := trade.StrategyPair.StrategySettings
 		before := cloneRows(stored)
 
@@ -135,7 +138,7 @@ func TestRaisedSettingsSizeTheFirstEntryForTheExtraDepth(t *testing.T) {
 
 	rows, raised := dynamicparams.RaisedSettings(trade)
 	if !raised {
-		t.Fatal("the opened row must raise the rows")
+		t.Fatal("the opened event must raise the rows")
 	}
 
 	sizing := aggragates.Params{EntrySettings: rows}.SizingTrade(trade)

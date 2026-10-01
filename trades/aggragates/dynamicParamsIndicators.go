@@ -12,7 +12,7 @@ package aggragates
 // row — and gates/dynamicparams treats a block that is not Valid as the
 // configured rows, whatever its reads say. The engines consult it only when
 // a ladder opens (dynamicparams.Opening), which turns it into the ladder's
-// opened row; every later tick rebuilds the rows from that row
+// opened event; every later tick rebuilds the rows from that event
 // (dynamicparams.RaisedSettings), never from the block. It holds nothing.
 type DynamicParamsIndicators struct {
 	Timeframe string

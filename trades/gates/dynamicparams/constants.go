@@ -12,11 +12,11 @@ const Interval = "1d"
 // the percentage (IncreasePercentage, IncreaseBoth) adds to the percentage of
 // every row: points added to the row's own percentage, never a multiple of
 // it. Opening reads it once, when the ladder opens, and writes it into the
-// opened row; the ladder then trades the amount its row carries
+// opened event; the ladder then trades the amount its event carries
 // (OpenedRaise), so a retune reaches the next ladder that opens and never one
 // already open. It must stay at or above zero. The backtest's skip gates keep
 // reading the stored rows, and they skip only prints the raised strategy does
-// not act on while the opened row widens the ladder; an amount under zero
+// not act on while the opened event widens the ladder; an amount under zero
 // would narrow it, and the replay would skip prints the raised strategy acts
 // on.
 const BearPercentagePoints float64 = 0.4
@@ -24,7 +24,7 @@ const BearPercentagePoints float64 = 0.4
 // BearDepths is what a ladder that opens while the increase names the depths
 // (IncreaseDepths, IncreaseBoth) adds to the depths of every row, so its
 // first entry is sized for that many more entries. Opening reads it at open
-// only and writes it into the opened row, as it does BearPercentagePoints. It
+// only and writes it into the opened event, as it does BearPercentagePoints. It
 // is a whole number of depths: ladder.CalculateInitialBid walks a row's
 // depths down in hundredths and sizes only on a half depth, and a fraction
 // added to a row can keep that walk off every half depth, which refuses every

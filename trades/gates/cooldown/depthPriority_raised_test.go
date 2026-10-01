@@ -4,215 +4,185 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/gates"
 	"github.com/giovani-sirbu/mercury/trades/gates/dynamicparams"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
-// The amounts the opened rows of this file carry: their own, apart from the
-// shipped constants, so a retune moves no expectation — a ladder trades the
-// raise its own row names.
+// The amounts the opened events of this file carry: their own, apart from the
+// shipped constants, so a retune moves no expectation.
 const (
 	raisedPoints = 0.5
 	raisedDepths = 2
 )
 
-// openedRaised is the ladder as the engine leaves it once it opened raised:
-// the DynamicParams flag on for a long spot parent, and the one opened row in
-// its logs. The rows the trade stores stay as they were.
+// openedRaised is the ladder as the engine leaves it once it opened raised: the
+// flag on for a long spot parent and the opened pair the engine's own writer
+// appends, the event the raise is read from beside the row an operator reads.
 func openedRaised(trade aggragates.Trades) aggragates.Trades {
 	trade.Strategy.Params.DynamicParams = true
 	trade.Strategy.TradeType = aggragates.Spot
-	trade.Logs = append(append([]aggragates.TradesLogs(nil), trade.Logs...), aggragates.TradesLogs{
-		Message: dynamicparams.OpenedMessage(raisedPoints, raisedDepths),
-		Type:    aggragates.LOG_INFO,
-	})
+	row, event := dynamicparams.Opened{Points: raisedPoints, Depths: raisedDepths}.Rows(trade, trade.PositionPrice, time.Time{})
 
-	return trade
+	return aggragates.AppendStrategyRow(trade, row, event)
 }
 
-// raisedAtTheStoredCeiling is a ladder of the fixture wallet that has filled
-// every depth its stored rows allow and opened raised: the ladder whose own
-// first entry was sized for more depths than that.
+// raisedAtTheStoredCeiling has filled every depth its stored rows allow and
+// opened raised: its own first entry was sized for more depths than that.
 func raisedAtTheStoredCeiling(id uint, symbol string) aggragates.Trades {
 	return openedRaised(testutil.LadderDepthTrade(id, symbol, walletDepths, walletDepths))
 }
 
-// The wallet is kept for a ladder until the depths its grid was sized for are
-// filled, and a ladder that opened raised was sized for more than its stored
-// rows say. Standing at the stored ceiling it is not full: the view carries
-// the raised ceiling and what its extra depths cost, the sibling that would
-// spend into that amount waits, and the row says the ladder keeps the wallet
-// for its remaining depths and prints the raised ceiling.
-//
-// The identical ladder without the opened row is full and keeps nothing: only
-// an entry the wallet cannot pay for holds, and the row says the ladder holds
-// the wallet until it closes.
+// raisedHold is the gate's answer for the trade on a buy tick that carries the
+// wallet view and the balance.
+func raisedHold(trade aggragates.Trades, view []aggragates.LadderDepth, free float64) gates.Hold {
+	return DepthPriorityHold(priorityEvent(trade, "buy", view, free), "stopLoss")
+}
+
+// assertWaits fails unless the hold names the depth priority event of the wallet
+// kept for priority while own waits, and its row text is formatted from it.
+func assertWaits(t *testing.T, hold gates.Hold, priority, own aggragates.LadderDepth) {
+	t.Helper()
+
+	want := DepthPriorityEvent{
+		Event:            gates.EventHeld,
+		PrioritySymbol:   priority.Symbol,
+		PriorityDepth:    priority.Depth,
+		PriorityMaxDepth: priority.MaxDepth,
+		Depth:            own.Depth,
+		MaxDepth:         own.MaxDepth,
+	}
+	if hold.Param != aggragates.StrategyParamCooldown || hold.Gate != GateDepthPriority || hold.Data != want {
+		t.Fatalf("hold names %q/%q with %+v, want the depth priority event %+v", hold.Param, hold.Gate, hold.Data, want)
+	}
+	if text := depthPriorityHoldMessage(want); hold.Reason != text {
+		t.Fatalf("reason = %q, want %q", hold.Reason, text)
+	}
+}
+
+// A ladder that opened raised was sized for more depths than its stored rows
+// say: at the stored ceiling its view carries the raised ceiling and what the
+// extra depths cost, and the sibling that would spend into that waits. The same
+// ladder without the opened event is full and holds only what the wallet cannot pay for.
 func TestDepthPriorityKeepsTheWalletForARaisedLadderAtItsStoredCeiling(t *testing.T) {
 	requireDepthPriority(t)
 
 	keeper := ladder.DepthOf(raisedAtTheStoredCeiling(14, "LINK/USDT"))
-	if keeper.Depth != walletDepths || keeper.MaxDepth != walletDepths+raisedDepths {
-		t.Fatalf("view = %+v, want depth %d of the raised ceiling %d", keeper, walletDepths, walletDepths+raisedDepths)
+	if keeper.Depth != walletDepths || keeper.MaxDepth != walletDepths+raisedDepths || keeper.RemainingCost <= 0 {
+		t.Fatalf("view = %+v, want depth %d of the raised ceiling %d and a reserve for the extra depths", keeper, walletDepths, walletDepths+raisedDepths)
 	}
-	if keeper.RemainingCost <= 0 {
-		t.Fatalf("view = %+v, want the raised ladder to name what its extra depths cost", keeper)
-	}
-
 	sibling := testutil.LadderDepthTrade(12, "ETH/USDT", 4, walletDepths)
 	view := []aggragates.LadderDepth{keeper}
 	short := walletShortFor(t, sibling, keeper.RemainingCost)
 
-	reason := DepthPriorityHoldReason(priorityEvent(sibling, "buy", view, short), "stopLoss")
-	if want := depthPriorityHoldMessage(keeper, ladder.DepthOf(sibling)); reason != want {
-		t.Fatalf("reason = %q, want %q", reason, want)
-	}
+	hold := raisedHold(sibling, view, short)
+	assertWaits(t, hold, keeper, ladder.DepthOf(sibling))
 	for _, fragment := range []string{"keeps the wallet for its remaining depths", ruleKeeps(keeper)} {
-		if !strings.Contains(reason, fragment) {
-			t.Errorf("reason = %q, want it to carry %q", reason, fragment)
+		if !strings.Contains(hold.Reason, fragment) {
+			t.Errorf("reason = %q, want it to carry %q", hold.Reason, fragment)
 		}
 	}
-	if strings.Contains(reason, "until it closes") {
-		t.Errorf("reason = %q, a ladder with raised depths left is not holding the wallet until it closes", reason)
+	if strings.Contains(hold.Reason, "until it closes") {
+		t.Errorf("reason = %q, a ladder with raised depths left is not holding the wallet until it closes", hold.Reason)
+	}
+	if hold := raisedHold(sibling, view, short+1); hold.Held() {
+		t.Errorf("a wallet level with the reserve and the entry must let the sibling through, got %q", hold.Reason)
 	}
 
-	level := short + 1
-	if reason := DepthPriorityHoldReason(priorityEvent(sibling, "buy", view, level), "stopLoss"); reason != "" {
-		t.Errorf("a wallet level with the reserve and the entry must let the sibling through, got %q", reason)
-	}
-
-	// The same ladder without its opened row: full, reserving nothing.
 	full := ladder.DepthOf(testutil.LadderDepthTrade(14, "LINK/USDT", walletDepths, walletDepths))
 	if full.Depth != full.MaxDepth || full.RemainingCost != 0 {
-		t.Fatalf("view = %+v, want the ladder without its opened row full and reserving nothing", full)
+		t.Fatalf("view = %+v, want the ladder without its opened event full and reserving nothing", full)
 	}
-
 	fullView := []aggragates.LadderDepth{full}
-	if reason := DepthPriorityHoldReason(priorityEvent(sibling, "buy", fullView, short), "stopLoss"); reason != "" {
-		t.Errorf("a full ladder keeps nothing the wallet can pay for, got %q", reason)
+	if hold := raisedHold(sibling, fullView, short); hold.Held() {
+		t.Errorf("a full ladder keeps nothing the wallet can pay for, got %q", hold.Reason)
 	}
-
-	ownCost := nextEntryCostOf(t, sibling, short)
-	unpayable := DepthPriorityHoldReason(priorityEvent(sibling, "buy", fullView, ownCost-1), "stopLoss")
-	if want := depthPriorityHoldMessage(full, ladder.DepthOf(sibling)); unpayable != want {
-		t.Errorf("reason = %q, want only the entry the wallet cannot pay for held: %q", unpayable, want)
-	}
-	if !strings.Contains(unpayable, "holds the wallet until it closes") {
-		t.Errorf("reason = %q, want the full ladder to hold the wallet until it closes", unpayable)
+	unpayable := raisedHold(sibling, fullView, nextEntryCostOf(t, sibling, short)-1)
+	assertWaits(t, unpayable, full, ladder.DepthOf(sibling))
+	if !strings.Contains(unpayable.Reason, "holds the wallet until it closes") {
+		t.Errorf("reason = %q, want the full ladder to hold the wallet until it closes", unpayable.Reason)
 	}
 }
 
-// The ladder being asked about reads its own depths off its own opened row: a
-// raised ladder at its stored ceiling has depths left, so it is ranked as one
-// that does, not as a full ladder that is cheaper to finish than a sibling.
-//
-// Two raised ladders standing level — the same depth, the same planned cost —
-// are split by their trade ids: the lower one is in front and the wallet is
-// kept for it, the higher one waits. Read on the stored rows the ladder being
-// asked about would be full with nothing left to finish, would outrank the
-// lower id on that cost, and would be held by nobody.
+// The ladder asked about reads its own depths off its own opened event, so a
+// raised ladder at its stored ceiling is ranked as one with depths left. Two
+// level ones split on trade id: the lower is in front and the higher waits,
+// where read on the stored rows the higher would be full and wait for nobody.
 func TestDepthPriorityRanksARaisedOwnLadderOnItsRaisedDepths(t *testing.T) {
 	requireDepthPriority(t)
 
-	ahead := raisedAtTheStoredCeiling(13, "SOL/USDT")
-	own := raisedAtTheStoredCeiling(14, "LINK/USDT")
-	aheadView := ladder.DepthOf(ahead)
-	ownView := ladder.DepthOf(own)
+	ahead, own := raisedAtTheStoredCeiling(13, "SOL/USDT"), raisedAtTheStoredCeiling(14, "LINK/USDT")
+	aheadView, ownView := ladder.DepthOf(ahead), ladder.DepthOf(own)
 	view := []aggragates.LadderDepth{aheadView, ownView}
 
-	if ownView.Depth != aheadView.Depth || ownView.PlannedRemainingCost != aheadView.PlannedRemainingCost {
-		t.Fatalf("views = %+v and %+v, want the two ladders level on everything but the id", ownView, aheadView)
+	if ownView.Depth != aheadView.Depth || ownView.PlannedRemainingCost != aheadView.PlannedRemainingCost || ownView.PlannedRemainingCost <= 0 {
+		t.Fatalf("views = %+v and %+v, want two raised ladders level on everything but the id, planned to cost something", ownView, aheadView)
 	}
-	if ownView.PlannedRemainingCost <= 0 {
-		t.Fatalf("view = %+v, want a raised ladder at its stored ceiling planned to cost something to finish", ownView)
-	}
-
 	priority, found := depthPriorityFor(ownView, view)
-	if !found || priority.TradeID != ahead.ID {
-		t.Fatalf("depthPriorityFor = %+v, %v, want the lower id in front of the ladder asked about", priority, found)
+	if !found || priority.TradeID != ahead.ID || priority.Depth >= priority.MaxDepth {
+		t.Fatalf("depthPriorityFor = %+v, %v, want the lower id in front, with raised depths left to keep the wallet for", priority, found)
 	}
-	if priority.Depth >= priority.MaxDepth {
-		t.Fatalf("priority = %+v, want a ladder with raised depths left: it keeps the wallet", priority)
-	}
+	assertWaits(t, raisedHold(own, view, walletShortFor(t, own, aheadView.RemainingCost)), aheadView, ownView)
 
-	short := walletShortFor(t, own, aheadView.RemainingCost)
-	reason := DepthPriorityHoldReason(priorityEvent(own, "buy", view, short), "stopLoss")
-	if want := depthPriorityHoldMessage(aheadView, ownView); reason != want {
-		t.Fatalf("reason = %q, want the higher id to wait for the lower one: %q", reason, want)
-	}
-
-	// The ladder in front is held by nobody: the one behind it is not ahead.
 	if front, found := depthPriorityFor(aheadView, view); found {
 		t.Errorf("depthPriorityFor = %+v, want nothing ahead of the lower id", front)
 	}
-	if reason := DepthPriorityHoldReason(priorityEvent(ahead, "buy", view, walletShortFor(t, ahead, aheadView.RemainingCost)), "stopLoss"); reason != "" {
-		t.Errorf("the ladder in front must not be held by the one behind it, got %q", reason)
+	if hold := raisedHold(ahead, view, walletShortFor(t, ahead, aheadView.RemainingCost)); hold.Held() {
+		t.Errorf("the ladder in front must not be held by the one behind it, got %q", hold.Reason)
 	}
 
-	// The same pair without the opened rows is level and full: the wallet has
-	// nothing to be kept for, only the entries it cannot pay for wait.
 	fullAhead := ladder.DepthOf(testutil.LadderDepthTrade(13, "SOL/USDT", walletDepths, walletDepths))
 	fullOwn := testutil.LadderDepthTrade(14, "LINK/USDT", walletDepths, walletDepths)
 	fullView := []aggragates.LadderDepth{fullAhead, ladder.DepthOf(fullOwn)}
-
-	if priority, found := depthPriorityFor(ladder.DepthOf(fullOwn), fullView); !found || priority.Depth < priority.MaxDepth {
-		t.Fatalf("depthPriorityFor = %+v, %v, want the full ladder in front, keeping nothing", priority, found)
+	if front, found := depthPriorityFor(ladder.DepthOf(fullOwn), fullView); !found || front.Depth < front.MaxDepth {
+		t.Fatalf("depthPriorityFor = %+v, %v, want the full ladder in front, keeping nothing", front, found)
 	}
-	if reason := DepthPriorityHoldReason(priorityEvent(fullOwn, "buy", fullView, nextEntryCostOf(t, fullOwn, 0)), "stopLoss"); reason != "" {
-		t.Errorf("a full ladder ahead keeps nothing the wallet can pay for, got %q", reason)
+	if hold := raisedHold(fullOwn, fullView, nextEntryCostOf(t, fullOwn, 0)); hold.Held() {
+		t.Errorf("a full ladder ahead keeps nothing the wallet can pay for, got %q", hold.Reason)
 	}
 }
 
-// The row the operator reads names the raised ceilings, both ends of it, and
-// they are the ceilings the ladders trade, not whatever the row builder
-// derives: the ladder keeping the wallet at the depth its stored rows stop at
-// is named with the raised ceiling, and so is the raised ladder that waits
-// behind a full one. The expected text is written out from the fixture's own
-// depths, apart from the builder the gate writes it with.
+// The row names the raised ceiling of both ladders, written out from the
+// fixture's own depths apart from the builder the gate writes it with: the keeper
+// at the depth its stored rows stop at, and the raised ladder behind a full one.
 func TestDepthPriorityRowNamesTheRaisedCeilingsOfBothLadders(t *testing.T) {
 	requireDepthPriority(t)
 
 	const waiting = 4
-
 	keeper := ladder.DepthOf(raisedAtTheStoredCeiling(14, "LINK/USDT"))
 	sibling := testutil.LadderDepthTrade(12, "ETH/USDT", waiting, walletDepths)
 
-	reason := DepthPriorityHoldReason(priorityEvent(sibling, "buy", []aggragates.LadderDepth{keeper}, walletShortFor(t, sibling, keeper.RemainingCost)), "stopLoss")
+	hold := raisedHold(sibling, []aggragates.LadderDepth{keeper}, walletShortFor(t, sibling, keeper.RemainingCost))
 	want := fmt.Sprintf(
 		DepthPriorityHoldMarker+", %s at depth %d of %d keeps the wallet for its remaining depths, this ladder waits at depth %d of %d",
 		"LINK/USDT", walletDepths, walletDepths+raisedDepths, waiting, walletDepths,
 	)
-	if reason != want {
-		t.Errorf("reason = %q, want %q", reason, want)
+	if hold.Reason != want {
+		t.Errorf("reason = %q, want %q", hold.Reason, want)
 	}
 
-	// The raised ladder waiting behind a FULL one at the same depth: the full
-	// ladder is planned cheaper to finish, so it is in front and keeps
-	// nothing, and the raised ladder, which has depths left, waits only for
-	// an entry the wallet cannot pay for.
+	// The full ladder is planned cheaper to finish, so it is in front and keeps
+	// nothing: the raised ladder waits only for an entry the wallet cannot pay for.
 	own := raisedAtTheStoredCeiling(12, "LINK/USDT")
 	full := ladder.DepthOf(testutil.LadderDepthTrade(13, "SOL/USDT", walletDepths, walletDepths))
-	view := []aggragates.LadderDepth{full, ladder.DepthOf(own)}
-	ownCost := nextEntryCostOf(t, own, 0)
-
-	reason = DepthPriorityHoldReason(priorityEvent(own, "buy", view, ownCost-1), "stopLoss")
+	hold = raisedHold(own, []aggragates.LadderDepth{full, ladder.DepthOf(own)}, nextEntryCostOf(t, own, 0)-1)
 	want = fmt.Sprintf(
 		DepthPriorityHoldMarker+", %s at depth %d of %d holds the wallet until it closes, this ladder waits at depth %d of %d",
 		"SOL/USDT", walletDepths, walletDepths, walletDepths, walletDepths+raisedDepths,
 	)
-	if reason != want {
-		t.Errorf("reason = %q, want %q", reason, want)
+	if hold.Reason != want {
+		t.Errorf("reason = %q, want %q", hold.Reason, want)
 	}
 }
 
-// The ladder being asked about is not judged as full at its stored ceiling
-// when it opened raised. A shallower sibling is never in front of it, so it is
-// never held by one however short the wallet runs; and against a full ladder
-// at the same depth it ranks on what it still has to fill — behind that
-// ladder, which is planned cheaper to finish — where read on its stored rows
-// it would rank on a plan of nothing, tie with it and win on the lower id.
+// The ladder asked about is not judged as full at its stored ceiling when it
+// opened raised: a shallower sibling is never in front of it however short the
+// wallet runs, and against a full ladder at the same depth it ranks behind, on
+// what it still has to fill, where on its stored rows it would tie and win.
 func TestDepthPriorityDoesNotJudgeARaisedManagedLadderAsFull(t *testing.T) {
 	requireDepthPriority(t)
 
@@ -221,57 +191,66 @@ func TestDepthPriorityDoesNotJudgeARaisedManagedLadderAsFull(t *testing.T) {
 	if ownView.Depth >= ownView.MaxDepth {
 		t.Fatalf("view = %+v, want a raised ladder at its stored ceiling to have depths left", ownView)
 	}
-
-	// Behind it: a shallower sibling, which outranks nothing on the depth.
 	shallower := ladder.DepthOf(testutil.LadderDepthTrade(11, "ETH/USDT", walletDepths/2, walletDepths))
-	view := []aggragates.LadderDepth{shallower, ownView}
-
-	if front, found := depthPriorityFor(ownView, view); found {
+	behind := []aggragates.LadderDepth{shallower, ownView}
+	if front, found := depthPriorityFor(ownView, behind); found {
 		t.Errorf("depthPriorityFor = %+v, want nothing in front of the deeper ladder", front)
 	}
 	for _, free := range []float64{0, walletShortFor(t, own, shallower.RemainingCost)} {
-		if reason := DepthPriorityHoldReason(priorityEvent(own, "buy", view, free), "stopLoss"); reason != "" {
-			t.Errorf("a shallower sibling must never hold the deeper ladder, got %q on a wallet of %f", reason, free)
+		if hold := raisedHold(own, behind, free); hold.Held() {
+			t.Errorf("a shallower sibling must never hold the deeper ladder, got %q on a wallet of %f", hold.Reason, free)
 		}
 	}
 
-	// In front of it at the same depth: a ladder that is full and, so, planned
-	// to cost nothing more to finish.
 	level := ladder.DepthOf(testutil.LadderDepthTrade(13, "SOL/USDT", walletDepths, walletDepths))
 	if level.Depth != ownView.Depth || level.PlannedRemainingCost >= ownView.PlannedRemainingCost {
 		t.Fatalf("views = %+v and %+v, want a level full ladder planned cheaper to finish", level, ownView)
 	}
-
-	front, found := depthPriorityFor(ownView, []aggragates.LadderDepth{level, ownView})
-	if !found || front.TradeID != level.TradeID {
-		t.Errorf("depthPriorityFor = %+v, %v, want the full ladder planned cheaper to finish in front of the raised one", front, found)
-	}
-
-	// The gate asks the same question of the trade itself: the full ladder in
-	// front keeps nothing, so the raised ladder is held only on an entry the
-	// wallet cannot pay for, and let through on one it can.
-	ownCost := nextEntryCostOf(t, own, 0)
 	withLevel := []aggragates.LadderDepth{level, ownView}
-
-	if reason := DepthPriorityHoldReason(priorityEvent(own, "buy", withLevel, ownCost-1), "stopLoss"); !strings.Contains(reason, "holds the wallet until it closes") {
-		t.Errorf("reason = %q, want the raised ladder held behind the full one on an entry the wallet cannot pay for", reason)
+	if front, found := depthPriorityFor(ownView, withLevel); !found || front.TradeID != level.TradeID {
+		t.Errorf("depthPriorityFor = %+v, %v, want the full ladder in front of the raised one", front, found)
 	}
-	if reason := DepthPriorityHoldReason(priorityEvent(own, "buy", withLevel, ownCost), "stopLoss"); reason != "" {
-		t.Errorf("reason = %q, want the raised ladder let through on a wallet that pays for its entry", reason)
+	ownCost := nextEntryCostOf(t, own, 0)
+	if hold := raisedHold(own, withLevel, ownCost-1); !strings.Contains(hold.Reason, "holds the wallet until it closes") {
+		t.Errorf("reason = %q, want the raised ladder held behind the full one on an entry the wallet cannot pay for", hold.Reason)
+	}
+	if hold := raisedHold(own, withLevel, ownCost); hold.Held() {
+		t.Errorf("reason = %q, want the raised ladder let through on a wallet that pays for its entry", hold.Reason)
 	}
 }
 
-// What the raise changes is how deep the ladder may go and what its depths
-// still cost, never what an add costs: a ladder that opened raised places its
-// adds on the multiplier of the row each one reads, exactly as the same ladder
-// without the raise does, so the entry the gate weighs is priced alike.
+// The raise changes how deep a ladder may go and what its depths still cost,
+// never what an add costs: the entry the gate weighs is priced alike.
 func TestDepthPriorityPricesAnAddOfARaisedLadderLikeAnyOther(t *testing.T) {
 	requireDepthPriority(t)
 
 	plain := testutil.LadderDepthTrade(12, "ETH/USDT", walletDepths, walletDepths)
-	raised := openedRaised(plain)
 
-	if got, want := nextEntryCostOf(t, raised, 0), nextEntryCostOf(t, plain, 0); got != want {
+	if got, want := nextEntryCostOf(t, openedRaised(plain), 0), nextEntryCostOf(t, plain, 0); got != want {
 		t.Errorf("an add of the raised ladder costs %f, want the %f the same ladder costs without the raise", got, want)
+	}
+}
+
+// The opened event is the raise and the row beside it only text: a ladder at its
+// stored ceiling whose logs carry the opened row but whose events do not is full
+// and keeps nothing, so the sibling the raised ladder holds goes through.
+func TestDepthPriorityReadsTheRaisedLadderFromItsEventNeverItsRow(t *testing.T) {
+	requireDepthPriority(t)
+
+	raised := raisedAtTheStoredCeiling(14, "LINK/USDT")
+	textOnly := raised
+	textOnly.StrategyEvents = nil
+	keeper, full := ladder.DepthOf(raised), ladder.DepthOf(textOnly)
+	if len(textOnly.Logs) != 1 || full.MaxDepth != walletDepths || full.RemainingCost != 0 {
+		t.Fatalf("view = %+v, want the opened row alone to leave the ladder full and reserving nothing", full)
+	}
+
+	sibling := testutil.LadderDepthTrade(12, "ETH/USDT", 4, walletDepths)
+	short := walletShortFor(t, sibling, keeper.RemainingCost)
+	if !raisedHold(sibling, []aggragates.LadderDepth{keeper}, short).Held() {
+		t.Fatal("fixture drifted: the raised ladder must hold the sibling on this wallet")
+	}
+	if hold := raisedHold(sibling, []aggragates.LadderDepth{full}, short); hold.Held() {
+		t.Errorf("a row without its event raises nothing: the full ladder keeps nothing, got %q", hold.Reason)
 	}
 }

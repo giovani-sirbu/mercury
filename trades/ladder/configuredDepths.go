@@ -25,8 +25,8 @@ func ConfiguredDepths(trade aggragates.Trades) int {
 
 // ceilingOf is ConfiguredDepths for a caller that already holds the rows the
 // ladder trades and has counted its filled entries. DepthOf holds both, and
-// the raise is read off the trade's logs, so handing the rows down is one
-// pass over them per ladder instead of one per reading.
+// the raise is read off the trade's strategy events, so handing the rows down
+// is one pass over them per ladder instead of one per reading.
 func ceilingOf(settings []aggragates.StrategySettings, filled int) int {
 	if len(settings) == 0 {
 		return 0

@@ -6,11 +6,11 @@ import (
 )
 
 // IndecisionMarker is the text every indecision row carries. Like
-// SlowDeclineMarker it is the schema: rebuildState finds the row by this
-// marker anywhere in the message (strings.Contains), never by parsing it, so
-// the text must stay byte-stable across releases or the rows already written
-// stop being found. It neither contains nor is contained in any other marker
-// rebuildState reads, so a row is always found as the one it is.
+// SlowDeclineMarker it is human-readable, byte-stable for cp and the
+// notification filter, and never a schema: the latch is the latched event
+// beside the row (EventLatched). It neither contains nor is contained in any
+// other marker, so a filter that finds a row by its text finds it as the one
+// it is.
 const IndecisionMarker = "smartTakeLoss: indecision direction, take profit from the last buy"
 
 // IndecisionMessage frames the marker exactly as SlowDeclineMessage frames
@@ -24,10 +24,21 @@ func IndecisionMessage(positionType string, reasons []string) string {
 	return slowDeclineRowMessage(positionType, IndecisionMarker, reasons)
 }
 
+// LatchedRow is the indecision gate's latched row at fill: the marker framed with positionType, naming reasons.
+func LatchedRow(positionType string, fill float64, reasons []string) Row {
+	return Row{
+		Message: IndecisionMessage(positionType, reasons),
+		Price:   fill,
+		Gate:    GateIndecision,
+		Event:   EventLatched,
+		Reasons: reasons,
+	}
+}
+
 // indecisionWatched is whether the indecision direction watches a trade:
 // indecisionEligible admits it and it holds IndecisionArmDepth filled entries
-// or more. The row carries the newest fill's price, so the watch needs fills
-// to carry. The flag and the parent check are Armed's and Apply's;
+// or more. The latched event carries the newest fill's price, so the watch
+// needs fills to carry. The flag and the parent check are Armed's and Apply's;
 // rebuildState reads the same watch off the fills it has already folded, with
 // the same bound. Fills never disappear, so a watched ladder stays watched for
 // the rest of its life.
@@ -65,8 +76,6 @@ func indecisionRow(trade aggragates.Trades, st state, block aggragates.SmartTake
 		return st, nil
 	}
 	st.indecision = true
-	return st, &Row{
-		Message: IndecisionMessage(trade.PositionType, block.SlowDeclineBreakReasons),
-		Price:   st.lastFill().Price,
-	}
+	row := LatchedRow(trade.PositionType, st.lastFill().Price, block.SlowDeclineBreakReasons)
+	return st, &row
 }

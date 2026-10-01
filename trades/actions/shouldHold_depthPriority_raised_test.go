@@ -3,41 +3,37 @@ package actions
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/gates"
 	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
 	"github.com/giovani-sirbu/mercury/trades/gates/dynamicparams"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
-// The amounts the opened rows of this file carry: their own, apart from the
-// shipped constants, so a retune moves no expectation — a ladder trades the
-// raise its own row names.
+// The amounts the opened events of this file carry: their own, apart from the
+// shipped constants, so a retune moves no expectation.
 const (
 	raisedPoints = 0.5
 	raisedDepths = 2
 )
 
 // raisedLadderOf is a ladder of the fixture wallet at the given depth that
-// opened raised: the DynamicParams flag on for a long spot parent and the one
-// opened row in its logs, on the same stored rows as every other ladder of
-// the wallet.
+// opened raised: the flag on for a long spot parent and the opened pair the
+// engine's own writer appends, on the stored rows of every other ladder.
 func raisedLadderOf(id uint, symbol string, depth int) aggragates.Trades {
 	trade := testutil.LadderDepthTrade(id, symbol, depth, walletDepths)
 	trade.Strategy.Params.DynamicParams = true
 	trade.Strategy.TradeType = aggragates.Spot
-	trade.Logs = append(trade.Logs, aggragates.TradesLogs{
-		Message: dynamicparams.OpenedMessage(raisedPoints, raisedDepths),
-		Type:    aggragates.LOG_INFO,
-	})
+	row, event := dynamicparams.Opened{Points: raisedPoints, Depths: raisedDepths}.Rows(trade, trade.PositionPrice, time.Time{})
 
-	return trade
+	return aggragates.AppendStrategyRow(trade, row, event)
 }
 
 // raisedWaitingRow is the row the operator reads on a ladder held behind one
-// that has depths left: which ladder the wallet is kept for with its ceiling,
-// and where this one stands with its own.
+// that has depths left: the ladder the wallet is kept for, and this one's own.
 func raisedWaitingRow(priority aggragates.LadderDepth, ownDepth, ownCeiling int) string {
 	return fmt.Sprintf(
 		"Hold stopLoss: "+cooldown.DepthPriorityHoldMarker+", %s at depth %d of %d keeps the wallet for its remaining depths, this ladder waits at depth %d of %d",
@@ -45,15 +41,14 @@ func raisedWaitingRow(priority aggragates.LadderDepth, ownDepth, ownCeiling int)
 	)
 }
 
-// rowsWritten is what a tick added to the trade's logs: the opened row a
-// raised ladder carries is not the tick's doing, so it is left out.
+// rowsWritten is what a tick added to the trade's logs: the opened row a raised
+// ladder carries is not the tick's doing, so it is left out.
 func rowsWritten(before, after aggragates.Trades) []aggragates.TradesLogs {
 	return after.Logs[len(before.Logs):]
 }
 
-// assertRaisedFreeToArm fails when the ladder is held on the tick that arms
-// its next entry: a released tick writes nothing beyond the opened row the
-// ladder already carries.
+// assertRaisedFreeToArm fails when the ladder is held on the tick that arms its
+// next entry: a released tick writes nothing beyond the opened pair it carries.
 func assertRaisedFreeToArm(t *testing.T, trade aggragates.Trades, wallet []aggragates.LadderDepth, free float64) {
 	t.Helper()
 
@@ -61,17 +56,18 @@ func assertRaisedFreeToArm(t *testing.T, trade aggragates.Trades, wallet []aggra
 	if err != nil {
 		t.Fatalf("%s must be free to arm its next entry, got %v", trade.Symbol, err)
 	}
-	if written := rowsWritten(trade, released.Trade); len(written) != 0 {
-		t.Fatalf("%s: no row may be written on a released ladder, got %v", trade.Symbol, messages(written))
+	written := rowsWritten(trade, released.Trade)
+	extra := len(released.Trade.StrategyEvents) - len(trade.StrategyEvents)
+	if len(written) != 0 || extra != 0 {
+		t.Fatalf("%s: no row and no event may be written on a released ladder, got %v and %d events", trade.Symbol, messages(written), extra)
 	}
 }
 
 // A sibling's add waits behind a ladder that opened raised and stands at the
-// depth its stored rows stop at. That ladder was sized for more depths than
-// that, so its reserve is the cost of the ones its opened row added — and a
-// sibling that would spend into it is held, with a row that names the raised
-// ceiling. The same wallet with the ladder stored at that depth has nothing
-// to keep: it is full, and the sibling buys.
+// depth its stored rows stop at: its reserve is the cost of the depths its
+// opened event added, and a sibling that would spend into it is held, with a row
+// that names the raised ceiling. With the ladder stored at that depth it is
+// full, and the sibling buys.
 func TestShouldHoldKeepsTheWalletForARaisedLadderAtItsStoredCeiling(t *testing.T) {
 	keeper := ladder.DepthOf(raisedLadderOf(14, priorityLadder, walletDepths))
 	if keeper.MaxDepth != walletDepths+raisedDepths || keeper.RemainingCost <= 0 {
@@ -80,7 +76,6 @@ func TestShouldHoldKeepsTheWalletForARaisedLadderAtItsStoredCeiling(t *testing.T
 
 	sibling := testutil.LadderDepthTrade(12, "ETH/USDT", 4, walletDepths)
 	wallet := []aggragates.LadderDepth{keeper}
-
 	held, err := ShouldHold(priorityEvent(sibling, "buy", wallet, walletShortOf(t, sibling, keeper.RemainingCost)))
 	if err == nil {
 		t.Fatal("an add that breaks into the raised ladder's remaining depths must wait")
@@ -91,6 +86,7 @@ func TestShouldHoldKeepsTheWalletForARaisedLadderAtItsStoredCeiling(t *testing.T
 	if want := raisedWaitingRow(keeper, 4, walletDepths); held.Trade.Logs[0].Message != want {
 		t.Fatalf("row = %q, want %q", held.Trade.Logs[0].Message, want)
 	}
+	assertNewestPair(t, held.Trade, aggragates.StrategyParamCooldown, cooldown.GateDepthPriority, gates.EventHeld)
 
 	assertFreeToArm(t, sibling, wallet, walletCovering(t, sibling, keeper.RemainingCost))
 
@@ -100,9 +96,8 @@ func TestShouldHoldKeepsTheWalletForARaisedLadderAtItsStoredCeiling(t *testing.T
 	assertFreeToArm(t, sibling, []aggragates.LadderDepth{full}, walletShortOf(t, sibling, keeper.RemainingCost))
 }
 
-// The reserve ends where the raised ceiling does, not the stored one: a
-// raised ladder that has filled the extra depths too is full, keeps nothing,
-// and the sibling buys on the balance that covers its own entry.
+// The reserve ends where the raised ceiling does, not the stored one: a raised
+// ladder that filled the extra depths too is full and the sibling buys.
 func TestShouldHoldReleasesARaisedLadderAtItsRaisedCeiling(t *testing.T) {
 	full := ladder.DepthOf(raisedLadderOf(14, priorityLadder, walletDepths+raisedDepths))
 	if full.Depth != full.MaxDepth || full.RemainingCost != 0 {
@@ -114,11 +109,10 @@ func TestShouldHoldReleasesARaisedLadderAtItsRaisedCeiling(t *testing.T) {
 	assertFreeToArm(t, sibling, []aggragates.LadderDepth{full}, walletCovering(t, sibling, 0))
 }
 
-// The wallet of the five fallen pairs with its deepest ladder standing at the
-// depth its stored rows stop at, having opened raised: it stays the one the
-// wallet is kept for, and every sibling waits behind it with a row that prints
-// the raised ceiling. Read on the stored rows it would be full, reserve
-// nothing, and the wallet would be kept for the next ladder in line.
+// The wallet of the five fallen pairs with its deepest ladder at the depth its
+// stored rows stop at, having opened raised: it stays the one the wallet is kept
+// for and every sibling waits behind it, with a row that prints the raised
+// ceiling. On the stored rows it would be full and reserve nothing.
 func TestShouldHoldKeepsTheFallenWalletForTheRaisedDeepestLadder(t *testing.T) {
 	trades := fallenWallet()
 	for index, trade := range trades {
@@ -154,11 +148,10 @@ func TestShouldHoldKeepsTheFallenWalletForTheRaisedDeepestLadder(t *testing.T) {
 	}
 }
 
-// The ladder the chain is handed is the stored trade carrying its own logs,
-// so the trade being asked about reads its raise as the wallet view does.
-// Two ladders that opened raised and stand level at the stored ceiling are
-// split by their trade ids: the higher one waits behind the lower one, which
-// still has depths left, and the lower one is held by nobody.
+// The trade the chain is handed carries its own events, so the ladder asked
+// about reads its raise as the wallet view does. Two ladders that opened raised
+// and stand level at the stored ceiling split on trade id: the higher waits
+// behind the lower, which still has depths left, and the lower is held by nobody.
 func TestShouldHoldRanksARaisedLadderBeingAskedAboutOnItsRaisedDepths(t *testing.T) {
 	ahead := raisedLadderOf(13, "SOL/USDT", walletDepths)
 	own := raisedLadderOf(14, priorityLadder, walletDepths)
@@ -182,4 +175,25 @@ func TestShouldHoldRanksARaisedLadderBeingAskedAboutOnItsRaisedDepths(t *testing
 	}
 
 	assertRaisedFreeToArm(t, ahead, wallet, walletShortOf(t, ahead, aheadView.RemainingCost))
+}
+
+// The opened event is the raise and the row beside it only text: a ladder at its
+// stored ceiling whose logs carry the opened row but whose events do not is full
+// and keeps nothing, so the sibling the raised ladder holds buys.
+func TestShouldHoldReadsTheRaisedLadderFromItsEventNeverItsRow(t *testing.T) {
+	raised := raisedLadderOf(14, priorityLadder, walletDepths)
+	textOnly := raised
+	textOnly.StrategyEvents = nil
+	keeper, full := ladder.DepthOf(raised), ladder.DepthOf(textOnly)
+	if len(textOnly.Logs) != 1 || full.MaxDepth != walletDepths || full.RemainingCost != 0 {
+		t.Fatalf("view = %+v, want the opened row alone to leave the ladder full and reserving nothing", full)
+	}
+
+	sibling := testutil.LadderDepthTrade(12, "ETH/USDT", 4, walletDepths)
+	short := walletShortOf(t, sibling, keeper.RemainingCost)
+	if _, err := ShouldHold(priorityEvent(sibling, "buy", []aggragates.LadderDepth{keeper}, short)); err == nil {
+		t.Fatal("fixture drifted: the raised ladder must hold the sibling on this wallet")
+	}
+
+	assertFreeToArm(t, sibling, []aggragates.LadderDepth{full}, short)
 }

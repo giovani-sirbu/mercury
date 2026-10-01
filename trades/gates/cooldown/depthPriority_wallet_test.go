@@ -36,11 +36,11 @@ func TestDepthPriorityReservesFromTheFirstFilledDepth(t *testing.T) {
 	newcomer := testutil.LadderDepthTrade(21, "ADA/USDT", 0, deepGridDepths)
 	reserve := view[0].RemainingCost
 
-	if reason := DepthPriorityHoldReason(priorityEvent(newcomer, "new", view, reserve), "buy"); reason == "" {
+	if reason := DepthPriorityHold(priorityEvent(newcomer, "new", view, reserve), "buy").Reason; reason == "" {
 		t.Fatal("a wallet that cannot cover the reserve and a first fill must hold the first fill")
 	}
 	if !strings.Contains(
-		DepthPriorityHoldReason(priorityEvent(newcomer, "new", view, reserve), "buy"),
+		DepthPriorityHold(priorityEvent(newcomer, "new", view, reserve), "buy").Reason,
 		"LINK/USDT at depth 1 of 12",
 	) {
 		t.Fatal("the row must name the ladder the wallet is kept for, however shallow it is")
@@ -81,10 +81,10 @@ func TestDepthPriorityReserveCountsOnlyTheDepthsLeftToFill(t *testing.T) {
 	reserve := viewReserve(t, nearlyDone, walletAsset)
 	free := reserve + nextEntryCostOf(t, waiting, reserve) - 1
 
-	if reason := DepthPriorityHoldReason(priorityEvent(waiting, "buy", nearlyDone, free), "stopLoss"); reason == "" {
+	if reason := DepthPriorityHold(priorityEvent(waiting, "buy", nearlyDone, free), "stopLoss").Reason; reason == "" {
 		t.Fatal("the sibling must wait while the ladder still has a depth to fill")
 	}
-	if reason := DepthPriorityHoldReason(priorityEvent(waiting, "buy", done, free), "stopLoss"); reason != "" {
+	if reason := DepthPriorityHold(priorityEvent(waiting, "buy", done, free), "stopLoss").Reason; reason != "" {
 		t.Fatalf("a full ladder keeps nothing the wallet can already pay for, got %q", reason)
 	}
 }
@@ -106,10 +106,10 @@ func TestDepthPriorityReservesOnlyTheDeepestLaddersOwnRemainder(t *testing.T) {
 	own := testutil.LadderDepthTrade(11, "BTC/USDT", 2, deepGridDepths)
 	ownCost := nextEntryCostOf(t, own, deep.RemainingCost)
 
-	if reason := DepthPriorityHoldReason(priorityEvent(own, "buy", view, deep.RemainingCost+ownCost), "stopLoss"); reason != "" {
+	if reason := DepthPriorityHold(priorityEvent(own, "buy", view, deep.RemainingCost+ownCost), "stopLoss").Reason; reason != "" {
 		t.Fatalf("only the deepest ladder's remainder is reserved, got %q", reason)
 	}
-	if reason := DepthPriorityHoldReason(priorityEvent(own, "buy", view, deep.RemainingCost+ownCost-1), "stopLoss"); reason == "" {
+	if reason := DepthPriorityHold(priorityEvent(own, "buy", view, deep.RemainingCost+ownCost-1), "stopLoss").Reason; reason == "" {
 		t.Fatal("a wallet one unit under the deepest ladder's remainder must hold the entry")
 	}
 }
@@ -141,7 +141,7 @@ func TestDepthPriorityHoldsALadderWhoseCeilingIsUnknown(t *testing.T) {
 	wallet := []aggragates.LadderDepth{own, walletLadder(14, "LINK/USDT", 7)}
 	reserve := viewReserve(t, wallet, walletAsset)
 
-	reason := DepthPriorityHoldReason(priorityEvent(unknown, "buy", wallet, reserve-1), "stopLoss")
+	reason := DepthPriorityHold(priorityEvent(unknown, "buy", wallet, reserve-1), "stopLoss").Reason
 	if !strings.Contains(reason, "LINK/USDT at depth 7 of 8") {
 		t.Fatalf("reason = %q, want the ladder with a known ceiling to keep the wallet", reason)
 	}
@@ -173,7 +173,7 @@ func TestDepthPriorityMeasuresAFractionalCeilingFloored(t *testing.T) {
 	view := []aggragates.LadderDepth{short}
 	free := short.RemainingCost + nextEntryCostOf(t, shallow, short.RemainingCost) - 1
 
-	reason := DepthPriorityHoldReason(priorityEvent(shallow, "buy", view, free), "stopLoss")
+	reason := DepthPriorityHold(priorityEvent(shallow, "buy", view, free), "stopLoss").Reason
 	if !strings.Contains(reason, "LINK/USDT at depth 7 of 8") {
 		t.Fatalf("reason = %q, want the row to print the floored ceiling", reason)
 	}
@@ -196,7 +196,7 @@ func TestDepthPriorityStopsReservingForALadderThatLeavesTheView(t *testing.T) {
 	reserve := viewReserve(t, wallet, walletAsset)
 	ownCost := nextEntryCostOf(t, trade, reserve)
 
-	held := DepthPriorityHoldReason(priorityEvent(trade, "buy", wallet, reserve+ownCost-1), "stopLoss")
+	held := DepthPriorityHold(priorityEvent(trade, "buy", wallet, reserve+ownCost-1), "stopLoss").Reason
 	if !strings.Contains(held, "LINK/USDT at depth 7 of 8") {
 		t.Fatalf("reason = %q, want the deepest ladder keeping the wallet", held)
 	}
@@ -204,11 +204,11 @@ func TestDepthPriorityStopsReservingForALadderThatLeavesTheView(t *testing.T) {
 	released := withoutSymbol(wallet, "LINK/USDT")
 	next := viewReserve(t, released, walletAsset)
 
-	handedOn := DepthPriorityHoldReason(priorityEvent(trade, "buy", released, next+ownCost-1), "stopLoss")
+	handedOn := DepthPriorityHold(priorityEvent(trade, "buy", released, next+ownCost-1), "stopLoss").Reason
 	if !strings.Contains(handedOn, "SOL/USDT at depth 6 of 8") {
 		t.Fatalf("reason = %q, want the next deepest ladder keeping the wallet", handedOn)
 	}
-	if reason := DepthPriorityHoldReason(priorityEvent(trade, "buy", released, next+ownCost), "stopLoss"); reason != "" {
+	if reason := DepthPriorityHold(priorityEvent(trade, "buy", released, next+ownCost), "stopLoss").Reason; reason != "" {
 		t.Fatalf("the wallet covers what the remaining ladders need, got %q", reason)
 	}
 }
@@ -228,12 +228,12 @@ func TestDepthPriorityReleasesEverybodyWhenTheLastCandidateLeaves(t *testing.T) 
 	reserve := viewReserve(t, wallet, walletAsset)
 	free := reserve + nextEntryCostOf(t, trade, reserve) - 1
 
-	if reason := DepthPriorityHoldReason(priorityEvent(trade, "buy", wallet, free), "stopLoss"); reason == "" {
+	if reason := DepthPriorityHold(priorityEvent(trade, "buy", wallet, free), "stopLoss").Reason; reason == "" {
 		t.Fatal("the shallow ladder must wait while the deepest one is in the view")
 	}
 
 	released := withoutSymbol(wallet, "LINK/USDT")
-	if reason := DepthPriorityHoldReason(priorityEvent(trade, "buy", released, free), "stopLoss"); reason != "" {
+	if reason := DepthPriorityHold(priorityEvent(trade, "buy", released, free), "stopLoss").Reason; reason != "" {
 		t.Fatalf("a wallet with no ladder left to finish reserves nothing, got %q", reason)
 	}
 }

@@ -36,9 +36,9 @@ func overBreakEven(trade aggragates.Trades) (price, fromAverage, fromPosition fl
 // the trade's state and carrying the newest fill's price — never the
 // position price, a re-anchor included — beside the proposal it leaves
 // untouched. The row marks and sells nothing. From the next tick the ladder
-// reads latched and held, and no second row goes out however often sophos
-// serves a reading. The indecision direction alone watching the ladder, the
-// other two rules switched off, changes none of it.
+// reads latched and held, and no second row or event goes out however often
+// sophos serves a reading. The indecision direction alone watching the ladder,
+// the other two rules switched off, changes none of it.
 func TestAHeldWatchedLadderIsLatchedOnTheIndecision(t *testing.T) {
 	trade := indecisionLadder()
 	newest := rebuildState(trade).lastFill().Price
@@ -69,8 +69,9 @@ func TestAHeldWatchedLadderIsLatchedOnTheIndecision(t *testing.T) {
 			assertUntouched(t, next, position)
 		}
 	}
-	if rows := carriedRows(latched, IndecisionMarker); rows != 1 {
-		t.Fatalf("one indecision row over every held tick, got %d in %+v", rows, latched.Logs)
+	rows, events := carriedRows(latched, IndecisionMarker), carriedEvents(latched, GateIndecision, EventLatched)
+	if rows != 1 || events != 1 {
+		t.Fatalf("one indecision row and one latched event over every held tick, got %d and %d in %+v and %+v", rows, events, latched.Logs, latched.StrategyEvents)
 	}
 
 	withQuietSlowDeclineExit(t, false)
@@ -83,8 +84,10 @@ func TestAHeldWatchedLadderIsLatchedOnTheIndecision(t *testing.T) {
 // A held ladder both pending and served the indecision gets both rows on its
 // first held tick — the reset row, then the indecision row that latches it,
 // each at the newest fill's price — and sells nothing at the band the same
-// ladder unheld sells at, a protected close included. From the next tick it
-// reads watched, latched and held, not pending, and nothing more is written.
+// ladder unheld sells at, a protected close included. The engines write each
+// row with its event, so the trade carries the reset event and the latched
+// event after it. From the next tick it reads watched, latched and held, not
+// pending, and nothing more is written.
 func TestAHeldPendingLadderServedTheIndecisionIsResetAndLatchedOnOneTick(t *testing.T) {
 	control := Apply(pendingTrade(), "", slowDeclineBand+1, indecisionReading())
 	assertForced(t, control, reasonSellBand)
@@ -92,12 +95,12 @@ func TestAHeldPendingLadderServedTheIndecisionIsResetAndLatchedOnOneTick(t *test
 
 	held := heldBy(pendingTrade(), testutil.At("18:05:00"))
 	protected := Apply(held, "sell", slowDeclineBand+5, indecisionReading())
-	assertRow(t, protected.SlowDecline, resetRow("buy"), slowDeclineLastFill)
+	assertRow(t, protected.SlowDecline, resetMessage("buy"), slowDeclineLastFill)
 	assertRow(t, protected.Indecision, IndecisionMessage("buy", indecisionReasons), slowDeclineLastFill)
 	assertNoSale(t, protected, "sell")
 
 	trade, got := engineTick(held, "", slowDeclineBand+1, testutil.At("18:10:00"), indecisionReading())
-	assertRow(t, got.SlowDecline, resetRow("buy"), slowDeclineLastFill)
+	assertRow(t, got.SlowDecline, resetMessage("buy"), slowDeclineLastFill)
 	assertRow(t, got.Indecision, IndecisionMessage("buy", indecisionReasons), slowDeclineLastFill)
 	assertNoSale(t, got, "")
 	if st := rebuildState(trade); !st.slowDeclineWatched || st.slowDeclinePending || !st.indecision || !st.depthPriorityHeld {
@@ -107,6 +110,9 @@ func TestAHeldPendingLadderServedTheIndecisionIsResetAndLatchedOnOneTick(t *test
 	if rows := len(trade.Logs) - len(held.Logs); rows != 2 || carriedRows(trade, SlowDeclineResetMarker) != 1 || carriedRows(trade, IndecisionMarker) != 1 {
 		t.Fatalf("one reset row and one indecision row, got %+v", trade.Logs)
 	}
+	if written := len(trade.StrategyEvents) - len(held.StrategyEvents); written != 2 || carriedEvents(trade, GateSlowDecline, EventReset) != 1 || carriedEvents(trade, GateIndecision, EventLatched) != 1 {
+		t.Fatalf("one reset event and one latched event, got %+v", trade.StrategyEvents)
+	}
 }
 
 // A latch taken before the hold keeps working through it: the ladder reads
@@ -114,7 +120,7 @@ func TestAHeldPendingLadderServedTheIndecisionIsResetAndLatchedOnOneTick(t *test
 // move against the position price all the same — the larger of that move and
 // the move it is handed, and the move it is handed under break even. The next
 // fill ends the hold and keeps the latch, and the take profit reads the new
-// fill's position price on the one row still.
+// fill's position price on the one row and event still.
 func TestALatchedLadderTheDepthPriorityHoldsStillReadsItsPositionPrice(t *testing.T) {
 	latched := latchedBy(indecisionLadder())
 	held := heldBy(latched, testutil.At("22:00:00"))
@@ -147,26 +153,41 @@ func TestALatchedLadderTheDepthPriorityHoldsStillReadsItsPositionPrice(t *testin
 	if got := TakeProfitPercentage(resumed, price, fromAverage); got != fromPosition || !(fromAverage < fromPosition) {
 		t.Fatalf("resumed, the take profit reads the new fill %v, got %v", fromPosition, got)
 	}
-	if got := Apply(resumed, "", underTheBand, indecisionReading()); got.Indecision != nil || carriedRows(resumed, IndecisionMarker) != 1 {
-		t.Fatalf("one indecision row, before the hold and after it, got %+v on %+v", got, resumed.Logs)
+	if got := Apply(resumed, "", underTheBand, indecisionReading()); got.Indecision != nil || carriedRows(resumed, IndecisionMarker) != 1 || carriedEvents(resumed, GateIndecision, EventLatched) != 1 {
+		t.Fatalf("one indecision row and event, before the hold and after it, got %+v on %+v and %+v", got, resumed.Logs, resumed.StrategyEvents)
 	}
 }
 
-// carriedRows counts the trade's rows naming marker.
+// carriedRows counts the trade's rows naming marker: the text the operator
+// reads, twin of carriedEvents.
 func carriedRows(trade aggragates.Trades, marker string) int {
 	count := 0
-	for _, row := range trade.Logs {
-		if strings.Contains(row.Message, marker) {
+	for _, logged := range trade.Logs {
+		if strings.Contains(logged.Message, marker) {
 			count++
 		}
 	}
 	return count
 }
 
-// Switched off, the gate's rows are ignored by every rule: a held pending
+// carriedEvents counts the trade's smartTakeLoss events of gate and kind: one
+// for every row the engines wrote for it, twin of carriedRows.
+func carriedEvents(trade aggragates.Trades, gate, kind string) int {
+	count := 0
+	for _, event := range trade.StrategyEventsOf(aggragates.StrategyParamSmartTakeLoss, gate) {
+		if event.Kind() == kind {
+			count++
+		}
+	}
+	return count
+}
+
+// Switched off, the gate's events are ignored by every rule: a held pending
 // ladder sells at the band with no reset row, a held watched ladder goes
-// pending on the verdict and is latched on the indecision, and a held latched
-// one reads its position price, as a held pending one reads its newest fill.
+// pending on the verdict and is latched on the indecision, a held pending
+// ladder served the indecision is latched beside the sale and gets no reset
+// row, and a held latched one reads its position price, as a held pending one
+// reads its newest fill.
 func TestSwitchedOffTheDepthPriorityRowsAreIgnored(t *testing.T) {
 	withDepthPriorityPause(t, false)
 	held := heldBy(pendingTrade(), testutil.At("18:05:00"))
@@ -195,7 +216,8 @@ func TestSwitchedOffTheDepthPriorityRowsAreIgnored(t *testing.T) {
 	}
 }
 
-// No row is read as another. No marker the smart take loss folds, nor its
+// No row is taken for another by the filters that find a row by its text (cp,
+// the notification filter). No marker the smart take loss writes, nor its
 // first-fill hold reason, contains another or the depth priority marker, or
 // is contained in either; no framed smart take loss row names the depth
 // priority marker, and the gate's framed row names no smart take loss marker.

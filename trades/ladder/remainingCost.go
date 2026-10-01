@@ -11,7 +11,7 @@ import (
 // cost, together with the asset it spends them in.
 //
 // The rows it walks are the ones the ladder trades (tradedSettings): a ladder
-// that opened raised walks the raised rows, so the depths its opened row added
+// that opened raised walks the raised rows, so the depths its opened event added
 // are reserved for at the raised percentage and multiplier — the depths its
 // first entry was sized for. Read on the stored rows it would report nothing
 // left to pay for at the stored ceiling, and the wallet would be spent from
@@ -63,7 +63,7 @@ func RemainingCost(trade aggragates.Trades) (string, float64) {
 // remainingCostAt is RemainingCost for a caller that already holds the rows the
 // ladder trades, has counted its filled entries and has read its ceiling.
 // DepthOf holds all three, and every surface builds its whole wallet view
-// through DepthOf — folding the same history, or the same logs, again per
+// through DepthOf — folding the same history, or the same events, again per
 // ladder is work the tick path pays for nothing.
 func remainingCostAt(trade aggragates.Trades, settings []aggragates.StrategySettings, filled, ceiling int) (string, float64) {
 	return SpendingAsset(trade), remainingCostFrom(trade, settings, filled, ceiling, trade.PositionPrice)

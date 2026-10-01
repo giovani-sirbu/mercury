@@ -42,10 +42,10 @@ func TestSaveHoldLogCollapsesSameReason(t *testing.T) {
 	at := time.Date(2025, 10, 10, 21, 0, 0, 0, time.UTC)
 	event := holdLogEvent(testutil.NewHoldTrade("stopLoss", false), at)
 
-	event, _ = SaveHoldLog(event, "stopLoss", patternHold)
+	event, _ = SaveHoldLog(event, "stopLoss", Hold{Reason: patternHold})
 	event.Trade.PositionType = "stopLoss"
 	event.Timestamp = at.Add(15 * time.Minute).UnixMilli()
-	event, _ = SaveHoldLog(event, "stopLoss", patternHold)
+	event, _ = SaveHoldLog(event, "stopLoss", Hold{Reason: patternHold})
 
 	if got := holdMessages(event.Trade); len(got) != 1 {
 		t.Fatalf("same reason 15 minutes apart must stay one row, got %v", got)
@@ -58,10 +58,10 @@ func TestSaveHoldLogWritesReasonChange(t *testing.T) {
 	at := time.Date(2025, 10, 10, 21, 0, 0, 0, time.UTC)
 	event := holdLogEvent(testutil.NewHoldTrade("stopLoss", false), at)
 
-	event, _ = SaveHoldLog(event, "stopLoss", patternHold)
+	event, _ = SaveHoldLog(event, "stopLoss", Hold{Reason: patternHold})
 	event.Trade.PositionType = "stopLoss"
 	event.Timestamp = at.Add(time.Minute).UnixMilli()
-	event, _ = SaveHoldLog(event, "stopLoss", spacingHold)
+	event, _ = SaveHoldLog(event, "stopLoss", Hold{Reason: spacingHold})
 
 	got := holdMessages(event.Trade)
 	if len(got) != 2 || !strings.Contains(got[1], "cooldown: depths too close") {
@@ -75,17 +75,17 @@ func TestSaveHoldLogRelogsAfterADay(t *testing.T) {
 	at := time.Date(2025, 10, 10, 21, 0, 0, 0, time.UTC)
 	event := holdLogEvent(testutil.NewHoldTrade("stopLoss", false), at)
 
-	event, _ = SaveHoldLog(event, "stopLoss", patternHold)
+	event, _ = SaveHoldLog(event, "stopLoss", Hold{Reason: patternHold})
 	event.Trade.PositionType = "stopLoss"
 	event.Timestamp = at.Add(holdRelogAfter - time.Minute).UnixMilli()
-	event, _ = SaveHoldLog(event, "stopLoss", patternHold)
+	event, _ = SaveHoldLog(event, "stopLoss", Hold{Reason: patternHold})
 	if got := holdMessages(event.Trade); len(got) != 1 {
 		t.Fatalf("under a day the row must not repeat, got %v", got)
 	}
 
 	event.Trade.PositionType = "stopLoss"
 	event.Timestamp = at.Add(holdRelogAfter + time.Minute).UnixMilli()
-	event, _ = SaveHoldLog(event, "stopLoss", patternHold)
+	event, _ = SaveHoldLog(event, "stopLoss", Hold{Reason: patternHold})
 	got := holdMessages(event.Trade)
 	if len(got) != 2 {
 		t.Fatalf("after a day the same reason must be written again, got %v", got)
@@ -101,9 +101,9 @@ func TestSaveHoldLogWithoutClockNeverRelogs(t *testing.T) {
 	event.Timestamp = 0
 	event.Trade.UpdatedAt = time.Time{}
 
-	event, _ = SaveHoldLog(event, "stopLoss", patternHold)
+	event, _ = SaveHoldLog(event, "stopLoss", Hold{Reason: patternHold})
 	event.Trade.PositionType = "stopLoss"
-	event, _ = SaveHoldLog(event, "stopLoss", patternHold)
+	event, _ = SaveHoldLog(event, "stopLoss", Hold{Reason: patternHold})
 
 	if got := holdMessages(event.Trade); len(got) != 1 {
 		t.Fatalf("no clock means no re-log, got %v", got)

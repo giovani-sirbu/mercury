@@ -19,11 +19,13 @@ type (
 		// opens, on sophos' Super Guppy and Bull Market Support Band reads
 		// (NeedsSmcTrendRoute). On each tick that judges the ladder before its
 		// first entry fills, reads that raise something have
-		// dynamicparams.Opening write the ladder's opened row, naming the
-		// amounts it adds to every row's percentage and depths — both bearish
-		// raise both (dynamicparams.IncreaseBoth), exactly one what
+		// dynamicparams.Opening name the amounts the ladder opens with, which
+		// the engines record as its opened strategy event (with a
+		// human-readable row beside it): what it adds to every row's
+		// percentage and depths — both bearish raise both
+		// (dynamicparams.IncreaseBoth), exactly one what
 		// dynamicparams.MixedIncrease names. From then on every tick trades
-		// the stored rows raised by the amounts that row carries
+		// the stored rows raised by the amounts that event carries
 		// (dynamicparams.RaisedSettings), whatever the reads say, until the
 		// ladder closes. The flag holds nothing.
 		DynamicParams bool `form:"dynamicParams" bson:"dynamicParams" json:"dynamicParams"`

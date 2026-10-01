@@ -8,10 +8,11 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
-// SlowDeclineMarker is the text every slow-decline marker row carries. It is
-// the schema: rebuildState finds the row by this marker anywhere in the
-// message (strings.Contains), never by parsing it, so the text must stay
-// byte-stable across releases or the rows already written stop being found.
+// SlowDeclineMarker is the text every slow-decline pending row carries. It is
+// human-readable, byte-stable for cp and the notification filter, which find
+// the row by it, and never a schema: what a ladder pending from a fill is
+// lives in the pending event beside the row (EventPending), and nothing in
+// this package reads the text back.
 const SlowDeclineMarker = "smartTakeLoss: quiet slow decline, sell at the bollinger band"
 
 // SlowDeclineMessage frames the marker the way gates.SaveHoldLog frames a
@@ -22,9 +23,20 @@ func SlowDeclineMessage(positionType string, reasons []string) string {
 	return slowDeclineRowMessage(positionType, SlowDeclineMarker, reasons)
 }
 
-// slowDeclineRowMessage is the one frame of both slow-decline rows, the
-// marker and the cancel row: "Hold <positionType>: <marker>", then the
-// reasons joined in parentheses when there are any.
+// PendingRow is the slowDecline gate's pending row at fill: the marker framed with positionType, naming reasons.
+func PendingRow(positionType string, fill float64, reasons []string) Row {
+	return Row{
+		Message: SlowDeclineMessage(positionType, reasons),
+		Price:   fill,
+		Gate:    GateSlowDecline,
+		Event:   EventPending,
+		Reasons: reasons,
+	}
+}
+
+// slowDeclineRowMessage is the one frame of the slow-decline and indecision
+// rows: "Hold <positionType>: <marker>", then the reasons joined in
+// parentheses when there are any.
 func slowDeclineRowMessage(positionType, marker string, reasons []string) string {
 	message := fmt.Sprintf("Hold %s: %s", positionType, marker)
 	if len(reasons) == 0 {
@@ -35,10 +47,10 @@ func slowDeclineRowMessage(positionType, marker string, reasons []string) string
 
 // slowDeclineWatched is whether the quiet slow-decline exit watches a trade:
 // QuietSlowDeclineExit on and a long ladder from SlowDeclineArmDepth filled
-// entries. The marker row carries the newest fill's price, so the watch needs
-// fills to carry; it needs that many because a shallow ladder sold at the
-// band only opens the pair to a new one. The flag and the parent check are
-// Armed's; rebuildState reads the same watch off the fills it has already
+// entries. The pending event carries the newest fill's price, so the watch
+// needs fills to carry; it needs that many because a shallow ladder sold at
+// the band only opens the pair to a new one. The flag and the parent check
+// are Armed's; rebuildState reads the same watch off the fills it has already
 // folded, with the same bound. Fills never disappear, so a watched ladder
 // stays watched for the rest of its life.
 func slowDeclineWatched(trade aggragates.Trades) bool {
@@ -46,14 +58,15 @@ func slowDeclineWatched(trade aggragates.Trades) bool {
 }
 
 // slowDeclineGoesPending is the tick a watched ladder goes pending, with the
-// marker row, and the reasons that row names: a watched ladder not pending —
-// never yet, or since a cancel or reset row — that bought a depth within the
-// fill window sophos serves (recentFill), on a tick the quiet slow decline
-// reads for it on the last closed bar (slowDeclineReadsForTheLadder), the
-// row naming SlowDeclineExitReasons, or else reads for it recently with the
-// ladder opened before the bar the verdict stood on
-// (slowDeclinePendsRecently), the row naming SlowDeclineRecentReasons. Apply
-// asks it only on a tick that judges no new fill (slowDeclineRow).
+// pending row, and the reasons that row names: a watched ladder not pending —
+// never yet, or since a cancelled or reset event — that bought a depth within
+// the fill window sophos serves (recentFill), on a tick the quiet slow
+// decline reads for it on the last closed bar
+// (slowDeclineReadsForTheLadder), the row naming SlowDeclineExitReasons, or
+// else reads for it recently with the ladder opened before the bar the
+// verdict stood on (slowDeclinePendsRecently), the row naming
+// SlowDeclineRecentReasons. Apply asks it only on a tick that judges no new
+// fill (slowDeclineRow).
 func slowDeclineGoesPending(st state, block aggragates.SmartTakeLossIndicators) ([]string, bool) {
 	if !st.slowDeclineWatched || st.slowDeclinePending || !recentFill(st.lastFill(), block) {
 		return nil, false

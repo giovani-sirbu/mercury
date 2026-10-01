@@ -6,12 +6,14 @@ import (
 	"time"
 
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/gates"
 )
 
 // Depth spacing is the Cooldown flag's second gate: a gate on the ladder
 // cascading through every depth during one fast drop. It reads nothing but
-// the trade's own fill history and log rows — no indicator, no sophos call, no
-// state of its own — so it costs a fold over rows already in memory.
+// the trade's own fill history and its own depth-spacing events — no
+// indicator, no sophos call — so it costs a fold over rows already in memory.
 //
 // It is therefore only as good as the clocks the calling engine supplies, and
 // it fails OPEN when either is missing. sisyphus backtesting and hermes both
@@ -68,35 +70,37 @@ type depthSpacingState struct {
 	hold time.Duration
 }
 
-// DepthSpacingHoldReason is the Cooldown flag's gate on an open position:
-// the ladder gate. Empty means the chain may proceed. The caller owns the
-// flag, as actions.ShouldHold does for every gate it orders.
+// DepthSpacingHold is the Cooldown flag's gate on an open position: the
+// ladder gate. The zero Hold means the chain may proceed; a refusal names the
+// text of its row and the DepthSpacingEvent that goes beside it
+// (gates.SaveHoldLog writes both). The caller owns the flag, as
+// actions.ShouldHold does for every gate it orders.
 //
 // stopLoss only. This is a "no new capital yet" gate, and a gate must
 // never defer a profitable close: takeProfit is the capital the rest of the
 // ladder is waiting for.
-func DepthSpacingHoldReason(event events.Events, position string) string {
+func DepthSpacingHold(event events.Events, position string) gates.Hold {
 	if position != "stopLoss" {
-		return ""
+		return gates.Hold{}
 	}
 
 	// The tick clock, simulated or wall, from gates.SaveHoldLog. Unknown clocks
 	// never hold, the same fail-open posture as Expired.
 	now := event.TickTime()
 	if now.IsZero() {
-		return ""
+		return gates.Hold{}
 	}
 
 	fills := depthFills(event.Trade)
-	state := depthSpacingEligibleFrom(event.Trade.Logs, fills, now)
+	state := depthSpacingEligibleFrom(event.Trade.StrategyEvents, fills, now)
 	if state.eligibleFrom.IsZero() || !now.UTC().Before(state.eligibleFrom) {
-		return ""
+		return gates.Hold{}
 	}
 
 	// The clock says wait; the market may already have paid instead. See
 	// depthSpacingPriceRelease.go — the hold is a price, not a duration.
 	if depthSpacingPriceReleased(event.Trade, event.Trade.PositionPrice, fills[len(fills)-1].Price, state.step) {
-		return ""
+		return gates.Hold{}
 	}
 
 	// The message must be stable for as long as one hold stands: gates.SaveHoldLog
@@ -111,7 +115,7 @@ func DepthSpacingHoldReason(event events.Events, position string) string {
 	// held. len(fills) is ladder.CountFilledEntries by construction
 	// (depthFillTimes mirrors it row for row), the trade's own depth on the
 	// same tick. The step printed is never below 1, and the first held tick
-	// already reports the step the row will keep, because the tick is folded
+	// already reports the step its event will keep, because the tick is folded
 	// in as the newest activation.
 	// The release price is in the row because it is the other half of the
 	// decision: an operator reading the parked duration alone cannot tell how
@@ -119,15 +123,37 @@ func DepthSpacingHoldReason(event events.Events, position string) string {
 	// fill and the settings row, both frozen while the hold stands, so the
 	// message stays byte-identical tick to tick and SaveHoldLog still
 	// collapses it.
-	release, ok := depthSpacingReleasePrice(event.Trade, fills[len(fills)-1].Price, state.step)
-	if !ok {
+	data := DepthSpacingEvent{
+		Event: gates.EventHeld,
+		Depth: len(fills),
+		Step:  state.step,
+		Hold:  state.hold,
+	}
+	if release, ok := depthSpacingReleasePrice(event.Trade, fills[len(fills)-1].Price, state.step); ok {
+		data.Release = release
+	}
+
+	return gates.Hold{
+		Reason: depthSpacingHoldMessage(data),
+		Param:  aggragates.StrategyParamCooldown,
+		Gate:   GateDepthSpacing,
+		Data:   data,
+	}
+}
+
+// depthSpacingHoldMessage is the hold's row text, formatted from the event
+// that goes beside it. It names the release price only when the event carries
+// one: depthSpacingReleasePrice answers a price above zero or nothing, so a
+// zero Release is the hold that could not be priced.
+func depthSpacingHoldMessage(data DepthSpacingEvent) string {
+	if data.Release <= 0 {
 		return fmt.Sprintf(
 			"cooldown: depths too close (depth %d, step %d), next add parked for %s",
-			len(fills), state.step, state.hold,
+			data.Depth, data.Step, data.Hold,
 		)
 	}
 	return fmt.Sprintf(
 		"cooldown: depths too close (depth %d, step %d), next add parked for %s or until %s",
-		len(fills), state.step, state.hold, strconv.FormatFloat(release, 'f', -1, 64),
+		data.Depth, data.Step, data.Hold, strconv.FormatFloat(data.Release, 'f', -1, 64),
 	)
 }

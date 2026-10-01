@@ -335,7 +335,7 @@ func rowsTail(rows []aggragates.StrategySettings, firstQuantity float64, filled,
 }
 
 // A ladder that opened raised is not done at its stored ceiling: its reserve
-// walks the depths the opened row added, each on the row that entry reads.
+// walks the depths the opened event added, each on the row that entry reads.
 //
 // Four entries on the four-row grid, position at 16: the stored rows allow
 // four depths and leave nothing to pay for. Raised by two depths the ladder's
@@ -350,7 +350,7 @@ func TestRemainingCostOfARaisedLadderAtItsStoredCeilingWalksTheExtraDepths(t *te
 		t.Fatalf("cost = %v, want a ladder at its stored ceiling to have nothing left", cost)
 	}
 
-	raised := withOpenedRow(stored, 0, raiseDepths)
+	raised := withOpenedEvent(stored, 0, raiseDepths)
 	if got := ConfiguredDepths(raised); got != len(grid)+raiseDepths {
 		t.Fatalf("ceiling = %d, want the stored ceiling raised by %d", got, raiseDepths)
 	}
@@ -367,7 +367,7 @@ func TestRemainingCostOfARaisedLadderAtItsStoredCeilingWalksTheExtraDepths(t *te
 
 // Short of the stored ceiling the extra depths are simply more tail: the
 // reserve of a raised ladder is the stored one plus what the added depths
-// cost, and the percentage an opened row adds steps every remaining entry
+// cost, and the percentage an opened event adds steps every remaining entry
 // further down the grid, so the same depths come to less.
 //
 // One entry filled, position at 16: the stored tail is 396 (see the row-by-row
@@ -380,7 +380,7 @@ func TestRemainingCostOfARaisedLadderIsTheStoredTailPlusTheExtraDepths(t *testin
 	_, storedCost := RemainingCost(stored)
 	testutil.AssertFloatEqual(t, storedCost, 396, rowsEpsilon, "the stored tail")
 
-	_, deeper := RemainingCost(withOpenedRow(stored, 0, 1))
+	_, deeper := RemainingCost(withOpenedEvent(stored, 0, 1))
 	testutil.AssertFloatEqual(t, deeper, 396+252, rowsEpsilon, "the stored tail and one extra depth")
 
 	for _, amounts := range []struct {
@@ -394,23 +394,23 @@ func TestRemainingCostOfARaisedLadderIsTheStoredTailPlusTheExtraDepths(t *testin
 		raisedRows := dynamicparams.RaiseBy(stored.StrategyPair.StrategySettings, amounts.points, amounts.depths)
 		want := rowsTail(raisedRows, 1, 1, 4+amounts.depths, 16)
 
-		_, cost := RemainingCost(withOpenedRow(stored, amounts.points, amounts.depths))
+		_, cost := RemainingCost(withOpenedEvent(stored, amounts.points, amounts.depths))
 		testutil.AssertFloatEqual(t, cost, want, rowsEpsilon+want*rowsEpsilon, amounts.name+": the tail on the raised rows")
 	}
 
-	_, steeper := RemainingCost(withOpenedRow(stored, raisePoints, 0))
+	_, steeper := RemainingCost(withOpenedEvent(stored, raisePoints, 0))
 	if steeper >= storedCost {
 		t.Fatalf("a wider grid costs %v, want under the stored %v: the same entries are bought lower", steeper, storedCost)
 	}
 }
 
 // A raised inverse ladder is not raised at all — the flag shapes long ladders
-// only — so its reserve stays the stored one, in base, whatever its logs say.
+// only — so its reserve stays the stored one, in base, whatever its events say.
 func TestRemainingCostOfAnInverseLadderIgnoresAnOpenedRow(t *testing.T) {
 	stored := rowsInverse(rowsLadder(1, 16, 4, rowsGrid()...))
 
 	_, want := RemainingCost(stored)
-	_, got := RemainingCost(withOpenedRow(stored, raisePoints, raiseDepths))
+	_, got := RemainingCost(withOpenedEvent(stored, raisePoints, raiseDepths))
 
 	if got != want {
 		t.Fatalf("cost = %v, want the stored %v: an inverse ladder keeps its configured rows", got, want)

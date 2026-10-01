@@ -15,7 +15,7 @@ import (
 //
 // The base row, through ladder.SettingsIndexOrBase(settings, 0), is the row
 // the reference levels were priced from (firstFillLevelsFrom) — the same p
-// the entered row promised to double. Sizing is untouched:
+// the entered event promised to double. Sizing is untouched:
 // ladder.CalculateInitialBid reads the settings on the trade, not this copy.
 func WidenSettingsForNextDepth(settings []aggragates.StrategySettings) []aggragates.StrategySettings {
 	if len(settings) == 0 {

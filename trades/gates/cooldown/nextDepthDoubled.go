@@ -11,6 +11,8 @@ import (
 // bar as a local top and the market disagreed; the ladder is then one step
 // closer to the next top than it planned for, and asking the second depth to
 // come 2p down instead of p puts it where the first depth would have been.
+// The release is the entered event the first-fill gate wrote, and the
+// reference is the one its first activated event set (firstFillState).
 //
 // Only while the ladder is exactly one fill deep: the doubling is a one-time
 // correction on the depth that follows the wrong call, not a wider grid.

@@ -32,27 +32,28 @@
 // reads for the ladder — the verdict, the leg on and quiet with the ladder
 // smooth from the bar of its newest fill (slowDeclineReadsForTheLadder), or
 // the decline read recently for a ladder whose first fill came before the bar
-// the verdict stood on (slowDeclinePendsRecently) — writes one marker row
-// (SlowDeclineMarker, carrying the newest fill's price, naming the reasons of
-// the last closed bar when it reads for the ladder and those of the recent
-// bar otherwise), and the trade is PENDING from that fill. A ladder opened
-// after that bar does not go pending on it, so the ladder a sale at the band
-// opens next on the pair does not go pending on the bar the one before it
-// went pending on. A fill it takes while pending is judged on the first tick
-// sophos serves a reading on, its sell band positive (judgeTheNewestFill):
-// the leg still on and quiet, or the decline read recently for the ladder
-// from that fill, confirms the exit — the marker row again, carrying the new
-// fill's price, and the trade pending from it — so a fill that lands while
-// such a recent bar is served never cancels it; anything else cancels it
-// with one row (SlowDeclineCancelMarker, naming what broke, carrying the new
-// fill's price). A cancelled trade is watched and not pending, and goes
-// pending again only as above; a pending one stays pending, however old its
-// newest fill grows, until its sale, a cancel row or a reset row. The
-// judgement comes before the band is read, so the band, served only with a
-// reading, never sells on a fill not judged yet. The fill that takes the
-// ladder to its last depth is never judged: the trade stays pending from
-// where it was. The rows hold prices, so a later fill at the very price the
-// trade is pending from reads as judged.
+// the verdict stood on (slowDeclinePendsRecently) — writes one row (a pending
+// event beside the text SlowDeclineMarker frames, carrying the newest fill's
+// price, naming the reasons of the last closed bar when it reads for the
+// ladder and those of the recent bar otherwise), and the trade is PENDING
+// from that fill. A ladder opened after that bar does not go pending on it,
+// so the ladder a sale at the band opens next on the pair does not go pending
+// on the bar the one before it went pending on. A fill it takes while pending
+// is judged on the first tick sophos serves a reading on, its sell band
+// positive (judgeTheNewestFill): the leg still on and quiet, or the decline
+// read recently for the ladder from that fill, confirms the exit — the
+// pending row again, carrying the new fill's price, and the trade pending
+// from it — so a fill that lands while such a recent bar is served never
+// cancels it; anything else cancels it with one row (a cancelled event
+// beside the text SlowDeclineCancelMarker frames, naming what broke,
+// carrying the new fill's price). A cancelled trade is watched and not
+// pending, and goes pending again only as above; a pending one stays pending,
+// however old its newest fill grows, until its sale, a cancelled event or a
+// reset event. The judgement comes before the band is read, so the band,
+// served only with a reading, never sells on a fill not judged yet. The fill
+// that takes the ladder to its last depth is never judged: the trade stays
+// pending from where it was. The events hold prices, so a later fill at the
+// very price the trade is pending from reads as judged.
 //
 // The sell band is a pending trade's one sale of this rule: it sells on the
 // first tick at or over the band, while the ladder's adds go on as the ladder
@@ -67,8 +68,8 @@
 // a close under the minimum profit, so on a tick between break even and the
 // price that clears it the take profit is proposed and refused, and no band
 // is read on that tick. The same verdict holds a long parent's first fill
-// (EntryHoldReason, asked by ShouldHold), so no new ladder opens into the
-// decline.
+// (EntryHold, asked by ShouldHold, which writes its held event), so no new
+// ladder opens into the decline.
 //
 // CapitalProtectionExit switches the capital protection exit. A long spot
 // ladder outside an impasse strategy is WATCHED for it once it has filled its
@@ -79,7 +80,8 @@
 // timeframe's reads bearish; the first tick at or over that band while it
 // does sells the ladder (capitalProtectionReached). The rule writes no marker
 // row and keeps no state: every tick reads the band and the trend afresh, and
-// it holds nothing.
+// it holds nothing. Its sale is recorded by the exit row (ExitRow) and the
+// sold event beside it, which no fold reads.
 //
 // IndecisionDirection switches the indecision direction. A long spot ladder
 // is WATCHED for it from IndecisionArmDepth filled entries
@@ -95,34 +97,35 @@
 // timeframe's reads bearish, while its IndecisionSmcTrend is on — so a
 // watched ladder that is not pending, or that sophos reads as a leg on and
 // quiet, is latched too; on a leg on and quiet the row names only that
-// reading. The first tick a watched ladder is served it on writes one row
-// (IndecisionMarker, carrying the newest fill's price, naming
-// SlowDeclineBreakReasons), and the ladder is LATCHED until it closes: no row
-// takes the latch away. From break even up a latched ladder's take profit is
-// measured from its position price — the `buy` row's own `percentage` — as
-// well as from its average entry price: the engines hand
-// strategies.GetPosition the larger of the moves (TakeProfitPercentage), so
-// the take profit arms once the profit is zero or more instead of waiting for
-// the average's take profit, and hasProfit still gates that arming. The
-// trailing take profit's sale runs the engines' own `sell` chain, hasProfit
-// included, as on every ladder: a close under the minimum profit is refused,
-// and the trade stays in takeProfit and retries on the next print. Under
-// break even nothing changes, and the rule sells nothing of its own.
+// reading. The first tick a watched ladder is served it on writes one row (a
+// latched event beside the text IndecisionMarker frames, carrying the newest
+// fill's price, naming SlowDeclineBreakReasons), and the ladder is LATCHED
+// until it closes: no event takes the latch away. From break even up a
+// latched ladder's take profit is measured from its position price — the
+// `buy` row's own `percentage` — as well as from its average entry price: the
+// engines hand strategies.GetPosition the larger of the moves
+// (TakeProfitPercentage), so the take profit arms once the profit is zero or
+// more instead of waiting for the average's take profit, and hasProfit still
+// gates that arming. The trailing take profit's sale runs the engines' own
+// `sell` chain, hasProfit included, as on every ladder: a close under the
+// minimum profit is refused, and the trade stays in takeProfit and retries on
+// the next print. Under break even nothing changes, and the rule sells
+// nothing of its own.
 //
 // DepthPriorityHoldPausesSmartTakeLoss switches the pause a depth priority
 // hold puts on the two exits, the quiet slow decline and capital protection.
-// A ladder is HELD while it carries a row of the cooldown depth priority gate
-// (cooldown.DepthPriorityHoldMarker) stamped after its newest fill
+// A ladder is HELD while it carries an event of the cooldown depth priority
+// gate (cooldown.GateDepthPriority) stamped after its newest fill
 // (depthPriorityHeld), and its next fill ends the hold. While held, neither
 // exit reads it: it goes pending on no reading, a new fill is judged on
 // none, and it sells at neither band. A pending ladder is reset on its first
-// held tick with one row (SlowDeclineResetMarker, carrying the newest fill's
-// price), which rebuildState folds like a cancel row, so the ladder goes
-// pending again only as above once the hold has ended. The indecision
-// direction is not paused: a held ladder is latched on a reading as on any
-// other tick, and a latched ladder's take profit reads its position price
-// while the hold lasts; only the pending reading, from the newest fill,
-// waits for the next fill.
+// held tick with one row (a reset event beside the text
+// SlowDeclineResetMarker frames, carrying the newest fill's price), which
+// rebuildState folds like a cancelled event, so the ladder goes pending again
+// only as above once the hold has ended. The indecision direction is not
+// paused: a held ladder is latched on a reading as on any other tick, and a
+// latched ladder's take profit reads its position price while the hold lasts;
+// only the pending reading, from the newest fill, waits for the next fill.
 //
 // The two exits' sales — at the sell band and at the upper band — are the
 // engines' existing sellLoss chain (cancelPendingOrder, acceptLoss, sell,
@@ -134,20 +137,23 @@
 // included — is never replaced, and no rule changes a chain: the trailing
 // take profit's sale runs the engines' own `sell` chain on every ladder. A
 // rule switched off watches no ladder: it writes no row, sells nothing, holds
-// nothing, and the rows it wrote earlier are ignored.
+// nothing, and the events it wrote earlier are ignored.
 //
-// State lives in the trade's own rows only — trade.Logs for the slow-decline
-// marker, cancel and reset rows and for the indecision row, folded in order,
-// and for the depth priority hold rows, read by their stamps, trade.History
-// for the fills — and is rebuilt on every tick (rebuildState);
-// there is no Redis key, no column and nothing on trade.PositionPrice. A row
-// an older release wrote for a rule that no longer exists carries no marker
-// rebuildState reads, and is ignored.
+// State lives in the trade's own strategy events (trade.StrategyEvents) and
+// its history: the smartTakeLoss events of the slow-decline gate (pending,
+// cancelled, reset) and of the indecision gate (latched), folded in slice
+// order, the cooldown depth priority gate's events, read by their stamps, and
+// trade.History for the fills. It is rebuilt on every tick (rebuildState);
+// there is no Redis key, no column and nothing on trade.PositionPrice. The
+// trade's log rows are the output an operator reads and nothing reads them
+// back: a marker text carries no state, and a row without its event carries
+// nothing. An event whose gate or kind the fold does not know is ignored.
 //
 // Apply is the single entry point for the exits; hermes, sisyphus backtesting
 // and sisyphus live-testing call it identically after the ladder has chosen a
-// position and write the rows it hands back with their own clock (LogRow,
-// ExitMessage). Armed tells hermes and live-testing which trades keep their
+// position and write the rows it hands back — each as a log row and its
+// event under one stamp of their own clock (Rows), the exit row built with
+// ExitRow. Armed tells hermes and live-testing which trades keep their
 // tick when the ladder proposes nothing, and ExitReached tells sisyphus
 // backtesting which prints of a blocked trade can sell: any print under a
 // funds block, and under a profit block the prints at or under the block's

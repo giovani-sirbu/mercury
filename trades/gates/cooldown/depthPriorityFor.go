@@ -72,10 +72,10 @@ import "github.com/giovani-sirbu/mercury/trades/aggragates"
 // own takes part in the ranking whether or not the view carries it. The view
 // is what the OTHER ladders see, built on the engine's own schedule, while
 // the trade being ticked knows its own depth and costs first-hand — read off
-// its own logs and rows, a raise included, by the helper that builds the view. Judged
-// against the view alone it would be parked behind a shallower ladder the
-// moment the wallet could pay for it again, which is the inversion this gate
-// exists to avoid.
+// its own events and rows, a raise included, by the helper that builds the
+// view. Judged against the view alone it would be parked behind a shallower
+// ladder the moment the wallet could pay for it again, which is the inversion
+// this gate exists to avoid.
 //
 // own's own row is skipped by its trade id, explicitly. With the depth as the
 // only key it did not have to be — an active own met itself as the best
