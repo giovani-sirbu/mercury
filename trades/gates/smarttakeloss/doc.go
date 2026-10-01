@@ -113,17 +113,19 @@
 // nothing of its own.
 //
 // DepthPriorityHoldPausesSmartTakeLoss switches the pause a depth priority
-// hold puts on all three rules. A ladder is HELD while it carries an event of
-// the cooldown depth priority gate (cooldown.GateDepthPriority) stamped after
-// its newest fill (depthPriorityHeld), and its next fill ends the hold. While
-// held, no rule reads it: it goes pending on no reading, a new fill is judged
-// on none, it is latched on none, and it sells at neither band. A pending
-// ladder is reset on its first held tick with one row (a reset event beside
-// the text SlowDeclineResetMarker frames, carrying the newest fill's price),
-// which rebuildState folds like a cancelled event, so the ladder goes pending
-// again only as above once the hold has ended. A latch set before the hold
-// keeps its event, but while the hold lasts the take profit reads the average
-// entry price alone.
+// hold puts on the two exits, the quiet slow decline and capital protection.
+// A ladder is HELD while it carries an event of the cooldown depth priority
+// gate (cooldown.GateDepthPriority) stamped after its newest fill
+// (depthPriorityHeld), and its next fill ends the hold. While held, neither
+// exit reads it: it goes pending on no reading, a new fill is judged on
+// none, and it sells at neither band. A pending ladder is reset on its first
+// held tick with one row (a reset event beside the text
+// SlowDeclineResetMarker frames, carrying the newest fill's price), which
+// rebuildState folds like a cancelled event, so the ladder goes pending again
+// only as above once the hold has ended. The indecision direction is not
+// paused: a held ladder is latched on a reading as on any other tick, and a
+// latched ladder's take profit reads its position price while the hold lasts;
+// only the pending reading, from the newest fill, waits for the next fill.
 //
 // The two exits' sales — at the sell band and at the upper band — are the
 // engines' existing sellLoss chain (cancelPendingOrder, acceptLoss, sell,

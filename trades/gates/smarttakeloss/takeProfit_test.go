@@ -321,3 +321,67 @@ func TestTakeProfitEventScanAgreesWithRebuildState(t *testing.T) {
 		t.Error("switched off, the indecision direction's events are found by no scan")
 	}
 }
+
+// While a depth priority holds the ladder (depthPriorityHeld) the pending
+// reading — the move against the newest fill — waits for the next fill, and
+// the latched reading — the move against the position price — applies all the
+// same: the hold pauses the quiet slow-decline exit, never the indecision
+// direction. A ladder both pending and latched reads the larger of the move it
+// is handed and the latched move, the position price's re-anchor over or
+// under the newest fill, and under break even it reads its input. Each
+// control is the same ladder unheld, and switched off the pause a held ladder
+// reads as an unheld one. Every product is rounded on its own (an explicit
+// conversion), so the compiler cannot fuse it into the subtraction a move
+// makes.
+func TestTheHeldTakeProfitSkipsThePendingReadingAndKeepsTheLatchedOne(t *testing.T) {
+	newest := shallowDecline().PositionPrice
+	average := ladder.AverageEntryPrice(shallowDecline())
+	price := float64(average * 1.01)
+	handed := moveAgainst(price, average)
+	over, under := float64(newest*1.01), float64(newest*0.99)
+	hold := func(trade aggragates.Trades) aggragates.Trades {
+		return heldBy(trade, testutil.At("22:00:00"))
+	}
+	pending := withRow(shallowDecline(), PendingRow("buy", newest, slowDeclineReasons), testutil.At("15:00:00"))
+	latched := latchedBy(shallowDecline())
+	both := latchedBy(pending)
+	if st := rebuildState(hold(both)); !st.slowDeclinePending || !st.indecision || !st.depthPriorityHeld || !(handed < moveAgainst(price, newest)) {
+		t.Fatalf("fixture drifted: pending, latched and held, the newest fill's move over the input, got %+v", st)
+	}
+
+	reanchored := func(trade aggragates.Trades, positionPrice float64) aggragates.Trades {
+		trade.PositionPrice = positionPrice
+		return trade
+	}
+	for name, tc := range map[string]struct {
+		trade        aggragates.Trades
+		held, unheld float64
+	}{
+		"pending alone":                       {pending, handed, moveAgainst(price, newest)},
+		"latched alone, re-anchored over":     {reanchored(latched, over), moveAgainst(price, over), moveAgainst(price, over)},
+		"pending and latched, over":           {reanchored(both, over), moveAgainst(price, over), moveAgainst(price, newest)},
+		"pending and latched, under":          {reanchored(both, under), moveAgainst(price, under), moveAgainst(price, under)},
+		"pending and latched at the position": {both, moveAgainst(price, newest), moveAgainst(price, newest)},
+	} {
+		if got := TakeProfitPercentage(tc.trade, price, handed); got != tc.unheld {
+			t.Errorf("%s: control, unheld the take profit reads %v, got %v", name, tc.unheld, got)
+		}
+		if got := TakeProfitPercentage(hold(tc.trade), price, handed); got != tc.held {
+			t.Errorf("%s: held the take profit reads %v, got %v", name, tc.held, got)
+		}
+	}
+
+	larger := moveAgainst(price, under) + 1
+	if got := TakeProfitPercentage(hold(reanchored(both, under)), price, larger); got != larger {
+		t.Errorf("held, an input larger than the latched move comes back, got %v want %v", got, larger)
+	}
+	below := average - 1
+	if input := moveAgainst(below, average); input >= 0 || TakeProfitPercentage(hold(both), below, input) != input {
+		t.Errorf("held, under break even the input comes back, got %v for %v", TakeProfitPercentage(hold(both), below, input), input)
+	}
+
+	withDepthPriorityPause(t, false)
+	if got := TakeProfitPercentage(hold(reanchored(both, over)), price, handed); got != moveAgainst(price, newest) {
+		t.Errorf("switched off, the held ladder reads as the unheld one %v, got %v", moveAgainst(price, newest), got)
+	}
+}

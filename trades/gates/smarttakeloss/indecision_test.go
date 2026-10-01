@@ -1,13 +1,13 @@
 package smarttakeloss
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
-	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
 // The indecision row's text is pinned like the slow-decline rows': the marker
@@ -146,27 +146,33 @@ func TestApplyCancelsAndLatchesOnOneTick(t *testing.T) {
 	assertNoSale(t, Apply(trade, "", slowDeclineBand, indecisionReading()), "")
 }
 
-// While the depth priority holds a ladder no latch starts on it, and a latch
-// set before the hold keeps its row while its effects wait for the next
-// fill: the take profit reads the move it is handed.
-func TestADepthPriorityHoldSuspendsTheIndecisionDirection(t *testing.T) {
-	trade := testutil.LadderTrade(false, fills(IndecisionArmDepth, "17:38:00")...)
-	if got := Apply(trade, "", underTheBand, indecisionReading()); got.Indecision == nil {
-		t.Fatalf("control: the reading latches the ladder, got %+v", got)
+// The depth priority hold pauses the quiet slow decline and capital
+// protection, never the indecision direction: a held watched ladder gets the
+// row the same ladder gets unheld — the row and the event it files, which the
+// Row carries — and a held latched ladder's take profit reads the move
+// against its position price as the unheld one does.
+func TestADepthPriorityHoldLeavesTheIndecisionDirectionOn(t *testing.T) {
+	trade := indecisionLadder()
+	unheld := Apply(trade, "", underTheBand, indecisionReading())
+	assertRow(t, unheld.Indecision, IndecisionMessage("buy", indecisionReasons), trade.PositionPrice)
+	held := Apply(heldBy(trade, testutil.At("18:00:00")), "", underTheBand, indecisionReading())
+	if held.Indecision == nil || !reflect.DeepEqual(*held.Indecision, *unheld.Indecision) || held.SlowDecline != nil || held.Position != "" || held.Reason != "" {
+		t.Fatalf("held, the ladder gets the unheld row and nothing else, got %+v want %+v", held, unheld)
 	}
-	assertUntouched(t, Apply(heldBy(trade, testutil.At("18:00:00")), "", underTheBand, indecisionReading()), "")
 
 	latched := latchedBy(trade)
-	held := heldBy(latched, testutil.At("22:00:00"))
-	if st := rebuildState(held); !st.indecision || !st.depthPriorityHeld {
+	heldLatched := heldBy(latched, testutil.At("22:00:00"))
+	if st := rebuildState(heldLatched); !st.indecision || !st.depthPriorityHeld {
 		t.Fatalf("fixture drifted: latched and held, got %+v", st)
 	}
-	price := ladder.AverageEntryPrice(latched) + 1
-	plain := moveAgainst(price, ladder.AverageEntryPrice(latched))
-	if got := TakeProfitPercentage(latched, price, plain); got == plain {
-		t.Fatal("control: a latched ladder's take profit reads its position price")
+	price, fromAverage, fromPosition := overBreakEven(latched)
+	if !(fromAverage < fromPosition) {
+		t.Fatal("fixture drifted: the position price's move must exceed the average entry price's")
 	}
-	if got := TakeProfitPercentage(held, price, plain); got != plain {
-		t.Fatalf("held, the take profit reads the move it is handed, got %v want %v", got, plain)
+	if got := TakeProfitPercentage(latched, price, fromAverage); got != fromPosition {
+		t.Fatalf("control: a latched ladder's take profit reads its position price %v, got %v", fromPosition, got)
+	}
+	if got := TakeProfitPercentage(heldLatched, price, fromAverage); got != fromPosition {
+		t.Fatalf("held, the take profit reads the position price %v, got %v", fromPosition, got)
 	}
 }

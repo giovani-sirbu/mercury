@@ -46,11 +46,13 @@ const (
 	// its new fill, the first-fill hold or the indecision latch.
 	SlowDeclineNeedsRecentFill = true
 	// DepthPriorityHoldPausesSmartTakeLoss switches the pause a depth priority
-	// hold puts on the smart take loss (depthPriorityHeld): from a cooldown
-	// depth priority hold row stamped after a ladder's newest fill until its
-	// next fill, no rule reads, marks, judges, latches or sells that ladder,
-	// and a pending exit is reset with one row. Switched off, the hold rows
-	// are ignored.
+	// hold puts on the quiet slow-decline exit and capital protection
+	// (depthPriorityHeld): from a cooldown depth priority hold row stamped
+	// after a ladder's newest fill until its next fill, neither exit reads,
+	// marks, judges or sells that ladder, and a pending exit is reset with one
+	// row. The indecision direction is not paused: the latch lands during the
+	// hold, and a latched ladder's take profit reads its position price.
+	// Switched off, the hold rows are ignored.
 	DepthPriorityHoldPausesSmartTakeLoss = true
 )
 

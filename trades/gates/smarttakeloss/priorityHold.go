@@ -33,12 +33,14 @@ func ResetRow(positionType string, fill float64) Row {
 }
 
 // depthPriorityHeld is whether a depth priority holds the ladder, which
-// pauses the smart take loss on it (Apply, TakeProfitPercentage):
-// DepthPriorityHoldPausesSmartTakeLoss on, and the trade carries an event of
-// the cooldown depth priority gate (cooldown.GateDepthPriority) stamped
-// strictly after its newest entry fill — newest in slice order, as
-// rebuildState folds the fills. The gate has one kind, its hold, so the
-// event is not decoded.
+// pauses the quiet slow-decline exit and capital protection on it (Apply,
+// TakeProfitPercentage): DepthPriorityHoldPausesSmartTakeLoss on, and the
+// trade carries an event of the cooldown depth priority gate
+// (cooldown.GateDepthPriority) stamped strictly after its newest entry fill —
+// newest in slice order, as rebuildState folds the fills. The gate has one
+// kind, its hold, so the event is not decoded. The indecision direction is
+// not paused: a held ladder is latched on a reading, and a latched ladder's
+// take profit reads its position price, all the same.
 //
 // The comparison is the event's CreatedAt against the fill's history stamp
 // (entryFill.At). gates.SaveHoldLog stamps the event with the tick clock, as

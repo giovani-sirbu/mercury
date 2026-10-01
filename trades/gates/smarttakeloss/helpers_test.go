@@ -22,8 +22,15 @@ const lastDepthFills = 8
 const capitalProtectionBand = 172.40
 
 // fills is the w3s ladder n deep: the first n−1 fills a quarter hour apart
-// from 08:00, the newest stamped at lastClock.
+// from 08:00, the newest stamped at lastClock. A ladder zero deep — what "one
+// short of the arm depth" is when the arm depth is one — holds no entry: its
+// one history row is the bookkeeping row at ladder.AccountingPriceCeiling,
+// which adds no depth, so the ladder is unwatched and a test that reads
+// History[0] still finds a row.
 func fills(n int, lastClock string) []testutil.LadderFill {
+	if n <= 0 {
+		return []testutil.LadderFill{{Price: ladder.AccountingPriceCeiling, At: testutil.At(lastClock)}}
+	}
 	clocks := make([]string, n)
 	for index := range clocks {
 		clocks[index] = fmt.Sprintf("%02d:%02d:00", 8+index/4, (index%4)*15)
