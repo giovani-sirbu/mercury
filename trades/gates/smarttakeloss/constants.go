@@ -23,7 +23,7 @@ const (
 	// ladder on the next print: while the leg stays on and quiet each new
 	// ladder would sell out again as soon as it went pending. The first-fill
 	// hold (EntryHoldReason) reads the verdict alone and does not wait for it.
-	SlowDeclineArmDepth = 2
+	SlowDeclineArmDepth = 1
 	// IndecisionDirection switches the indecision direction as a whole: its
 	// watch (indecisionWatched), its row and the take profit a latched ladder
 	// reads from its position price (TakeProfitPercentage). Switched off it
@@ -36,7 +36,7 @@ const (
 	// and its row goes out for it, and an indecision row already on a
 	// shallower ladder latches nothing. It is the rule's own bound, set apart
 	// from SlowDeclineArmDepth.
-	IndecisionArmDepth = 3
+	IndecisionArmDepth = 1
 	// SlowDeclineNeedsRecentFill switches the recent-fill rule of the quiet
 	// slow-decline exit (recentFill): a watched ladder goes pending — on the
 	// last closed bar's reading or on the look-back — only when its newest

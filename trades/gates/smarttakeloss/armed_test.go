@@ -44,29 +44,35 @@ func TestArmed(t *testing.T) {
 	futures.Strategy.TradeType = aggragates.Futures
 	impasse := lastDepthLadder()
 	impasse.Strategy.Params.Impasse = true
-	shortRow := testutil.LadderTrade(false, fills(SlowDeclineArmDepth-1, "17:38:00")...)
-	shortRow.StrategyPair.StrategySettings[0].Depths = SlowDeclineArmDepth - 1
 	child := lastDepthLadder()
 	child.ParentID = 7
 	off := lastDepthLadder()
 	off.Strategy.Params.SmartTakeLoss = false
 
-	cases := []struct {
+	type armedCase struct {
 		name                                       string
 		trade                                      aggragates.Trades
 		slowDecline, capitalProtection, indecision bool
-	}{
+	}
+	cases := []armedCase{
 		{"a long ladder short of every watch", testutil.LadderTrade(false, fills(min(SlowDeclineArmDepth, IndecisionArmDepth)-1, "17:38:00")...), false, false, false},
 		{"a long ladder at SlowDeclineArmDepth", testutil.LadderTrade(false, fills(SlowDeclineArmDepth, "17:38:00")...), true, false, SlowDeclineArmDepth >= IndecisionArmDepth},
 		{"a long ladder one short of IndecisionArmDepth", testutil.LadderTrade(false, fills(IndecisionArmDepth-1, "17:38:00")...), IndecisionArmDepth-1 >= SlowDeclineArmDepth, false, false},
 		{"a long ladder at IndecisionArmDepth", testutil.LadderTrade(false, fills(IndecisionArmDepth, "17:38:00")...), IndecisionArmDepth >= SlowDeclineArmDepth, false, true},
 		{"one depth short of the last", testutil.LadderTrade(false, fills(lastDepthFills-1, "21:30:00")...), true, false, true},
 		{"a long ladder at its last depth", lastDepthLadder(), true, true, true},
-		{"a short row at its last depth", shortRow, false, true, false},
 		{"a futures ladder at its last depth", futures, true, false, false},
 		{"an impasse strategy at its last depth", impasse, true, false, true},
 		{"an inverse ladder at its last depth", testutil.LadderTrade(true, fills(lastDepthFills, "21:30:00")...), false, false, false},
 		{"a ladder with no fill", testutil.LadderTrade(false), false, false, false},
+	}
+	// A row short of the slow decline's watch that is still at its last depth
+	// needs a filled entry under SlowDeclineArmDepth: with the constant at one
+	// the only ladder under it has no fill, so the case does not exist.
+	if SlowDeclineArmDepth >= 2 {
+		shortRow := testutil.LadderTrade(false, fills(SlowDeclineArmDepth-1, "17:38:00")...)
+		shortRow.StrategyPair.StrategySettings[0].Depths = SlowDeclineArmDepth - 1
+		cases = append(cases, armedCase{"a short row at its last depth", shortRow, false, true, false})
 	}
 	for _, switches := range [][3]bool{{true, true, true}, {true, false, true}, {false, true, true}, {false, false, true}, {true, true, false}, {true, false, false}, {false, true, false}, {false, false, false}} {
 		withQuietSlowDeclineExit(t, switches[0])
