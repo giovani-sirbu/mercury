@@ -146,7 +146,9 @@ func TestDepthSpacingNeverCountsADepthTheLadderHasNotFilled(t *testing.T) {
 // operator reads. The hold is written by the gate's own path, row and event at
 // each tick; with the events dropped the rows it leaves — the exact text, stamped
 // inside the window — are no activation, and the next depth holds as on a ladder
-// that was never held. With the event kept it escalates.
+// that was never held. With the event kept it escalates: the second depth filled
+// a minute inside the first hold, so the price release bought it, and only the
+// event says the first hold ever activated.
 func TestDepthSpacingHoldRowsAloneAreNoActivation(t *testing.T) {
 	first := testutil.At("09:00:00")
 	expiry := first.Add(depthSpacingHoldFor(1))
@@ -154,7 +156,7 @@ func TestDepthSpacingHoldRowsAloneAreNoActivation(t *testing.T) {
 	trade.History = testutil.DepthTrade(first).History
 
 	held, _ := heldAt(t, trade, first.Add(time.Minute))
-	held.History = testutil.DepthTrade(first, expiry).History
+	held.History = testutil.DepthTrade(first, expiry.Add(-time.Minute)).History
 	rowsOnly := held
 	rowsOnly.StrategyEvents = nil
 	never := rowsOnly

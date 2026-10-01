@@ -19,13 +19,35 @@ import (
 // (depthSpacingActivations), the only state the gate keeps.
 //
 // Step is 1 at the first activation and at the first one after a reset. The
-// next activation adds one when it lands less than DepthSpacingWindow past the
-// previous activation's hold expiry, measured from the fill of the depth that
-// activated, not from the event. Measured from the previous fill the gap would
-// be >= the hold by construction and the rule could never escalate. An
-// activation DepthSpacingWindow or more past that expiry is a genuine pause:
-// the count goes back to 1. It is never zero and never capped; only the hold
-// is, by depthSpacingHoldFor.
+// next activation adds one only when its depth filled WHILE the previous
+// activation's hold still stood, and the activation itself lands less than
+// DepthSpacingWindow past that hold's expiry. Both are measured from the fill
+// of the depth that activated, not from the event, and against the expiry, not
+// the previous fill: measured from the previous fill the gap would be >= the
+// hold by construction and the rule could never escalate. The count goes back
+// to 1 on either of two resets, and is never zero and never capped; only the
+// hold is, by depthSpacingHoldFor.
+//
+//   - A depth that filled at or after the previous expiry waited that hold out:
+//     the hold ended by TIME and its price release never bought the depth. The
+//     gate refuses every stopLoss proposal while a hold stands unless the price
+//     release lifts it (depthSpacingPriceReleased), so the only way a depth arms
+//     inside a hold is the market paying the price the hold asked for, and that
+//     is the cascade the step counts. A ladder that waits every hold out is the
+//     spacing doing its job and never deepens.
+//   - An activation DepthSpacingWindow or more past that expiry is a genuine
+//     pause, however its depth arrived.
+//
+// Fills are chronological, so when activations skip depths (a depth filled with
+// no hold) the newest depth filling before the previous expiry still means the
+// release bought it and every depth between.
+//
+// The fill stamp is the same clock the header of depthSpacingHoldReason.go
+// describes. In sisyphus backtesting TradesHistory.CreatedAt is the placement
+// tick, the arm time, exact; in hermes it is the fill time, the bounce a
+// tolerance past the arm, so a hold released seconds before its expiry can read
+// as released by time there. That is the lenient direction: a reset, never a
+// spurious escalation.
 //
 // The tick being evaluated is itself the activation of the newest depth: its
 // time is the stamp of the earliest event written for that depth, else `now`.
@@ -54,17 +76,33 @@ func depthSpacingEligibleFrom(spacing []aggragates.TradesStrategyEvents, fills [
 	var state depthSpacingState
 	var expiry time.Time
 	for _, depth := range depths {
-		at := activations[depth]
-		if state.step == 0 || at.Sub(expiry) >= DepthSpacingWindow {
-			state.step = 1
-		} else {
+		filled := fills[depth-1].At
+		if depthSpacingCascades(state.step, expiry, activations[depth], filled) {
 			state.step++
+		} else {
+			state.step = 1
 		}
 		state.hold = depthSpacingHoldFor(state.step)
-		expiry = fills[depth-1].At.Add(state.hold)
+		expiry = filled.Add(state.hold)
 	}
 	state.eligibleFrom = expiry
 	return state
+}
+
+// depthSpacingCascades reports whether an activation continues the cascade the
+// previous activation's hold, expiring at `expiry`, was part of. `step` is the
+// count that activation left, zero before the first, which has nothing to
+// continue. The depth must have filled strictly before the expiry, which only
+// the price release can do, and the activation must land inside
+// DepthSpacingWindow past it; see depthSpacingEligibleFrom.
+func depthSpacingCascades(step int, expiry, activated, filled time.Time) bool {
+	if step == 0 {
+		return false
+	}
+	if activated.Sub(expiry) >= DepthSpacingWindow {
+		return false
+	}
+	return filled.Before(expiry)
 }
 
 // depthSpacingHoldFor is base * factor^(step-1), clamped. It scales in a

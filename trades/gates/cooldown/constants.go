@@ -31,15 +31,18 @@ const FirstFillMaxHold = 12 * time.Hour
 // on depthSpacingHoldReason.go.
 //
 // Read the boundary they compute together, not any one of them. A depth is
-// held for the current hold, and the escalation measures the next fill
-// against that hold's EXPIRY, so what counts as "the same drop" is the hold
-// plus the window; the window alone is only its tail. Together they are a
-// brake on how fast capital is committed, and the price release is what keeps
-// that brake from being a pure delay.
+// held for the current hold, and the escalation measures the next depth
+// against that hold's EXPIRY: a depth that filled before it was bought out by
+// the price release and deepens the cascade, one that filled at or after it
+// waited the hold out and starts the count over. The window is the second
+// reset, how long past the expiry the next activation may land before a
+// cascade counts as paused. Together they are a limit on how fast capital is
+// committed, and the price release is what keeps that limit from being a pure
+// delay.
 const (
-	// depthSpacingFactor is the escalation. A drop that keeps filling depths
-	// the instant the previous hold lifts is falling faster than the grid was
-	// built for, so the gate grows the wait as the drop consumes depths.
+	// depthSpacingFactor is the escalation. A drop that keeps paying the price
+	// release, depth after depth, is falling faster than the grid was built
+	// for, so the gate grows the wait as the drop consumes depths.
 	// depthSpacingHoldFor scales through float64, so a fractional factor
 	// stays valid here without a code change.
 	depthSpacingFactor = 1.5
@@ -52,11 +55,14 @@ const (
 	// down for, and that bottom depth is the one that pays for the rest of
 	// the ladder. The price release is what bounds the damage beyond it.
 	depthSpacingMaxHold = 9 * time.Hour
-	// DepthSpacingWindow is the grace the escalation allows PAST a hold: a
-	// depth that lands within this of the previous hold's expiry is still the
-	// same drop, and a depth that lands later resets the count. It is
-	// therefore not by itself the line between a ladder and a cascade — that
-	// line is the standing hold plus this window.
+	// DepthSpacingWindow is the second reset of the escalation: an activation
+	// that lands this long or more past the previous hold's expiry starts the
+	// count over even when its depth filled inside the hold, because a
+	// cascade that went that long unnoticed has paused. The first reset is the
+	// fill itself, and it is the one that tells a ladder spaced by time from a
+	// cascade paid by the price release: a depth that filled at or after the
+	// expiry waited the hold out, whatever the window says. The window is
+	// therefore not by itself the line between a ladder and a cascade.
 	DepthSpacingWindow = 15 * time.Hour
 )
 

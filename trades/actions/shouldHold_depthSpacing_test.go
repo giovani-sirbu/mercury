@@ -65,44 +65,59 @@ func TestDepthSpacingHoldsTheSecondDepthFromTheFirstFill(t *testing.T) {
 	}
 }
 
-// The escalated hold (a depth that filled the instant a hold lifted, after the
-// gate had activated at the depths before it) still parks the next depth past
-// the point an unescalated one would have freed it, and it does lift
-// eventually.
+// The escalated hold (a depth that filled inside the hold of the depth before
+// it, the price release having bought it out, after the gate had activated at
+// that depth) still parks the next depth past the point an unescalated one
+// would have freed it, and it does lift eventually.
 //
 // The exact escalated duration is NOT asserted here: it is base * factor, and
 // the factor is unexported — the schedule itself is pinned in the cooldown
 // package (TestDepthSpacingClampsTheHoldAtTheCeiling). What this test owns is
 // the wiring: that ShouldHold honours the escalation at all. Still parked one
-// base hold past the expiry is exactly that evidence, since the first level
+// base hold past the fill is exactly that evidence, since the first level
 // would have freed it there under any factor above one.
 //
 // The activations are the depth-spacing events the trade carries. The rows
 // beside them are text: the same ladder with its rows alone has no activation
 // to count, reads as a first activation at every tick and is freed there.
-func TestDepthSpacingEscalatesWhenADepthFillsTheInstantTheHoldLifts(t *testing.T) {
+func TestDepthSpacingEscalatesWhenADepthFillsInsideThePreviousHold(t *testing.T) {
 	first := testutil.At("09:00:00")
-	inside := first.Add(time.Minute) // starts the cascade
-	expiry := inside.Add(cooldown.DepthSpacingBaseHold)
-	trade := testutil.DepthTrade(first, inside, expiry)
+	expiry := first.Add(cooldown.DepthSpacingBaseHold)
+	bought := expiry.Add(-time.Minute)
+	trade := testutil.DepthTrade(first, bought)
 	trade = heldDepth(trade, 1, first.Add(time.Minute))
-	trade = heldDepth(trade, 2, inside.Add(time.Minute))
-	atBase := expiry.Add(cooldown.DepthSpacingBaseHold)
+	atBase := bought.Add(cooldown.DepthSpacingBaseHold)
 
 	if _, err := ShouldHold(depthEvent(trade, atBase)); err == nil {
 		t.Fatal("the escalated hold must park the next depth past one base hold")
 	}
-	if _, err := ShouldHold(depthEvent(trade, expiry.Add(30*24*time.Hour))); err != nil {
+	if _, err := ShouldHold(depthEvent(trade, bought.Add(30*24*time.Hour))); err != nil {
 		t.Fatalf("the escalated hold must lift, got %v", err)
 	}
 
-	rowsOnly := testutil.DepthTrade(first, inside, expiry)
-	rowsOnly.Logs = []aggragates.TradesLogs{
-		depthRow(rowsOnly, 1, first.Add(time.Minute)),
-		depthRow(rowsOnly, 2, inside.Add(time.Minute)),
-	}
+	rowsOnly := testutil.DepthTrade(first, bought)
+	rowsOnly.Logs = []aggragates.TradesLogs{depthRow(rowsOnly, 1, first.Add(time.Minute))}
 	if _, err := ShouldHold(depthEvent(rowsOnly, atBase)); err != nil {
 		t.Fatalf("rows without their events count no activation, so the base hold lifts here, got %v", err)
+	}
+}
+
+// The mirror: a depth that fills the instant the previous hold lifts waited it
+// out. That hold ended by time, the price release never bought the depth, and
+// the next activation is step 1: the depth is parked for its own base hold and
+// freed exactly there, where an escalated one would still be parked.
+func TestDepthSpacingKeepsStepOneWhenADepthFillsTheInstantTheHoldLifts(t *testing.T) {
+	first := testutil.At("09:00:00")
+	expiry := first.Add(cooldown.DepthSpacingBaseHold)
+	trade := testutil.DepthTrade(first, expiry)
+	trade = heldDepth(trade, 1, first.Add(time.Minute))
+	eligible := expiry.Add(cooldown.DepthSpacingBaseHold)
+
+	if _, err := ShouldHold(depthEvent(trade, eligible.Add(-time.Second))); err == nil {
+		t.Fatal("the depth carries its own base hold: a second under it must still be parked")
+	}
+	if _, err := ShouldHold(depthEvent(trade, eligible)); err != nil {
+		t.Fatalf("a depth that waited the hold out is at step 1 and frees one base hold after its fill, got %v", err)
 	}
 }
 
@@ -121,6 +136,8 @@ func TestDepthSpacingReleasesASingleFillAfterTheBaseHold(t *testing.T) {
 // nothing is parked. The distance is base + window rather than a multiple of
 // the base hold — the window has been both narrower and wider than the hold
 // across calibrations, so a fixed multiple is only accidentally far enough.
+// The gate activated at every depth, a minute after its fill, so each has an
+// activation to count and none of them escalates.
 func TestDepthSpacingNeverHoldsALadderAFullWindowPastEachExpiry(t *testing.T) {
 	start := testutil.At("09:00:00")
 	spacing := cooldown.DepthSpacingBaseHold + cooldown.DepthSpacingWindow
@@ -129,6 +146,9 @@ func TestDepthSpacingNeverHoldsALadderAFullWindowPastEachExpiry(t *testing.T) {
 		placements = append(placements, start.Add(time.Duration(i)*spacing))
 	}
 	trade := testutil.DepthTrade(placements...)
+	for depth, placed := range placements {
+		trade = heldDepth(trade, depth+1, placed.Add(time.Minute))
+	}
 	next := placements[len(placements)-1].Add(spacing)
 
 	if _, err := ShouldHold(depthEvent(trade, next)); err != nil {

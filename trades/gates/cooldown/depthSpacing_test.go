@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -85,9 +86,10 @@ func TestDepthSpacingHoldsTheSecondDepthFromTheFirstFill(t *testing.T) {
 }
 
 // The recorded ladder of trade 109059: six fills over two days, the gate
-// activated at depths 2, 3 and 6. Depth 3 activated inside the window past
-// depth 2's expiry, so the cascade deepens; depth 6 activated days later, so
-// it starts over. Fills that the gate never held (4 and 5) count for nothing.
+// activated at depths 2, 3 and 6. Depth 3 filled while depth 2's hold still
+// stood and activated inside the window past its expiry, so the cascade
+// deepens; depth 6 activated days later, so it starts over. Fills that the gate
+// never held (4 and 5) count for nothing.
 func TestDepthSpacingCountsActivationsOnTheRecordedTrade109059(t *testing.T) {
 	at := func(day int, clock string) time.Time {
 		parsed, err := time.Parse("2006-01-02 15:04:05", fmt.Sprintf("2026-05-%02d %s", day, clock))
@@ -108,6 +110,9 @@ func TestDepthSpacingCountsActivationsOnTheRecordedTrade109059(t *testing.T) {
 
 	// The fixture is only this shape while the constants keep it so.
 	expiry2 := placements[1].Add(depthSpacingHoldFor(1))
+	if !placements[2].Before(expiry2) {
+		t.Fatalf("depth 3 filled at %s, the fixture needs it inside the hold that expires at %s", placements[2], expiry2)
+	}
 	if gap := written[1].CreatedAt.Sub(expiry2); gap >= DepthSpacingWindow {
 		t.Fatalf("depth 3 activated %s past the expiry, the fixture needs it inside %s", gap, DepthSpacingWindow)
 	}
@@ -178,7 +183,7 @@ func TestDepthSpacingCountsAReLoggedDepthOnce(t *testing.T) {
 }
 
 // The first held tick has no event yet and already reports its step: 1 on a
-// fresh trade, 2 when a previous activation is still in the window.
+// fresh trade, 2 when its depth filled inside the hold of a previous activation.
 func TestDepthSpacingFirstHeldTickReportsItsStep(t *testing.T) {
 	start := testutil.At("09:00:00")
 	placements := []time.Time{start, start.Add(time.Hour)}
@@ -197,11 +202,15 @@ func TestDepthSpacingFirstHeldTickReportsItsStep(t *testing.T) {
 }
 
 // An activation DepthSpacingWindow or more past the previous expiry starts
-// over at step 1; one second short of it keeps counting.
+// over at step 1, even though its depth filled inside the hold; one second
+// short of it keeps counting. The depth is the same in every case and filled
+// before the expiry: only the clock of the activation, the tick, moves.
 func TestDepthSpacingResetsAfterTheWindow(t *testing.T) {
 	start := testutil.At("09:00:00")
 	activated := start.Add(time.Minute)
 	expiry := start.Add(depthSpacingHoldFor(1))
+	bought := expiry.Add(-2 * time.Minute)
+	placements := []time.Time{start, bought}
 	written := []aggragates.TradesStrategyEvents{spacingEvent(1, activated)}
 
 	cases := []struct {
@@ -216,13 +225,306 @@ func TestDepthSpacingResetsAfterTheWindow(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			placements := []time.Time{start, c.now.Add(-time.Second)}
 			state := spacingState(placements, written, c.now)
 			if state.step != c.wantStep {
 				t.Fatalf("step = %d, want %d", state.step, c.wantStep)
 			}
 			if state.hold != depthSpacingHoldFor(c.wantStep) {
 				t.Errorf("hold = %s, want %s", state.hold, depthSpacingHoldFor(c.wantStep))
+			}
+		})
+	}
+}
+
+// paidCascade is a ladder the price release buys down: every depth after the
+// first fills a minute short of the previous hold's expiry, and the gate
+// writes the activation of each a minute after its fill, so the step of depth
+// d is d.
+func paidCascade(depths int) ([]time.Time, []aggragates.TradesStrategyEvents) {
+	placements := []time.Time{testutil.At("09:00:00")}
+	written := []aggragates.TradesStrategyEvents{spacingEvent(1, placements[0].Add(time.Minute))}
+	for depth := 2; depth <= depths; depth++ {
+		expiry := placements[depth-2].Add(depthSpacingHoldFor(depth - 1))
+		fill := expiry.Add(-time.Minute)
+		placements = append(placements, fill)
+		written = append(written, spacingEvent(depth, fill.Add(time.Minute)))
+	}
+
+	return placements, written
+}
+
+// A depth that filled strictly before the previous hold's expiry was bought
+// out of it by the price release, and deepens the cascade even though its
+// activation lands well inside the window. A fill a second short of the expiry
+// is already that.
+func TestDepthSpacingEscalatesWhenADepthFillsInsideThePreviousHold(t *testing.T) {
+	start := testutil.At("09:00:00")
+	expiry := start.Add(depthSpacingHoldFor(1))
+	written := []aggragates.TradesStrategyEvents{spacingEvent(1, start.Add(time.Minute))}
+
+	cases := []struct {
+		name string
+		fill time.Time
+	}{
+		{"a second short of the expiry", expiry.Add(-time.Second)},
+		{"half way into the hold", start.Add(depthSpacingHoldFor(1) / 2)},
+		{"just after the first fill", start.Add(time.Minute)},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			now := c.fill.Add(time.Minute)
+			if now.Sub(expiry) >= DepthSpacingWindow {
+				t.Fatal("fixture drifted: the activation must land inside the window")
+			}
+
+			state := spacingState([]time.Time{start, c.fill}, written, now)
+			if state.step != 2 {
+				t.Fatalf("step = %d, want 2 — the depth filled while the hold stood", state.step)
+			}
+			if state.hold != depthSpacingHoldFor(2) {
+				t.Errorf("hold = %s, want %s", state.hold, depthSpacingHoldFor(2))
+			}
+			if want := c.fill.Add(depthSpacingHoldFor(2)); !state.eligibleFrom.Equal(want) {
+				t.Errorf("eligibleFrom = %s, want %s", state.eligibleFrom, want)
+			}
+		})
+	}
+}
+
+// A depth that filled at or after the previous hold's expiry waited that hold
+// out: it ended by time and its price release never bought the depth, so the
+// count starts over at step 1 however recent the activation. The fill the
+// instant the hold lifts is the boundary, and it is a time release.
+func TestDepthSpacingResetsWhenADepthFillsAtOrAfterThePreviousExpiry(t *testing.T) {
+	start := testutil.At("09:00:00")
+	expiry := start.Add(depthSpacingHoldFor(1))
+	written := []aggragates.TradesStrategyEvents{spacingEvent(1, start.Add(time.Minute))}
+
+	cases := []struct {
+		name string
+		fill time.Time
+	}{
+		{"the instant the hold lifts", expiry},
+		{"a second after the expiry", expiry.Add(time.Second)},
+		{"half a window after the expiry", expiry.Add(DepthSpacingWindow / 2)},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			now := c.fill.Add(time.Minute)
+			if now.Sub(expiry) >= DepthSpacingWindow {
+				t.Fatal("fixture drifted: the activation must land inside the window, or the window is what resets")
+			}
+
+			state := spacingState([]time.Time{start, c.fill}, written, now)
+			if state.step != 1 {
+				t.Fatalf("step = %d, want 1 — the depth waited the hold out", state.step)
+			}
+			if state.hold != DepthSpacingBaseHold {
+				t.Errorf("hold = %s, want the base %s", state.hold, DepthSpacingBaseHold)
+			}
+			if want := c.fill.Add(DepthSpacingBaseHold); !state.eligibleFrom.Equal(want) {
+				t.Errorf("eligibleFrom = %s, want %s", state.eligibleFrom, want)
+			}
+		})
+	}
+}
+
+// The window is still the second reset after a cascade the price release has
+// been paying: the next depth fills inside the standing hold, and only how
+// long past the expiry the gate took to activate it decides.
+func TestDepthSpacingTheWindowStillResetsAPaidCascade(t *testing.T) {
+	const depths = 3
+	placements, written := paidCascade(depths)
+	if state := spacingState(placements, written, written[depths-1].CreatedAt); state.step != depths {
+		t.Fatalf("fixture drifted: the paid cascade is at step %d, want %d", state.step, depths)
+	}
+	expiry := placements[depths-1].Add(depthSpacingHoldFor(depths))
+	placements = append(placements, expiry.Add(-time.Minute))
+
+	cases := []struct {
+		name      string
+		activated time.Time
+		wantStep  int
+	}{
+		{"inside the hold", expiry.Add(-time.Second), depths + 1},
+		{"a second short of the window", expiry.Add(DepthSpacingWindow - time.Second), depths + 1},
+		{"exactly the window", expiry.Add(DepthSpacingWindow), 1},
+		{"well past the window", expiry.Add(3 * DepthSpacingWindow), 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			next := append(slices.Clone(written), spacingEvent(depths+1, c.activated))
+			state := spacingState(placements, next, c.activated)
+			if state.step != c.wantStep {
+				t.Fatalf("step = %d, want %d", state.step, c.wantStep)
+			}
+			if state.hold != depthSpacingHoldFor(c.wantStep) {
+				t.Errorf("hold = %s, want %s", state.hold, depthSpacingHoldFor(c.wantStep))
+			}
+		})
+	}
+}
+
+// The recorded ladder of HBAR trade 113805 (backtest 224). Counting proximity
+// alone the fold read its seven activations as steps 1, 2, 3, 1, 2, 3, 4, a
+// cascade, when six of the seven depths had waited their hold out or followed a
+// pause and only the last filled inside a standing hold. Stamps are UTC; the
+// ladder row is percentage 2, tolerance 0.2.
+var hbar113805Row = aggragates.StrategySettings{MinDepths: 6, Depths: 8, Percentage: 2, Multiplier: 2, Tolerance: 0.2}
+
+var hbar113805Fills = []struct {
+	at    string
+	price float64
+}{
+	{"12-01 08:38:31", 0.3573},
+	{"12-01 19:25:10", 0.3504},
+	{"12-02 03:06:46", 0.3407},
+	{"12-03 01:00:59", 0.3345},
+	{"12-03 16:12:37", 0.3233},
+	{"12-03 20:13:24", 0.313},
+	{"12-04 02:22:19", 0.3069},
+	{"12-04 04:55:00", 0.28},
+}
+
+// hbar113805Activations are the depths the gate held, in the order it held
+// them; depth 4 filled with no hold, and the wantStep is what the rule counts.
+var hbar113805Activations = []struct {
+	depth    int
+	at       string
+	wantStep int
+	why      string
+}{
+	{1, "12-01 11:26:12", 1, "the first activation"},
+	{2, "12-01 21:23:08", 1, "depth 2 filled after depth 1's hold, inside the window"},
+	{3, "12-02 03:21:03", 1, "depth 3 filled after depth 2's hold, inside the window"},
+	{5, "12-03 19:41:51", 1, "the activation lands a window past depth 3's expiry"},
+	{6, "12-04 00:51:12", 1, "depth 6 filled 47 seconds after depth 5's expiry"},
+	{7, "12-04 03:56:46", 1, "depth 7 filled after depth 6's hold"},
+	{8, "12-04 04:55:31", 2, "depth 8 filled inside depth 7's hold: the price release bought it"},
+}
+
+func hbar113805Stamp(t *testing.T, stamp string) time.Time {
+	t.Helper()
+
+	parsed, err := time.Parse("2006-01-02 15:04:05", "2021-"+stamp)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return parsed.UTC()
+}
+
+// hbar113805Trade is the trade with its first `depths` fills, at the recorded
+// stamps and prices.
+func hbar113805Trade(t *testing.T, depths int) aggragates.Trades {
+	t.Helper()
+
+	placements := make([]time.Time, 0, depths)
+	for _, fill := range hbar113805Fills[:depths] {
+		placements = append(placements, hbar113805Stamp(t, fill.at))
+	}
+	trade := testutil.DepthTrade(placements...)
+	for index := range trade.History {
+		trade.History[index].Price = hbar113805Fills[index].price
+	}
+	trade.StrategyPair.StrategySettings = []aggragates.StrategySettings{hbar113805Row}
+	trade.PositionPrice = hbar113805Fills[depths-1].price
+
+	return trade
+}
+
+// hbar113805Events are the depth-spacing events of the recorded activations of
+// the given depths.
+func hbar113805Events(t *testing.T, depths ...int) []aggragates.TradesStrategyEvents {
+	t.Helper()
+
+	var written []aggragates.TradesStrategyEvents
+	for _, activation := range hbar113805Activations {
+		if slices.Contains(depths, activation.depth) {
+			written = append(written, spacingEvent(activation.depth, hbar113805Stamp(t, activation.at)))
+		}
+	}
+
+	return written
+}
+
+// The fold over the recorded activations of trade 113805: the count stays at 1
+// through every depth that waited its hold out or followed a pause, and
+// escalates only at depth 8, the one depth that filled inside a standing hold.
+// The hold and the expiry are derived from the step, so a retune moves them
+// with it; the steps are the rule's own answer for this ladder.
+func TestDepthSpacingCountsTheRecordedTrade113805(t *testing.T) {
+	var every []aggragates.TradesStrategyEvents
+	for _, activation := range hbar113805Activations {
+		every = append(every, spacingEvent(activation.depth, hbar113805Stamp(t, activation.at)))
+	}
+
+	for _, c := range hbar113805Activations {
+		t.Run(fmt.Sprintf("depth %d", c.depth), func(t *testing.T) {
+			placements := hbar113805Trade(t, c.depth).History
+			stamps := make([]time.Time, 0, len(placements))
+			for _, placed := range placements {
+				stamps = append(stamps, placed.CreatedAt)
+			}
+
+			state := spacingState(stamps, every, hbar113805Stamp(t, c.at))
+			if state.step != c.wantStep {
+				t.Fatalf("step = %d, want %d — %s", state.step, c.wantStep, c.why)
+			}
+			if wantHold := depthSpacingHoldFor(c.wantStep); state.hold != wantHold {
+				t.Errorf("hold = %s, want %s", state.hold, wantHold)
+			}
+			if want := stamps[c.depth-1].Add(depthSpacingHoldFor(c.wantStep)); !state.eligibleFrom.Equal(want) {
+				t.Errorf("eligibleFrom = %s, want %s", state.eligibleFrom, want)
+			}
+		})
+	}
+}
+
+// The ticks of trade 113805 end to end through the gate, with the events the
+// ladder carries when each is evaluated. Depth 6 filled 47 seconds after depth
+// 5's hold expired, so at the tick the gate noticed it the base hold had
+// already lifted and nothing is parked; depth 7 is held at step 1, and the row
+// prints the release price off its own fill; depth 8, filled inside depth 7's
+// hold, is held at step 2.
+func TestDepthSpacingHoldsTheRecordedTicksOfTrade113805(t *testing.T) {
+	releaseOf := func(lastFill float64, step int) float64 {
+		row := hbar113805Row
+
+		return lastFill * (1 - (row.Percentage+row.Tolerance+row.Percentage*float64(step))/100)
+	}
+
+	free := hbar113805Trade(t, 6)
+	free.StrategyEvents = hbar113805Events(t, 1, 2, 3, 5)
+	atDepth6 := tickOf(free, hbar113805Stamp(t, "12-04 00:51:12"))
+	if hold := DepthSpacingHold(atDepth6, "stopLoss"); hold.Held() {
+		t.Errorf("depth 6 at its recorded tick: held as %q, want it free — its hold lifted at the base", hold.Reason)
+	}
+
+	cases := []struct {
+		name     string
+		depths   int
+		written  []int
+		tick     string
+		wantStep int
+	}{
+		{"depth 7, step 1", 7, []int{1, 2, 3, 5}, "12-04 03:56:46", 1},
+		{"depth 8, step 2", 8, []int{1, 2, 3, 5, 7}, "12-04 04:55:31", 2},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			trade := hbar113805Trade(t, c.depths)
+			trade.StrategyEvents = hbar113805Events(t, c.written...)
+			lastFill := hbar113805Fills[c.depths-1].price
+			release := strconv.FormatFloat(releaseOf(lastFill, c.wantStep), 'f', -1, 64)
+
+			got := DepthSpacingHold(tickOf(trade, hbar113805Stamp(t, c.tick)), "stopLoss").Reason
+			want := fmt.Sprintf(
+				"cooldown: depths too close (depth %d, step %d), next add parked for %s or until %s",
+				c.depths, c.wantStep, depthSpacingHoldFor(c.wantStep), release,
+			)
+			if got != want {
+				t.Fatalf("row = %q, want %q", got, want)
 			}
 		})
 	}
@@ -332,7 +634,9 @@ func TestDepthSpacingActivationsOnlyReadTheDepthSpacingEvents(t *testing.T) {
 	}
 }
 
-// The step keeps counting past the hold cap; only the hold is capped.
+// The step keeps counting past the hold cap; only the hold is capped. Each
+// depth fills a minute short of the previous expiry, the price release paying
+// the cascade down.
 func TestDepthSpacingStepCountsPastTheHoldCap(t *testing.T) {
 	start := testutil.At("09:00:00")
 	placements := []time.Time{start}
@@ -341,7 +645,7 @@ func TestDepthSpacingStepCountsPastTheHoldCap(t *testing.T) {
 
 	const depths = 12
 	for depth := 2; depth <= depths; depth++ {
-		fill := state.eligibleFrom
+		fill := state.eligibleFrom.Add(-time.Minute)
 		placements = append(placements, fill)
 		written = append(written, spacingEvent(depth, fill.Add(time.Minute)))
 		state = spacingState(placements, written, fill.Add(time.Minute))
@@ -391,11 +695,13 @@ func TestDepthSpacingMessageIsStableOnceTheHoldIsWritten(t *testing.T) {
 }
 
 // The cascade end to end on what gates.SaveHoldLog wrote: depth 1 is held on
-// the first tick after its fill, depth 2 fills the instant that hold lifts and
-// is held in turn, so its event is the second activation and escalates.
+// the first tick after its fill, depth 2 fills a minute short of that hold's
+// expiry, bought out by the price release, and is held in turn, so its event
+// is the second activation and escalates.
 func TestDepthSpacingEscalatesOnTheActivationsSaveHoldLogWrote(t *testing.T) {
 	first := testutil.At("09:00:00")
 	expiry := first.Add(depthSpacingHoldFor(1))
+	bought := expiry.Add(-time.Minute)
 	trade := hbarTrade(1)
 	trade.History = testutil.DepthTrade(first).History
 
@@ -404,16 +710,41 @@ func TestDepthSpacingEscalatesOnTheActivationsSaveHoldLogWrote(t *testing.T) {
 		t.Fatalf("depth 1 held as %q, want step 1", one.Reason)
 	}
 
-	held.History = testutil.DepthTrade(first, expiry).History
-	held, two := heldAt(t, held, expiry.Add(time.Minute))
+	held.History = testutil.DepthTrade(first, bought).History
+	held, two := heldAt(t, held, bought.Add(time.Minute))
 	if !strings.Contains(two.Reason, "(depth 2, step 2)") {
 		t.Fatalf("depth 2 held as %q, want step 2", two.Reason)
 	}
 
 	// Each hold left its event on the tick it was written: the activations.
 	activations := depthSpacingActivations(held.StrategyEvents)
-	if len(activations) != 2 || !activations[1].Equal(first.Add(time.Minute)) || !activations[2].Equal(expiry.Add(time.Minute)) {
+	if len(activations) != 2 || !activations[1].Equal(first.Add(time.Minute)) || !activations[2].Equal(bought.Add(time.Minute)) {
 		t.Fatalf("activations = %v, want depth 1 and depth 2 at the ticks they were held on", activations)
+	}
+}
+
+// The mirror, end to end: depth 2 fills the instant depth 1's hold lifts. It
+// waited that hold out, so it is held for its own base hold at step 1 and its
+// event is a fresh start, not the second activation of a cascade.
+func TestDepthSpacingAHoldThatExpiredByTimeStartsTheCountOver(t *testing.T) {
+	first := testutil.At("09:00:00")
+	expiry := first.Add(depthSpacingHoldFor(1))
+	trade := hbarTrade(1)
+	trade.History = testutil.DepthTrade(first).History
+
+	held, _ := heldAt(t, trade, first.Add(time.Minute))
+	held.History = testutil.DepthTrade(first, expiry).History
+	held, two := heldAt(t, held, expiry.Add(time.Minute))
+	if !strings.Contains(two.Reason, "(depth 2, step 1)") {
+		t.Fatalf("depth 2 held as %q, want step 1", two.Reason)
+	}
+	if data, ok := two.Data.(DepthSpacingEvent); !ok || data.Hold != DepthSpacingBaseHold {
+		t.Fatalf("hold data = %+v, want the base hold %s", two.Data, DepthSpacingBaseHold)
+	}
+
+	activations := depthSpacingActivations(held.StrategyEvents)
+	if len(activations) != 2 || !activations[2].Equal(expiry.Add(time.Minute)) {
+		t.Fatalf("activations = %v, want depth 2 still written at the tick it was held on", activations)
 	}
 }
 
@@ -461,17 +792,24 @@ func TestDepthSpacingAFirstActivationParksForTheBaseHoldAndPriceReleases(t *test
 // genuinely spaced: no tick is ever held. That distance is base + window, and
 // it is written as such rather than as a multiple of the base hold — the
 // window is a calibration knob and has been both narrower and wider than the
-// hold, so any fixed multiple is only accidentally far enough.
+// hold, so any fixed multiple is only accidentally far enough. Every depth
+// carries its own hold and the gate activated at each, a minute after its
+// fill, so the fold has an activation to count at every depth: none of them
+// escalates.
 func TestDepthSpacingNeverHoldsALadderAFullWindowPastEachExpiry(t *testing.T) {
 	start := testutil.At("09:00:00")
 	spacing := DepthSpacingBaseHold + DepthSpacingWindow
 	var placements []time.Time
+	var written []aggragates.TradesStrategyEvents
 	for i := 0; i < 7; i++ {
 		placements = append(placements, start.Add(time.Duration(i)*spacing))
 	}
+	for depth, placed := range placements[:len(placements)-1] {
+		written = append(written, spacingEvent(depth+1, placed.Add(time.Minute)))
+	}
 	last := placements[len(placements)-1]
 
-	state := spacingState(placements, nil, last)
+	state := spacingState(placements, written, last)
 	if state.step != 1 || state.hold != DepthSpacingBaseHold {
 		t.Fatalf("a well-spaced ladder must stay at base: step %d hold %s", state.step, state.hold)
 	}
