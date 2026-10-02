@@ -38,8 +38,8 @@ func TestExitReachedAgreesWithApply(t *testing.T) {
 						for _, position := range positions {
 							sold := Apply(trade, position, price, withBlock(block)).Reason != ""
 							if sold != (exit && !gridCloses[position]) {
-								t.Fatalf("switches %v, stand %q, %d fills (state %q, events %d), %q at %v, block %+v: ExitReached %v, Apply sold %v",
-									switches, c.stand.name, len(trade.History), state, len(trade.StrategyEvents), position, price, block, exit, sold)
+								t.Fatalf("switches %v, gate state %q, %d fills (state %q, events %d), %q at %v, block %+v: ExitReached %v, Apply sold %v",
+									switches, c.gateState.name, len(trade.History), state, len(trade.StrategyEvents), position, price, block, exit, sold)
 							}
 						}
 					}

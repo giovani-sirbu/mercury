@@ -147,8 +147,8 @@ func gridStates() []gridState {
 
 // gridCase is a ladder with its state.
 type gridCase struct {
-	trade aggragates.Trades
-	stand gridState
+	trade     aggragates.Trades
+	gateState gridState
 }
 
 // gridDepths are the fill counts of the grid's ladders: one short of each
@@ -332,10 +332,10 @@ func TestApplyOnTheGrid(t *testing.T) {
 					for _, block := range blocks {
 						for _, price := range prices {
 							got := Apply(trade, position, price, withBlock(block))
-							want := expectedApply(trade, c.stand, position, price, block, switches)
+							want := expectedApply(trade, c.gateState, position, price, block, switches)
 							if !reflect.DeepEqual(got, want) {
 								t.Fatalf("switches %v, gate state %q, %d fills (inverse %v, state %q, events %d), %q at %v, block %+v:\ngot  %+v\nwant %+v",
-									switches, c.stand.name, len(trade.History), trade.Inverse, state, len(trade.StrategyEvents), position, price, block, got, want)
+									switches, c.gateState.name, len(trade.History), trade.Inverse, state, len(trade.StrategyEvents), position, price, block, got, want)
 							}
 							sold[got.Reason]++
 							rows += len(got.Rows)
@@ -379,10 +379,10 @@ func TestApplyOnTheGridUnderTheCap(t *testing.T) {
 					for _, block := range blocks {
 						for _, price := range prices {
 							got := Apply(trade, position, price, withBlock(block))
-							want := expectedUnderTheCap(trade, c.stand, position, price, block, switches)
+							want := expectedUnderTheCap(trade, c.gateState, position, price, block, switches)
 							if !reflect.DeepEqual(got, want) {
 								t.Fatalf("switches %v, gate state %q, %d fills (inverse %v, state %q, events %d), %q at %v, block %+v:\ngot  %+v\nwant %+v",
-									switches, c.stand.name, len(trade.History), trade.Inverse, state, len(trade.StrategyEvents), position, price, block, got, want)
+									switches, c.gateState.name, len(trade.History), trade.Inverse, state, len(trade.StrategyEvents), position, price, block, got, want)
 							}
 							held := len(want.Rows) > 0 && want.Rows[len(want.Rows)-1].Event == EventSaleHeld
 							switch {
