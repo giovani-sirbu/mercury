@@ -48,13 +48,13 @@ const (
 	depthSpacingFactor = 1.5
 	// DepthSpacingBaseHold is what the first fast depth costs the ladder, and
 	// the value the escalation starts from.
-	DepthSpacingBaseHold = 4 * time.Hour
+	DepthSpacingBaseHold = 6 * time.Hour
 	// depthSpacingMaxHold caps one hold, and is what a fully escalated ladder
 	// is left with. Past it the gate stops being a gate and becomes an
 	// outage: the trade sits out the bottom of the very move it was slowed
 	// down for, and that bottom depth is the one that pays for the rest of
 	// the ladder. The price release is what bounds the damage beyond it.
-	depthSpacingMaxHold = 9 * time.Hour
+	depthSpacingMaxHold = 12 * time.Hour
 	// DepthSpacingWindow is the second reset of the escalation: an activation
 	// that lands this long or more past the previous hold's expiry starts the
 	// count over even when its depth filled inside the hold, because a
@@ -63,7 +63,7 @@ const (
 	// cascade paid by the price release: a depth that filled at or after the
 	// expiry waited the hold out, whatever the window says. The window is
 	// therefore not by itself the line between a ladder and a cascade.
-	DepthSpacingWindow = 15 * time.Hour
+	DepthSpacingWindow = 18 * time.Hour
 )
 
 // Depth-priority tunable — the Cooldown flag's gate on the WALLET, the one
