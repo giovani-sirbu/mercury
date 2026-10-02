@@ -32,7 +32,9 @@ type Opened struct {
 	Depths int
 }
 
-// Message is the text of the opened row: OpenedMessage of the amounts.
+// Message is the text of the opened row: OpenedMessage of the amounts, which
+// opens with RowPrefix and OpenedMarker and names only the parts that raise
+// something, each once.
 func (o Opened) Message() string {
 	return OpenedMessage(o.Points, o.Depths)
 }

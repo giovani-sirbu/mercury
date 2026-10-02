@@ -42,6 +42,9 @@ func TestRaisedSettingsLeavesTheStoredRowsWhenNothingIsRaised(t *testing.T) {
 		{"only the per-tick rows an earlier release wrote", func(trade *aggragates.Trades) {
 			*trade = withRows(*trade, "dynamic params: 1D Super Guppy bearish, BMSB bearish: both bearish, percentage +0.5 and depths +1 on every row")
 		}},
+		{"only the opened rows an earlier wording wrote", func(trade *aggragates.Trades) {
+			*trade = withRows(*trade, earlierOpenedRows...)
+		}},
 		{"an opened event raising nothing", func(trade *aggragates.Trades) {
 			*trade = withOpened(*trade, 0, 0)
 		}},

@@ -98,7 +98,7 @@ func TestOpenedRaiseReadsTheEventNotTheConstants(t *testing.T) {
 func TestOpenedRaiseFoldsTheEventsInOrder(t *testing.T) {
 	trade := withRows(flaggedTrade(),
 		"Updated position to buy from new",
-		"Hold entry: smartTakeLoss: quiet slow decline, first fill held",
+		"Hold entry: smartTakeLoss: quiet decline, first fill held",
 	)
 	for _, amounts := range []dynamicparams.Opened{{Points: 0.4, Depths: 1}, {Points: 0.75}} {
 		row, event := amounts.Rows(trade, 0, time.Time{})
@@ -127,27 +127,38 @@ var earlierReleaseRows = []string{
 	"dynamic params: 1D Super Guppy bearish, BMSB bearish: both bearish, percentage +0.5 and depths +1 on every row",
 }
 
+// earlierOpenedRows are the opened rows the wording before the current one
+// wrote, byte for byte: the percentage and the depths, the percentage alone and
+// the depths alone. Trades opened under it still carry them, each under the
+// prefix the wording had then.
+var earlierOpenedRows = []string{
+	"dynamic params: opened raised, percentage +0.4 and depths +1 on every row",
+	"dynamic params: opened raised, percentage +0.4 on every row",
+	"dynamic params: opened raised, depths +1 on every row",
+}
+
 // The rows are the operator's text and never the ladder's state: a trade with
 // every row that ever named an opening — the opened row's own text, plain or
-// under a hold frame, the per-tick rows an earlier release wrote, each alone
-// and all of them together — but no opened event has not opened. None of them
-// raises a ladder's rows either: the ladder carrying them trades the very
-// configured slice.
+// under a hold frame, the opened rows an earlier wording wrote, the per-tick
+// rows an earlier release wrote, each alone and all of them together — but no
+// opened event has not opened. None of them raises a ladder's rows either: the
+// ladder carrying them trades the very configured slice.
 func TestOpenedRaiseIsNotTheRowText(t *testing.T) {
 	cases := map[string][]string{
 		"no row":                nil,
 		"the opened row's text": {dynamicparams.OpenedMessage(0.4, 1)},
 		"the opened row's text under a hold frame":   {"Hold entry: " + dynamicparams.OpenedMessage(0.75, 0)},
+		"the opened rows an earlier wording wrote":   earlierOpenedRows,
 		"the per-tick rows an earlier release wrote": earlierReleaseRows,
-		"the prefix without the marker":              {"dynamic params: raised, percentage +0.4 on every row"},
-		"the marker without the prefix":              {"opened raised, percentage +0.4 and depths +1 on every row"},
+		"the prefix without the marker":              {"dynamicParams: percentage +0.4, depths +1"},
+		"the marker without the prefix":              {"volatility expected, strategy params adjusted: percentage +0.4, depths +1"},
 		"another gate's rows": {
 			"Hold stopLoss: pattern: bull_flag found, preventing stopLoss",
 			"Updated position to stopLoss from buy",
 		},
 	}
-	for _, row := range earlierReleaseRows {
-		cases["the earlier release's row "+row] = []string{row}
+	for _, row := range append(append([]string(nil), earlierReleaseRows...), earlierOpenedRows...) {
+		cases["the earlier row "+row] = []string{row}
 	}
 
 	for name, messages := range cases {

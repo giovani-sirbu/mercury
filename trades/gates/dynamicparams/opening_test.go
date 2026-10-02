@@ -116,7 +116,7 @@ func TestOpenedRowsWriteThePairTheEnginesAppend(t *testing.T) {
 
 	wantRow := aggragates.TradesLogs{
 		TradeID:   31,
-		Message:   "dynamic params: opened raised, percentage +0.4 and depths +1 on every row",
+		Message:   "dynamicParams: volatility expected, strategy params adjusted: percentage +0.4, depths +1",
 		Type:      aggragates.LOG_INFO,
 		Price:     87.5,
 		CreatedAt: at,
@@ -220,18 +220,20 @@ func TestOpeningAnswersOnlyUntilTheLadderOpens(t *testing.T) {
 
 // The rows are the operator's text, never the ladder's state: a ladder whose
 // log carries every row that ever named an opening — the opened row's text,
-// plain or under a hold frame, the per-tick rows an earlier release wrote,
-// each alone and all of them together — but no opened event has not opened, so
-// it opens on the amounts the reads of its opening raise.
+// plain or under a hold frame, the opened rows an earlier wording wrote, the
+// per-tick rows an earlier release wrote, each alone and all of them together —
+// but no opened event has not opened, so it opens on the amounts the reads of
+// its opening raise.
 func TestOpeningIsNotSilencedByTheRowText(t *testing.T) {
 	want := dynamicparams.Opened{Points: dynamicparams.BearPercentagePoints, Depths: dynamicparams.BearDepths}
 	carrying := map[string][]string{
 		"the opened row's text":                      {dynamicparams.OpenedMessage(dynamicparams.BearPercentagePoints, 0)},
 		"the opened row's text under a hold frame":   {"Hold entry: " + dynamicparams.OpenedMessage(dynamicparams.BearPercentagePoints, 0)},
+		"the opened rows an earlier wording wrote":   earlierOpenedRows,
 		"all of the per-tick release's rows":         earlierReleaseRows,
-		"an opened row naming no amount it can read": {"dynamic params: opened raised, on every row"},
+		"an opened row naming no amount it can read": {dynamicparams.OpenedMessage(0, 0)},
 	}
-	for _, row := range earlierReleaseRows {
+	for _, row := range append(append([]string(nil), earlierReleaseRows...), earlierOpenedRows...) {
 		carrying[row] = []string{row}
 	}
 	for name, rows := range carrying {

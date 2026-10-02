@@ -20,7 +20,8 @@
 // strategy event (OpenedEvent), carrying the amounts the ladder trades —
 // BearPercentagePoints added to every row's percentage and BearDepths to every
 // row's depths, only the parts the increase names — and beside it an INFO row
-// (OpenedMessage), the same amounts as text for the operator. A first entry
+// (OpenedMessage): RowPrefix, OpenedMarker and the same amounts as text for the
+// operator, one part per amount the increase raises. A first entry
 // that is held or refused funds is judged again on later ticks, the reads with
 // it, until the ladder opens; once the trade carries its event, no second pair
 // is written.
