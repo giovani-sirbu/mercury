@@ -9,15 +9,15 @@ import (
 // TakeProfitPercentage is the move the `buy` row's take profit reads: the
 // profitPercentage an engine hands strategies.GetPosition, after its inverse
 // negation — the move against the average entry price. At or over break even
-// — that move zero or more — two rules raise it, each behind its own switch
+// — that move zero or more — two readings raise it, each behind its own switch
 // and each read off the trade's own strategy events:
 //
-//   - a trade rebuildState reads pending — its last slow-decline event a
-//     pending event, not a cancelled or reset one (QuietSlowDeclineExit), or
-//     its last slow-pattern event a pending event, not a cancelled one
-//     (SlowPatternDeclineExit) — is also measured from its newest entry fill;
-//   - a trade rebuildState reads latched — it carries a latched event
-//     (IndecisionDirection) — is also measured from its position price,
+//   - a trade rebuildState reads pending — the slow decline gate's last pending
+//     event not followed by a cancelled or reset one, on a feature that is
+//     switched on (QuietDecline, SwingDecline) — is also measured from its
+//     newest entry fill, whichever feature made it pending;
+//   - a trade rebuildState reads latched — it carries an event that latched it
+//     (Indecision) — is also measured from its position price,
 //     trade.PositionPrice: the engines' own `percentage`, the move against
 //     the last buy.
 //
@@ -26,7 +26,7 @@ import (
 // average entry price alone and never under break even. Under break even the
 // input comes back unchanged, exactly as on every other trade — no event, a
 // cancelled exit, no fill, an inverse ladder, a child, a futures trade, a
-// strategy without the flag, a rule switched off, no price: the `buy` row is
+// strategy without the flag, a feature switched off, no price: the `buy` row is
 // the spot ladder's, and sisyphus backtesting reads it for its futures trades
 // too.
 //
@@ -35,10 +35,10 @@ import (
 // cancelled or reset event ends it; nothing ends a latch. The engines read it
 // before Apply, so a row Apply hands back reaches it from the tick after the
 // one that wrote its event. While a depth priority holds the ladder
-// (depthPriorityHeld) the pending reading — the move from the newest fill,
-// whichever rule made the ladder pending — waits for the next fill, while the
-// latched reading — the move from the position price — applies all the same:
-// the hold pauses the pending exits, never the indecision direction.
+// (depthPriorityHeld) the pending reading — the move from the newest fill —
+// waits for the next fill, while the latched reading — the move from the
+// position price — applies all the same: the hold pauses the gate, never the
+// indecision direction.
 //
 // Under break even nothing reads the newest fill or the position price, here
 // or in Apply: a pending trade's one sale there is the sell band. A take
@@ -46,8 +46,8 @@ import (
 // every close under the minimum profit — and a proposal it refuses is still
 // a close Apply never replaces (protectedPosition), so that refused,
 // protected proposal would silence both bands — the sell band and capital
-// protection's — on every such tick, and sisyphus backtesting's profit block
-// would skip the prints after it.
+// protection's — on every such tick, and sisyphus backtesting's profit
+// block would skip the prints after it.
 //
 // Only the arming moves. hasProfit in the takeProfit chain still refuses a
 // close under the minimum profit, and the trade then stays in `buy`; the
@@ -77,7 +77,7 @@ func TakeProfitPercentage(trade aggragates.Trades, price, profitPercentage float
 	}
 	st := rebuildState(trade)
 	reading := profitPercentage
-	if (st.slowDeclinePending || st.slowPatternPending) && !st.depthPriorityHeld {
+	if st.slowDeclinePending && !st.depthPriorityHeld {
 		fromNewestFill := (price - st.lastFill().Price) / price * 100
 		reading = math.Max(reading, fromNewestFill)
 	}
@@ -90,25 +90,31 @@ func TakeProfitPercentage(trade aggragates.Trades, price, profitPercentage float
 
 // carriesTakeProfitEvent is the cheap half of the pending and the latched
 // tests, asked first because the engines read the take profit on every price
-// print of every trade: a trade with no smartTakeLoss event on the
-// slow-decline gate while QuietSlowDeclineExit is on, on the slow-pattern gate
-// while SlowPatternDeclineExit is on, or on the indecision gate while
-// IndecisionDirection is on, can be neither pending nor latched, and the fold
-// is skipped. One pass over the events answers for all three gates by their
-// filing alone — no document is decoded — and stops at the first such event.
+// print of every trade: a trade with no smartTakeLoss event on the gate that
+// could make it pending or latched can be neither, and the fold is skipped. The
+// slow decline gate's events count while any of its features is on, the events
+// of the gates it replaced while the feature they drove is on (gateSlowPattern
+// for SwingDecline, gateIndecision for Indecision). One pass over the events
+// answers for all of them by their filing alone — no document is decoded — and
+// stops at the first such event.
 func carriesTakeProfitEvent(trade aggragates.Trades) bool {
 	for _, event := range trade.StrategyEvents {
 		if event.Param != aggragates.StrategyParamSmartTakeLoss {
 			continue
 		}
-		if quietSlowDeclineExit && event.Gate == GateSlowDecline {
-			return true
-		}
-		if slowPatternDeclineExit && event.Gate == GateSlowPattern {
-			return true
-		}
-		if indecisionDirection && event.Gate == GateIndecision {
-			return true
+		switch event.Gate {
+		case GateSlowDecline:
+			if quietDecline || swingDecline || indecision {
+				return true
+			}
+		case gateSlowPattern:
+			if swingDecline {
+				return true
+			}
+		case gateIndecision:
+			if indecision {
+				return true
+			}
 		}
 	}
 	return false

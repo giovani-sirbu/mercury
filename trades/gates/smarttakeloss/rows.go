@@ -16,8 +16,8 @@ import (
 //
 // The log row is the human-readable output: Message at the row's own price,
 // never trade.PositionPrice. The event is the state: EventData of the row's
-// kind, price and reasons, filed under the row's gate. The engines only append
-// or persist the pair.
+// kind, price, features and reasons, filed under the row's gate. One row, one
+// event: the engines only append or persist the pair.
 func Rows(trade aggragates.Trades, row Row, at time.Time) (aggragates.TradesLogs, aggragates.TradesStrategyEvents) {
 	logRow := aggragates.TradesLogs{
 		TradeID:   trade.ID,
@@ -27,7 +27,7 @@ func Rows(trade aggragates.Trades, row Row, at time.Time) (aggragates.TradesLogs
 		CreatedAt: at,
 		UpdatedAt: at,
 	}
-	data := EventData{Event: row.Event, Price: row.Price, Reasons: row.Reasons}
+	data := EventData{Event: row.Event, Price: row.Price, Reasons: row.Reasons, Features: row.Features}
 	event := aggragates.NewStrategyEvent(trade.ID, aggragates.StrategyParamSmartTakeLoss, row.Gate, data, at)
 
 	return logRow, event

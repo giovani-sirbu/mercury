@@ -74,7 +74,7 @@ func (p StrategyParams) NeedsAIRoute() bool {
 // InjectsEntryHold is true when the first-buy action chain should include
 // shouldHold. This is a PRODUCT rule: cooldown owns the first-fill gate,
 // UseAI owns its legacy entry veto, and SmartTakeLoss holds a long first fill
-// while its quiet slow-decline verdict stands, so no new ladder opens into
+// while its quiet decline verdict stands, so no new ladder opens into
 // the decline its exit sells out of; UsePatterns keeps its seat for the
 // futures pre-chain. DynamicParams is not here: it sizes a first entry for
 // the raised rows but never holds one.

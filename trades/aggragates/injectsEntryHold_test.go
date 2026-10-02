@@ -20,7 +20,7 @@ func fetchAndHoldOf(params StrategyParams) fetchAndHold {
 }
 
 // The first-buy gate injection is a product rule: cooldown, UseAI,
-// UsePatterns and SmartTakeLoss own it — the last for its quiet slow-decline
+// UsePatterns and SmartTakeLoss own it — the last for its quiet decline
 // hold; DynamicParams fetches /smc-trend for its reads, decides the rows a
 // ladder opens with and holds nothing. Pinned beside what each set of flags
 // fetches, so the difference between "fetches the verdict" and "gates the

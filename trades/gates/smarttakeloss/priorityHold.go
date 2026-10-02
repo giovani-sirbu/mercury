@@ -5,42 +5,15 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
 )
 
-// SlowDeclineResetMarker is the text every row carries that resets a pending
-// ladder's quiet slow-decline exit because a depth priority holds the ladder
-// (depthPriorityHeld). Like SlowDeclineMarker it is human-readable,
-// byte-stable for cp and the notification filter, and never a schema: the
-// reset is the reset event beside the row (EventReset). It neither contains
-// nor is contained in any other marker, nor cooldown.DepthPriorityHoldMarker,
-// so a filter that finds a row by its text finds it as the one it is.
-const SlowDeclineResetMarker = "smartTakeLoss: quiet slow decline reset, depth priority holds this ladder"
-
-// SlowDeclineResetMessage frames the reset marker exactly as
-// SlowDeclineMessage frames its own — "Hold <positionType>: …" with the
-// trade's raw PositionType. It names no reasons: the hold row beside it names
-// the ladder the wallet is kept for. Nothing is refused on that tick.
-func SlowDeclineResetMessage(positionType string) string {
-	return slowDeclineRowMessage(positionType, SlowDeclineResetMarker, nil)
-}
-
-// ResetRow is the slowDecline gate's reset row at fill: the reset marker framed with positionType, naming no reasons.
-func ResetRow(positionType string, fill float64) Row {
-	return Row{
-		Message: SlowDeclineResetMessage(positionType),
-		Price:   fill,
-		Gate:    GateSlowDecline,
-		Event:   EventReset,
-	}
-}
-
 // depthPriorityHeld is whether a depth priority holds the ladder, which
-// pauses the quiet slow-decline exit and capital protection on it (Apply,
+// pauses the slow decline gate and capital protection on it (Apply,
 // TakeProfitPercentage): DepthPriorityHoldPausesSmartTakeLoss on, and the
 // trade carries an event of the cooldown depth priority gate
 // (cooldown.GateDepthPriority) stamped strictly after its newest entry fill —
 // newest in slice order, as rebuildState folds the fills. The gate has one
-// kind, its hold, so the event is not decoded. The indecision direction is
-// not paused: a held ladder is latched on a reading, and a latched ladder's
-// take profit reads its position price, all the same.
+// kind, its hold, so the event is not decoded. The sophos reading of the
+// indecision direction is not paused: a held ladder is latched on it, and a
+// latched ladder's take profit reads its position price, all the same.
 //
 // The comparison is the event's CreatedAt against the fill's history stamp
 // (entryFill.At). gates.SaveHoldLog stamps the event with the tick clock, as
@@ -72,19 +45,21 @@ func depthPriorityHeld(trade aggragates.Trades, newest entryFill) bool {
 	return false
 }
 
-// slowDeclineReset is the one row a held tick hands back, if any, and the
-// state as that row leaves it: a pending ladder is reset — the reset row,
-// carrying its newest fill's price, and the ladder watched and not pending —
-// exactly as a cancelled row leaves it, so only slowDeclineGoesPending makes
-// it pending again once the hold has ended. A ladder not pending gets
-// nothing, so the reset is written once. The row goes back in
-// Result.SlowDecline, which every engine already writes.
-func slowDeclineReset(trade aggragates.Trades, st state) (state, *Row) {
+// slowDeclineReset is what a held tick finds of the gate, if anything, and the
+// state as it leaves it: a pending ladder is reset — the reset row, naming the
+// decline features it was pending on and carrying its newest fill's price, and
+// the ladder watched and not pending — exactly as a cancelled row leaves it, so
+// only goesPending makes it pending again once the hold has ended. It resets
+// whichever feature made the ladder pending, and a ladder the events of the
+// gate it replaced left pending too (rebuildState). A ladder not pending gets
+// nothing, so the reset is written once.
+func slowDeclineReset(st state) (state, tick) {
 	if !st.slowDeclinePending {
-		return st, nil
+		return st, tick{}
 	}
-	st.slowDeclinePending = false
-	st.slowDeclinePendingFrom = 0
-	row := ResetRow(trade.PositionType, st.lastFill().Price)
-	return st, &row
+	found := tick{kind: rowReset}
+	for _, feature := range st.pendingFeatures {
+		found.findings = append(found.findings, Finding{Feature: feature})
+	}
+	return st.notPending(), found
 }

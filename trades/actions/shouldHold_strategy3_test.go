@@ -66,7 +66,7 @@ func lastHold(t *testing.T, event events.Events) (string, bool) {
 // no sibling ladder keeping the wallet, and an AI verdict that does not refuse
 // the long — a payload carrying every other family's signal still lets the
 // first fill through: a long pattern verdict scored over HoldMinScore with its
-// target ahead, a quiet slow-decline verdict with its sell band, and a bearish
+// target ahead, a quiet decline verdict with its sell band, and a bearish
 // dynamic params block. The same payload holds the fill once the smart take
 // loss flag is on, so its slow-decline reading is one that flag's gate acts
 // on; and a cooldown verdict that refuses the long holds the fill at the tick

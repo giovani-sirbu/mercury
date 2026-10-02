@@ -61,15 +61,32 @@ func TestEntryHoldThatHoldsNothingIsTheZeroHold(t *testing.T) {
 	}
 }
 
-// Switched off, the quiet slow decline holds no first fill, the verdict
-// standing or not; switched back on, the same entry is held.
+// The hold is the one row of the flag that is a refusal, so it keeps the text
+// the first-fill hold has always carried, in the quiet decline's words; the
+// frame gates.SaveHoldLog puts before it ("Hold entry: ") is the gate's.
+func TestEntryHoldReasonIsPinned(t *testing.T) {
+	if SlowDeclineEntryHoldReason != "smartTakeLoss: quiet decline, first fill held" {
+		t.Fatalf("the entry hold's reason is byte-stable text and must not move, got %q", SlowDeclineEntryHoldReason)
+	}
+}
+
+// Switched off, the quiet decline holds no first fill, the verdict
+// standing or not; switched back on, the same entry is held. The swing decline
+// and the indecision direction hold no first fill whatever they are switched to.
 func TestEntryHoldHoldsNothingWhileSwitchedOff(t *testing.T) {
 	trade := testutil.LadderTrade(false)
-	withQuietSlowDeclineExit(t, false)
+	withQuietDecline(t, false)
 	if got := EntryHold(trade, aggragates.SideLong, slowDeclineVerdict(true)); got.Held() {
 		t.Fatalf("switched off, the verdict must hold nothing, got %+v", got)
 	}
-	withQuietSlowDeclineExit(t, true)
+	withQuietDecline(t, true)
+	withSwingDecline(t, false)
+	withIndecision(t, false)
+	if got := EntryHold(trade, aggragates.SideLong, slowDeclineVerdict(true)); got.Reason != SlowDeclineEntryHoldReason {
+		t.Fatalf("the other features' switches leave the hold as it was, got %+v", got)
+	}
+	withSwingDecline(t, true)
+	withIndecision(t, true)
 	if got := EntryHold(trade, aggragates.SideLong, slowDeclineVerdict(true)); got.Reason != SlowDeclineEntryHoldReason {
 		t.Fatalf("control: switched on, the verdict holds the first fill, got %+v", got)
 	}

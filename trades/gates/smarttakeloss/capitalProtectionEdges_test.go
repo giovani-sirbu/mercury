@@ -15,7 +15,7 @@ import (
 // a child, no flag, no settings, an unknown or lowered depth count, or a
 // partial fill of the newest depth.
 func sampledLadder(r *rand.Rand) aggragates.Trades {
-	depths := []int{0, 1, SlowDeclineArmDepth - 1, SlowDeclineArmDepth, IndecisionArmDepth - 1, IndecisionArmDepth, lastDepthFills - 1, lastDepthFills}
+	depths := []int{0, 1, QuietDeclineArmDepth - 1, QuietDeclineArmDepth, IndecisionArmDepth - 1, IndecisionArmDepth, SwingDeclineArmDepth - 1, SwingDeclineArmDepth, lastDepthFills - 1, lastDepthFills}
 	var ladderFills []testutil.LadderFill
 	if n := depths[r.IntN(len(depths))]; n > 0 {
 		ladderFills = fills(n, "21:30:00")
@@ -45,27 +45,29 @@ func sampledLadder(r *rand.Rand) aggragates.Trades {
 	return trade
 }
 
-// sampledState draws the trade's slow-decline and indecision state, ten kinds
-// with one draw: none, a marker at the newest fill or at the fill before it
-// (the newest not judged yet), a marker a cancel took back, a cancel a marker
-// followed, the retired rule's text rows before a marker, a marker's text
-// without its event, an indecision row, one beside a marker, or an
-// indecision text without its event. The rows are written the way the engines
-// write them, each with its event; a row of text alone carries no event, and
-// so no state.
+// sampledState draws the trade's slow decline gate state, fourteen kinds with
+// one draw: none, a pending row on the quiet decline at the newest fill or at the
+// fill before it (the newest not judged yet), one a cancel took back, a cancel
+// a pending row followed, the retired rule's text rows before a pending row, a
+// pending row's text without its event, a latch row, one beside a pending row,
+// a latch text without its event, a pending row on the swing decline, one on
+// both declines, and the events the gates before the merge wrote — the quiet
+// decline's, the slow pattern's. The rows are written the way the engines write
+// them, each with its event; a row of text alone carries no event, and so no
+// state.
 func sampledState(r *rand.Rand, trade aggragates.Trades) aggragates.Trades {
 	entries := entryFills(trade)
 	newest, before := trade.PositionPrice, trade.PositionPrice
 	if len(entries) >= 2 {
 		before = entries[len(entries)-2].Price
 	}
-	marker := PendingRow("buy", newest, nil)
-	cancel := CancelledRow("buy", newest, nil)
-	earlier := PendingRow("buy", before, nil)
-	latch := LatchedRow("buy", newest, nil)
+	marker := PendingRow(newest, quietFinding(nil))
+	cancel := CancelledRow(newest, quietFinding(nil))
+	earlier := PendingRow(before, quietFinding(nil))
+	latch := LatchedRow(newest, indecisionFinding(nil))
 
 	trade.Logs, trade.StrategyEvents = nil, nil
-	switch r.IntN(10) {
+	switch r.IntN(14) {
 	case 1:
 		return withRows(trade, marker)
 	case 2:
@@ -85,6 +87,14 @@ func sampledState(r *rand.Rand, trade aggragates.Trades) aggragates.Trades {
 		return withRows(trade, marker, latch)
 	case 9:
 		trade.Logs = []aggragates.TradesLogs{{Message: latch.Message}}
+	case 10:
+		return withRows(trade, PendingRow(newest, swingFinding(nil)))
+	case 11:
+		return withRows(trade, PendingRow(newest, indecisionFinding(nil), quietFinding(nil), swingFinding(nil)))
+	case 12:
+		return withEvents(trade, eventOf(GateSlowDecline, legacyDocument(EventPending, newest)))
+	case 13:
+		return withEvents(trade, eventOf(gateSlowPattern, legacyDocument(EventPending, newest)), eventOf(gateIndecision, legacyDocument(EventLatched, newest)))
 	}
 	return trade
 }
@@ -133,15 +143,15 @@ func capitalProtectionHolds(trade aggragates.Trades, price float64, block aggrag
 // the settings row the next fill would use, the base row past the table,
 // floored — against ladder.CountFilledEntries, which counts a legacy row
 // without an order id as a depth of its own and an accounting row as none.
-// capitalProtectionWatched, rebuildState's watch, Armed with the slow decline,
-// the indecision direction and the slow pattern decline switched off — the
-// pattern watches every long spot ladder from SlowPatternArmDepth fills — and
+// capitalProtectionWatched, rebuildState's watch, Armed with the quiet decline,
+// the indecision direction and the swing decline switched off — the swing
+// decline watches every long spot ladder from SwingDeclineArmDepth fills — and
 // Apply's sale at the band all read it so.
 func TestCapitalProtectionWatchIsTheLaddersOwnLastDepth(t *testing.T) {
 	withCapitalProtectionExit(t, true)
-	withQuietSlowDeclineExit(t, false)
-	withIndecisionDirection(t, false)
-	withSlowPatternDeclineExit(t, false)
+	withQuietDecline(t, false)
+	withIndecision(t, false)
+	withSwingDecline(t, false)
 	ladderOf := func(depths int) aggragates.Trades {
 		return testutil.LadderTrade(false, fills(depths, "21:30:00")...)
 	}

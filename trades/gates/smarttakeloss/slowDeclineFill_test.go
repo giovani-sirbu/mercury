@@ -3,7 +3,6 @@ package smarttakeloss
 import (
 	"fmt"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -13,12 +12,12 @@ import (
 )
 
 // The fixtures are the ladder that sold under break even on a fill the exit
-// never judged: the w3s ladder pending from its fifth fill, the marker row
-// written for that fill, and a sixth fill landed after the quiet reading
-// broke. judgeTick is minutes after the sixth fill: the tick the engines
-// stamp the judgement's row with. The readings
-// serve judgeBand: a price at it or at overJudgeBand reaches it,
-// underJudgeBand does not, and all three sit under the ladder's break even.
+// never judged: the w3s ladder pending from its fifth fill, the row written
+// for that fill, and a sixth fill landed after the quiet reading broke.
+// judgeTick is minutes after the sixth fill: the tick the engines stamp the
+// judgement's row with. The readings serve judgeBand: a price at it or at
+// overJudgeBand reaches it, underJudgeBand does not, and all three sit under
+// the ladder's break even.
 const (
 	pendingFromFifth = 179.78
 	sixthFill        = 175.83
@@ -37,7 +36,7 @@ var slowDeclineBreakReasons = []string{"NATR(14) 1.04x its median sampled every 
 // engine wrote for its fifth fill, before the sixth landed.
 func pendingAtFive() aggragates.Trades {
 	trade := testutil.LadderTrade(false, fills(6, "23:09:00")...)
-	return withRow(trade, PendingRow("buy", pendingFromFifth, slowDeclineReasons), testutil.At("15:00:00"))
+	return withRow(trade, quietPending(pendingFromFifth), testutil.At("15:00:00"))
 }
 
 // brokenReading is a reading sophos served on a read window whose leg is not
@@ -67,29 +66,18 @@ func judgeBandAlone() aggragates.AIIndicators {
 	return withBlock(aggragates.SmartTakeLossIndicators{SlowDeclineSellBand: judgeBand})
 }
 
-// assertRow fails unless got is the row the engine writes: the message at the
-// price, and the event beside it filed under the gate and kind that message's
-// marker names (rowFiling).
-func assertRow(t *testing.T, got *Row, message string, price float64) {
-	t.Helper()
-	if got == nil || got.Message != message || got.Price != price {
-		t.Fatalf("row = %+v, want %q at %v", got, message, price)
-	}
-	if gate, kind := rowFiling(got.Message); gate == "" || got.Gate != gate || got.Event != kind {
-		t.Fatalf("row %q is filed under %q/%q, want %q/%q", got.Message, got.Gate, got.Event, gate, kind)
-	}
+// sixthCancelled is the row that cancels the exit at the sixth fill on the
+// reasons sophos names for a broken reading; sixthConfirmed the one that
+// confirms it on the leg still on and quiet.
+func sixthCancelled() Row {
+	return CancelledRow(sixthFill, quietFinding(slowDeclineBreakReasons))
 }
 
-// assertNoSale is the answer of a ladder the slow decline does not sell:
-// the proposal untouched, no reason.
-func assertNoSale(t *testing.T, got Result, position string) {
-	t.Helper()
-	if got.Position != position || got.Reason != "" {
-		t.Fatalf("expected %q with no sale, got %+v", position, got)
-	}
+func sixthConfirmed() Row {
+	return ConfirmedRow(sixthFill, quietFinding(slowDeclineReasons))
 }
 
-func TestSlowDeclineFillFixture(t *testing.T) {
+func TestJudgementFixture(t *testing.T) {
 	trade := pendingAtFive()
 	st := rebuildState(trade)
 	if !st.slowDeclinePending || st.slowDeclinePendingFrom != pendingFromFifth || st.lastFill().Price != sixthFill {
@@ -103,49 +91,25 @@ func TestSlowDeclineFillFixture(t *testing.T) {
 	}
 }
 
-// The cancel row is schema like the marker, framed like it, and neither text
-// holds the other — nor any other marker rebuildState reads.
-func TestSlowDeclineCancelMessageIsFramedLikeTheMarker(t *testing.T) {
-	want := "Hold stopLoss: smartTakeLoss: quiet slow decline broken at the new fill, exit cancelled"
-	if got := SlowDeclineCancelMessage("stopLoss", nil); got != want {
-		t.Fatalf("cancel row %q, want %q", got, want)
-	}
-	if got := SlowDeclineCancelMessage("buy", []string{"leg off", "NATR over"}); got != "Hold buy: "+SlowDeclineCancelMarker+" (leg off, NATR over)" {
-		t.Fatalf("the reasons follow the marker in parentheses, got %q", got)
-	}
-	markers := []string{SlowDeclineMarker, SlowDeclineCancelMarker, SlowDeclineEntryHoldReason, SlowPatternMarker, SlowPatternCancelMarker}
-	for _, one := range markers {
-		for _, other := range markers {
-			if one != other && strings.Contains(one, other) {
-				t.Errorf("%q contains %q", one, other)
-			}
-		}
-	}
-	if strings.Contains(SlowDeclineCancelMessage("buy", slowDeclineBreakReasons), SlowDeclineMarker) || strings.Contains(SlowDeclineMessage("buy", slowDeclineReasons), SlowDeclineCancelMarker) {
-		t.Fatal("a framed row must never read as the other marker")
-	}
-}
-
 // A reading that is not the leg on and quiet cancels the exit on the first
-// tick after the new fill: one cancel row, naming what broke and carrying the
-// new fill's price, and no sale at all — on that tick, at and over the band,
-// and on the next ones, whatever sophos serves by then. A band served without
-// break reasons cancels too, with the bare row.
+// tick after the new fill: one cancelled row, naming what broke and carrying
+// the new fill's price, and no sale at all — on that tick, at and over the
+// band, and on the next ones, whatever sophos serves by then. A band served
+// without break reasons cancels too, with the bare row.
 func TestApplyCancelsThePendingExitOnABrokenReading(t *testing.T) {
 	trade := pendingAtFive()
-	cancel := SlowDeclineCancelMessage("buy", slowDeclineBreakReasons)
 	for _, position := range []string{"", "stopLoss", "buy"} {
 		for _, price := range []float64{judgeBand, overJudgeBand, underJudgeBand} {
 			got := Apply(trade, position, price, brokenReading())
-			assertRow(t, got.SlowDecline, cancel, sixthFill)
+			assertRow(t, got, sixthCancelled())
 			assertNoSale(t, got, position)
 		}
 	}
 	bare := Apply(trade, "", overJudgeBand, judgeBandAlone())
-	assertRow(t, bare.SlowDecline, SlowDeclineCancelMessage("buy", nil), sixthFill)
+	assertRow(t, bare, CancelledRow(sixthFill, quietFinding(nil)))
 	assertNoSale(t, bare, "")
 
-	cancelled := withRow(trade, CancelledRow("buy", sixthFill, slowDeclineBreakReasons), judgeTick)
+	cancelled := withRow(trade, sixthCancelled(), judgeTick)
 	if st := rebuildState(cancelled); st.slowDeclinePending || !st.slowDeclineWatched {
 		t.Fatalf("a cancelled ladder is watched and not pending, got %+v", st)
 	}
@@ -157,21 +121,20 @@ func TestApplyCancelsThePendingExitOnABrokenReading(t *testing.T) {
 	}
 }
 
-// The leg still on and quiet confirms the exit: the marker row again,
-// carrying the new fill's price, and the ladder pending from that fill — the
-// band sells from the confirming tick on, as on any pending ladder, and no
-// second row is written.
+// The leg still on and quiet confirms the exit: the confirmed row, carrying
+// the new fill's price, and the ladder pending from that fill — the band
+// sells from the confirming tick on, as on any pending ladder, and no second
+// row is written.
 func TestApplyConfirmsThePendingExitOnALegOnAndQuiet(t *testing.T) {
 	trade := pendingAtFive()
-	marker := SlowDeclineMessage("buy", slowDeclineReasons)
 	got := Apply(trade, "", underJudgeBand, legOnAndQuiet())
-	assertRow(t, got.SlowDecline, marker, sixthFill)
+	assertRow(t, got, sixthConfirmed())
 	assertNoSale(t, got, "")
 	confirming := Apply(trade, "stopLoss", judgeBand, legOnAndQuiet())
-	assertRow(t, confirming.SlowDecline, marker, sixthFill)
+	assertRow(t, confirming, sixthConfirmed())
 	assertForced(t, confirming, reasonSellBand)
 
-	confirmed := withRow(trade, *got.SlowDecline, judgeTick)
+	confirmed := withRow(trade, got.Rows[0], judgeTick)
 	if st := rebuildState(confirmed); !st.slowDeclinePending || st.slowDeclinePendingFrom != sixthFill || slowDeclineFillUnjudged(confirmed, st) {
 		t.Fatalf("a confirmed ladder is pending from the new fill, got %+v", st)
 	}
@@ -179,7 +142,7 @@ func TestApplyConfirmsThePendingExitOnALegOnAndQuiet(t *testing.T) {
 		for _, price := range []float64{judgeBand, overJudgeBand} {
 			sold := Apply(confirmed, "", price, reading)
 			assertForced(t, sold, reasonSellBand)
-			if sold.SlowDecline != nil {
+			if len(sold.Rows) != 0 {
 				t.Fatalf("a judged fill writes no second row, got %+v", sold)
 			}
 		}
@@ -202,7 +165,7 @@ func TestApplyJudgesTheNewFillOnTheFirstTickThatServesTheBand(t *testing.T) {
 		"a smooth bar without a band":  withBlock(aggragates.SmartTakeLossIndicators{SlowDeclineSmoothFrom: testutil.At("23:00:00").UnixMilli()}),
 	} {
 		for _, position := range []string{"", "stopLoss"} {
-			if got := Apply(trade, position, underJudgeBand, reading); got.SlowDecline != nil || got.Position != position {
+			if got := Apply(trade, position, underJudgeBand, reading); len(got.Rows) != 0 || got.Position != position {
 				t.Fatalf("%s: nothing is judged and the proposal passes, got %+v", name, got)
 			}
 		}
@@ -210,7 +173,7 @@ func TestApplyJudgesTheNewFillOnTheFirstTickThatServesTheBand(t *testing.T) {
 	if st := rebuildState(trade); !slowDeclineFillUnjudged(trade, st) {
 		t.Fatal("the fill must still wait for its judgement")
 	}
-	assertRow(t, Apply(trade, "", underJudgeBand, brokenReading()).SlowDecline, SlowDeclineCancelMessage("buy", slowDeclineBreakReasons), sixthFill)
+	assertRow(t, Apply(trade, "", underJudgeBand, brokenReading()), sixthCancelled())
 }
 
 // The fill that takes the ladder to its last depth is never judged: no row,
@@ -227,7 +190,7 @@ func TestApplyNeverJudgesTheFillThatTakesTheLadderToItsLastDepth(t *testing.T) {
 		for _, price := range []float64{judgeBand, overJudgeBand} {
 			sold := Apply(last, "", price, reading)
 			assertForced(t, sold, reasonSellBand)
-			if sold.SlowDecline != nil {
+			if len(sold.Rows) != 0 {
 				t.Fatalf("the last depth's fill writes no row, got %+v", sold)
 			}
 		}
@@ -235,17 +198,17 @@ func TestApplyNeverJudgesTheFillThatTakesTheLadderToItsLastDepth(t *testing.T) {
 
 	short := pendingAtFive()
 	short.StrategyPair.StrategySettings[0].Depths = 7
-	assertRow(t, Apply(short, "", underJudgeBand, brokenReading()).SlowDecline, SlowDeclineCancelMessage("buy", slowDeclineBreakReasons), sixthFill)
+	assertRow(t, Apply(short, "", underJudgeBand, brokenReading()), sixthCancelled())
 }
 
 // After a cancel the ladder goes pending again only by the rule it went
-// pending by the first time (slowDeclineGoesPending): the verdict,
-// or the leg on and quiet counted smooth from the newest fill with the
-// closed bars after it, marks it at its newest fill; a broken reading, the
-// band alone, or a leg on and quiet whose count from the newest fill is not
-// served marks nothing. Pending again, it sells at the band.
+// pending by the first time (quietDeclineGoesPending): the verdict, or the leg
+// on and quiet counted smooth from the newest fill with the closed bars after
+// it, marks it at its newest fill; a broken reading, the band alone, or a leg
+// on and quiet whose count from the newest fill is not served marks nothing.
+// Pending again, it sells at the band.
 func TestApplyGoesPendingAgainAfterACancelOnlyByTheGoPendingRule(t *testing.T) {
-	cancelled := withRow(pendingAtFive(), CancelledRow("buy", sixthFill, slowDeclineBreakReasons), judgeTick)
+	cancelled := withRow(pendingAtFive(), sixthCancelled(), judgeTick)
 	next := judgeTick.Add(time.Hour)
 	for _, reading := range []aggragates.AIIndicators{brokenReading(), judgeBandAlone(), legOnAndQuiet()} {
 		assertNoSlowDeclineRow(t, Apply(cancelled, "", underJudgeBand, reading), "")
@@ -256,8 +219,8 @@ func TestApplyGoesPendingAgainAfterACancelOnlyByTheGoPendingRule(t *testing.T) {
 	smoothFromTheFill := quietLegBlock(false, testutil.At("23:00:00"), testutil.At("23:59:00"))
 	for name, reading := range map[string]aggragates.AIIndicators{"the verdict": verdict, "the count from the newest fill": smoothFromTheFill} {
 		got := Apply(cancelled, "", underJudgeBand, reading)
-		assertRow(t, got.SlowDecline, SlowDeclineMessage("buy", slowDeclineReasons), sixthFill)
-		repended := withRow(cancelled, *got.SlowDecline, next)
+		assertRow(t, got, quietPending(sixthFill))
+		repended := withRow(cancelled, got.Rows[0], next)
 		if st := rebuildState(repended); !st.slowDeclinePending || st.slowDeclinePendingFrom != sixthFill {
 			t.Fatalf("%s makes the cancelled ladder pending from its newest fill, got %+v", name, st)
 		}
@@ -265,12 +228,12 @@ func TestApplyGoesPendingAgainAfterACancelOnlyByTheGoPendingRule(t *testing.T) {
 	}
 }
 
-// Several fills landed since the marker are judged as one, at the newest:
-// one row, carrying that fill's price.
+// Several fills landed since the row are judged as one, at the newest: one
+// row, carrying that fill's price.
 func TestApplyJudgesTheNewestOfSeveralFills(t *testing.T) {
-	trade := withRows(testutil.LadderTrade(false, fills(6, "23:09:00")...), PendingRow("buy", slowDeclineLastFill, nil))
-	assertRow(t, Apply(trade, "", underJudgeBand, brokenReading()).SlowDecline, SlowDeclineCancelMessage("buy", slowDeclineBreakReasons), sixthFill)
-	assertRow(t, Apply(trade, "", underJudgeBand, legOnAndQuiet()).SlowDecline, SlowDeclineMessage("buy", slowDeclineReasons), sixthFill)
+	trade := withRows(testutil.LadderTrade(false, fills(6, "23:09:00")...), PendingRow(slowDeclineLastFill, quietFinding(nil)))
+	assertRow(t, Apply(trade, "", underJudgeBand, brokenReading()), sixthCancelled())
+	assertRow(t, Apply(trade, "", underJudgeBand, legOnAndQuiet()), sixthConfirmed())
 }
 
 // The rows hold prices, so a later fill at exactly the price the ladder is
@@ -285,23 +248,23 @@ func TestApplyReadsARefillAtThePendingPriceAsJudged(t *testing.T) {
 	}
 	got := Apply(trade, "", judgeBand, brokenReading())
 	assertForced(t, got, reasonSellBand)
-	if got.SlowDecline != nil {
+	if len(got.Rows) != 0 {
 		t.Fatalf("a refill at the pending price writes no row, got %+v", got)
 	}
 }
 
-// The judgement goes out before the protected return, like the marker: a
-// close the ladder proposes, or a trade resting in one, still gets its row,
-// and the close is never replaced.
+// The judgement goes out before the protected return, like the going-pending
+// row: a close the ladder proposes, or a trade resting in one, still gets its
+// row, and the close is never replaced.
 func TestApplyJudgesTheNewFillBesideADecidedClose(t *testing.T) {
 	resting := pendingAtFive()
 	resting.PositionType = "takeProfit"
 	got := Apply(resting, "", overJudgeBand, brokenReading())
-	assertRow(t, got.SlowDecline, SlowDeclineCancelMessage("takeProfit", slowDeclineBreakReasons), sixthFill)
+	assertRow(t, got, sixthCancelled())
 	assertNoSale(t, got, "")
 
 	proposed := Apply(pendingAtFive(), "takeProfit", overJudgeBand, legOnAndQuiet())
-	assertRow(t, proposed.SlowDecline, SlowDeclineMessage("buy", slowDeclineReasons), sixthFill)
+	assertRow(t, proposed, sixthConfirmed())
 	assertNoSale(t, proposed, "takeProfit")
 }
 
@@ -318,50 +281,50 @@ func withFill(trade aggragates.Trades, price float64, at time.Time) aggragates.T
 
 // engineTick is one engine tick: Apply's answer on the trade, and the trade
 // carrying every row that answer handed back, each with its event, appended in
-// the order the engines append them — the slow-decline row, then the
-// indecision row — and stamped with the tick.
+// order and stamped with the tick.
 func engineTick(trade aggragates.Trades, position string, price float64, now time.Time, ai aggragates.AIIndicators) (aggragates.Trades, Result) {
 	got := Apply(trade, position, price, ai)
-	if got.SlowDecline != nil {
-		trade = withRow(trade, *got.SlowDecline, now)
-	}
-	if got.Indecision != nil {
-		trade = withRow(trade, *got.Indecision, now)
+	for _, row := range got.Rows {
+		trade = withRow(trade, row, now)
 	}
 	return trade, got
 }
 
-// slowDeclineRowsInOrder lists the trade's slow-decline rows in slice order,
-// each as its kind and the price it carries: the text the operator reads, and
-// the twin of slowDeclineEventsInOrder.
-func slowDeclineRowsInOrder(trade aggragates.Trades) []string {
-	var rows []string
-	for _, logged := range trade.Logs {
-		switch {
-		case strings.Contains(logged.Message, SlowDeclineCancelMarker):
-			rows = append(rows, fmt.Sprintf("cancel@%v", logged.Price))
-		case strings.Contains(logged.Message, SlowDeclineMarker):
-			rows = append(rows, fmt.Sprintf("marker@%v", logged.Price))
-		}
+// writtenRows lists the trade's log rows in slice order: the text the operator
+// reads, the twin of writtenEvents.
+func writtenRows(trade aggragates.Trades) []string {
+	rows := make([]string, len(trade.Logs))
+	for index, logged := range trade.Logs {
+		rows[index] = fmt.Sprintf("%s@%v", logged.Message, logged.Price)
 	}
 	return rows
 }
 
-// slowDeclineEventsInOrder lists the trade's slow-decline events in slice
-// order, each as its kind and the price it carries, in the notation
-// slowDeclineRowsInOrder uses for the row beside it.
-func slowDeclineEventsInOrder(t *testing.T, trade aggragates.Trades) []string {
+// writtenEvents lists the trade's slow decline events in slice order, each as
+// its kind and the price it carries, in the notation the rows are listed in
+// (expectedRows).
+func writtenEvents(t *testing.T, trade aggragates.Trades) []string {
 	t.Helper()
-	notation := map[string]string{EventPending: "marker", EventCancelled: "cancel"}
 	var listed []string
 	for _, event := range trade.StrategyEventsOf(aggragates.StrategyParamSmartTakeLoss, GateSlowDecline) {
 		var data EventData
 		if err := event.DecodeData(&data); err != nil {
 			t.Fatalf("event %+v does not decode: %v", event, err)
 		}
-		listed = append(listed, fmt.Sprintf("%s@%v", notation[data.Event], data.Price))
+		listed = append(listed, fmt.Sprintf("%s@%v", data.Event, data.Price))
 	}
 	return listed
+}
+
+// expectedRows lists rows as writtenRows lists the rows written, and as
+// writtenEvents lists their events: the message and kind first, the price
+// after.
+func expectedRows(rows ...Row) (messages, events []string) {
+	for _, row := range rows {
+		messages = append(messages, fmt.Sprintf("%s@%v", row.Message, row.Price))
+		events = append(events, fmt.Sprintf("%s@%v", row.Event, row.Price))
+	}
+	return messages, events
 }
 
 // verdictReading is the verdict served with the band: the reading a
@@ -391,21 +354,20 @@ func pastTheNewestFillsTakeProfit(t *testing.T, trade aggragates.Trades) float64
 // itself hands back, in the order the engines append them. The verdict marks
 // it pending at its newest fill. Two fills land while sophos serves no
 // reading: nothing is judged and nothing sells, and the first tick that
-// serves the band judges the newest of them once — the cancel row at its
+// serves the band judges the newest of them once — the cancelled row at its
 // price — while the ticks after it write nothing and sell nothing, at the
 // band or past the newest fill's take profit, and the take profit reads the
 // average alone. The verdict marks the ladder pending again at that fill,
 // where only the band sells it; the next fill, on a broken reading, is
-// cancelled in turn — marker, cancel, marker, cancel — and the ladder is not
-// pending. Marked pending once more, the fill that takes it to its last depth
-// is never judged, and the band alone sells it: capital protection, which
-// watches it from that fill on, is served no band.
+// cancelled in turn — pending, cancelled, pending, cancelled — and the ladder
+// is not pending. Marked pending once more, the fill that takes it to its last
+// depth is never judged, and the band alone sells it: capital protection,
+// which watches it from that fill on, is served no band.
 func TestApplyFoldsItsOwnRowsFillAfterFill(t *testing.T) {
 	noReading := withBlock(aggragates.SmartTakeLossIndicators{})
-	cancel := SlowDeclineCancelMessage("buy", slowDeclineBreakReasons)
-	marker := SlowDeclineMessage("buy", slowDeclineReasons)
 	w3s := fills(8, "21:30:00")
 	fill5, fill6, fill7, fill8 := w3s[4].Price, w3s[5].Price, w3s[6].Price, w3s[7].Price
+	cancel := func(fill float64) Row { return CancelledRow(fill, quietFinding(slowDeclineBreakReasons)) }
 
 	trade := testutil.LadderTrade(false, fills(4, "17:38:00")...)
 	if ladder.ConfiguredDepths(trade) != 8 || fill5 != pendingFromFifth || fill6 != sixthFill || trade.PositionPrice != slowDeclineLastFill {
@@ -413,7 +375,7 @@ func TestApplyFoldsItsOwnRowsFillAfterFill(t *testing.T) {
 	}
 
 	trade, got := engineTick(trade, "", underJudgeBand, testutil.At("18:00:00"), verdictReading())
-	assertRow(t, got.SlowDecline, marker, slowDeclineLastFill)
+	assertRow(t, got, quietPending(slowDeclineLastFill))
 	assertNoSale(t, got, "")
 
 	trade = withFill(trade, fill5, testutil.At("18:30:00"))
@@ -432,7 +394,7 @@ func TestApplyFoldsItsOwnRowsFillAfterFill(t *testing.T) {
 	}
 
 	trade, got = engineTick(trade, "", overJudgeBand, testutil.At("19:30:00"), brokenReading())
-	assertRow(t, got.SlowDecline, cancel, fill6)
+	assertRow(t, got, cancel(fill6))
 	assertNoSale(t, got, "")
 	breakEven := ladder.AverageEntryPrice(trade)
 	overBreakEven := breakEven + 1
@@ -446,7 +408,7 @@ func TestApplyFoldsItsOwnRowsFillAfterFill(t *testing.T) {
 	}
 
 	trade, got = engineTick(trade, "", underJudgeBand, testutil.At("20:00:00"), verdictReading())
-	assertRow(t, got.SlowDecline, marker, fill6)
+	assertRow(t, got, quietPending(fill6))
 	assertNoSale(t, got, "")
 	assertNoSlowDeclineRow(t, Apply(trade, "", pastTheNewestFillsTakeProfit(t, trade), judgeBandAlone()), "")
 	assertForced(t, Apply(trade, "", judgeBand, judgeBandAlone()), reasonSellBand)
@@ -456,17 +418,17 @@ func TestApplyFoldsItsOwnRowsFillAfterFill(t *testing.T) {
 
 	trade = withFill(trade, fill7, testutil.At("20:30:00"))
 	trade, got = engineTick(trade, "", overJudgeBand, testutil.At("20:45:00"), brokenReading())
-	assertRow(t, got.SlowDecline, cancel, fill7)
+	assertRow(t, got, cancel(fill7))
 	assertNoSale(t, got, "")
 	if st := rebuildState(trade); st.slowDeclinePending || st.slowDeclinePendingFrom != 0 || !st.slowDeclineWatched {
-		t.Fatalf("marker, cancel, marker, cancel: watched and not pending, got %+v", st)
+		t.Fatalf("pending, cancelled, pending, cancelled: watched and not pending, got %+v", st)
 	}
 	for _, price := range []float64{judgeBand, overJudgeBand, pastTheNewestFillsTakeProfit(t, trade)} {
 		assertNoSlowDeclineRow(t, Apply(trade, "", price, brokenReading()), "")
 	}
 
 	trade, got = engineTick(trade, "", underJudgeBand, testutil.At("21:15:00"), verdictReading())
-	assertRow(t, got.SlowDecline, marker, fill7)
+	assertRow(t, got, quietPending(fill7))
 	trade = withFill(trade, fill8, testutil.At("21:30:00"))
 	if ladder.CountFilledEntries(trade) != ladder.ConfiguredDepths(trade) {
 		t.Fatal("fixture drifted: the eighth fill must take the ladder to its last depth")
@@ -476,104 +438,16 @@ func TestApplyFoldsItsOwnRowsFillAfterFill(t *testing.T) {
 		assertNoSlowDeclineRow(t, Apply(trade, "", pastTheNewestFillsTakeProfit(t, trade), reading), "")
 		sold := Apply(trade, "", overJudgeBand, reading)
 		assertForced(t, sold, reasonSellBand)
-		if sold.SlowDecline != nil {
+		if len(sold.Rows) != 0 {
 			t.Fatalf("the last depth's fill is never judged, got %+v", sold)
 		}
 	}
 
-	want := []string{
-		fmt.Sprintf("marker@%v", slowDeclineLastFill), fmt.Sprintf("cancel@%v", fill6), fmt.Sprintf("marker@%v", fill6),
-		fmt.Sprintf("cancel@%v", fill7), fmt.Sprintf("marker@%v", fill7),
+	wantRows, wantEvents := expectedRows(quietPending(slowDeclineLastFill), cancel(fill6), quietPending(fill6), cancel(fill7), quietPending(fill7))
+	if rows := writtenRows(trade); !reflect.DeepEqual(rows, wantRows) {
+		t.Fatalf("rows %v, want %v", rows, wantRows)
 	}
-	if rows := slowDeclineRowsInOrder(trade); fmt.Sprint(rows) != fmt.Sprint(want) {
-		t.Fatalf("rows %v, want %v", rows, want)
+	if listed := writtenEvents(t, trade); !reflect.DeepEqual(listed, wantEvents) {
+		t.Fatalf("events %v, want the rows' %v", listed, wantEvents)
 	}
-	if listed := slowDeclineEventsInOrder(t, trade); fmt.Sprint(listed) != fmt.Sprint(want) {
-		t.Fatalf("events %v, want the rows' %v", listed, want)
-	}
-}
-
-// A new fill on a pending slow-pattern ladder is judged once the series sophos
-// serves has closed its bar: the window read again with the new fill holding
-// confirms the exit — the pending row at the new fill, and the band sells on
-// that same tick — and anything else cancels it, with the reasons of what
-// missed, a window the series cannot read included, and no sale on the cancel
-// tick. A series not served, or one that has not closed the new fill's bar,
-// is waited on: no row, and a ladder with an unjudged fill sells nothing. The
-// judgement has no freshness bound, and the latch the pattern took stays
-// through a cancel.
-func TestSlowPatternJudgesTheNewFillOfAPendingLadder(t *testing.T) {
-	fifth := stairFifthFill(t)
-	if st := rebuildState(fifth); !st.slowPatternPending || !slowPatternFillUnjudged(fifth, st) || slowPatternSells(fifth, st) {
-		t.Fatalf("fixture drifted: pending from the fourth fill, the fifth unjudged, got %+v", st)
-	}
-	late := stairBlock(append(append([]float64{}, stairTurns...), 84, 83, 82, 81), 42)
-	older := stairBlock(stairTurns, 30)
-	older.SlowPatternOpens, older.SlowPatternCloses = older.SlowPatternOpens[10:], older.SlowPatternCloses[10:]
-	for name, tc := range map[string]struct {
-		block aggragates.SmartTakeLossIndicators
-		event string
-	}{
-		"confirmed":                           {stairBlock(stairTurns, 30), EventPending},
-		"confirmed twelve bars late":          {late, EventPending},
-		"broken by a rally":                   {stairBlock(stairBounce, 30), EventCancelled},
-		"a window the series no longer holds": {older, EventCancelled},
-		"the fill's bar not closed yet":       {stairBlock(stairTurns, 29), ""},
-		"no series served":                    {aggragates.SmartTakeLossIndicators{SlowDeclineSellBand: slowDeclineBand}, ""},
-	} {
-		got := Apply(fifth, "", slowDeclineBand+1, withBlock(tc.block))
-		if (got.SlowDecline == nil && tc.event != "") || (got.SlowDecline != nil && (got.SlowDecline.Event != tc.event || got.SlowDecline.Gate != GateSlowPattern || got.SlowDecline.Price != stairPrices[4])) {
-			t.Errorf("%s: want a %q row at the fifth fill, got %+v", name, tc.event, got.SlowDecline)
-		}
-		if got.Indecision != nil {
-			t.Errorf("%s: the latch is taken and never written twice, got %+v", name, got.Indecision)
-		}
-		if sold := got.Reason == reasonSlowPatternBand; sold != (tc.event == EventPending) {
-			t.Errorf("%s: the band sells on a confirmation and on no other tick, got %+v", name, got)
-		}
-	}
-
-	_, got := engineTick(fifth, "", slowDeclineBand+1, testutil.At("08:00:00"), withBlock(older))
-	if want := []string{"depth 5, no window between the fills is readable in the 1h bars served"}; !reflect.DeepEqual(got.SlowDecline.Reasons, want) {
-		t.Errorf("the cancel names why nothing was read, got %q", got.SlowDecline.Reasons)
-	}
-	broken := stairBlock(stairBounce, 30)
-	cancelled, _ := engineTick(fifth, "", slowDeclineBand+1, testutil.At("08:00:00"), withBlock(broken))
-	if st := rebuildState(cancelled); !st.slowPatternWatched || st.slowPatternPending || !st.indecision {
-		t.Fatalf("a cancelled ladder is watched, not pending, and still latched, got %+v", st)
-	}
-	assertUntouched(t, Apply(cancelled, "", slowDeclineBand+1, withBlock(broken)), "")
-}
-
-// The fill that takes a pending slow-pattern ladder to its last depth is never
-// judged: it stays pending from where it was and the band sells at once.
-func TestSlowPatternNeverJudgesTheFillThatReachesTheLastDepth(t *testing.T) {
-	withSlowPatternDeclineExit(t, true)
-	seventh := withRows(stairLadder(0, 9, 15, 24, 30, 36, 42), SlowPatternPendingRow("buy", stairPrices[6], nil))
-	eighth := withFill(seventh, stairPrices[7], stairOpen(48).Add(time.Minute))
-	if st := rebuildState(eighth); !st.slowPatternPending || slowPatternFillUnjudged(eighth, st) || !slowPatternSells(eighth, st) {
-		t.Fatalf("fixture drifted: the last-depth fill must read as judged, got %+v", st)
-	}
-	block := withBlock(aggragates.SmartTakeLossIndicators{SlowDeclineSellBand: slowDeclineBand})
-	assertUntouched(t, Apply(eighth, "", slowDeclineBand-1, block), "")
-	assertForced(t, Apply(eighth, "", slowDeclineBand+1, block), reasonSlowPatternBand)
-}
-
-// The slow pattern shares the slow-decline slot: on a tick the quiet slow decline
-// writes its own row the pattern is not read, and lands on the next tick with its
-// latch; with both pending the quiet rule's band is read first.
-func TestSlowPatternYieldsTheSlotToTheQuietSlowDecline(t *testing.T) {
-	withSlowPatternDeclineExit(t, true)
-	block := stairBlock(stairTurns, 24)
-	block.SlowDeclineExit, block.SlowDeclineExitReasons, block.SlowDeclineFillFrom = true, slowDeclineReasons, fillWindowFrom.UnixMilli()
-	ticked, first := engineTick(stairLadder(0, 9, 15, 24), "", slowDeclineBand-1, testutil.At("01:00:00"), withBlock(block))
-	assertRow(t, first.SlowDecline, SlowDeclineMessage("buy", slowDeclineReasons), stairPrices[3])
-	if first.Indecision != nil || rebuildState(ticked).slowPatternPending {
-		t.Fatalf("the quiet rule keeps the slot and the pattern is not read, got %+v", first)
-	}
-	both, second := engineTick(ticked, "", slowDeclineBand-1, testutil.At("01:15:00"), withBlock(block))
-	assertRow(t, second.SlowDecline, SlowPatternMessage("buy", patternReasonsAt24), stairPrices[3])
-	assertRow(t, second.Indecision, IndecisionMessage("buy", append([]string{"slow pattern decline"}, patternReasonsAt24...)), stairPrices[3])
-	assertForced(t, Apply(both, "", slowDeclineBand+1, withBlock(block)), reasonSellBand)
-	assertUntouched(t, Apply(both, "", slowDeclineBand-1, withBlock(block)), "")
 }

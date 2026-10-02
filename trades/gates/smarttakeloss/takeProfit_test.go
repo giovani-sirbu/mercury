@@ -183,7 +183,7 @@ func TestTakeProfitPercentageReadsTheNewestOrderNotTheNewestRow(t *testing.T) {
 
 // Every trade the pending event does not make pending reads its input: an
 // inverse ladder, a child, a futures trade, a ladder without a fill, a ladder
-// short of SlowDeclineArmDepth, a strategy without the flag, a marker row
+// short of QuietDeclineArmDepth, a strategy without the flag, a pending row
 // without its event — and a pending trade on no price at all.
 func TestTakeProfitPercentageLeavesTheOtherTradesAlone(t *testing.T) {
 	wearing := pendingTrade()
@@ -195,20 +195,20 @@ func TestTakeProfitPercentageLeavesTheOtherTradesAlone(t *testing.T) {
 	futures := pendingTrade()
 	futures.Strategy.TradeType = aggragates.Futures
 	noFill := carryingTheStateOf(testutil.LadderTrade(false), wearing)
-	shallow := carryingTheStateOf(testutil.LadderTrade(false, fills(SlowDeclineArmDepth-1, "17:38:00")...), wearing)
+	shallow := carryingTheStateOf(testutil.LadderTrade(false, fills(QuietDeclineArmDepth-1, "17:38:00")...), wearing)
 	off := pendingTrade()
 	off.Strategy.Params.SmartTakeLoss = false
 	textOnly := watchedTrade()
-	textOnly.Logs = []aggragates.TradesLogs{{Message: SlowDeclineMessage("buy", slowDeclineReasons), Price: slowDeclineLastFill, Type: aggragates.LOG_INFO}}
+	textOnly.Logs = []aggragates.TradesLogs{{Message: quietPending(slowDeclineLastFill).Message, Price: slowDeclineLastFill, Type: aggragates.LOG_INFO}}
 
 	for name, trade := range map[string]aggragates.Trades{
-		"an inverse ladder":              inverse,
-		"a child":                        child,
-		"a futures trade":                futures,
-		"a ladder without a fill":        noFill,
-		"a ladder too shallow":           shallow,
-		"a strategy without the flag":    off,
-		"a marker row without its event": textOnly,
+		"an inverse ladder":               inverse,
+		"a child":                         child,
+		"a futures trade":                 futures,
+		"a ladder without a fill":         noFill,
+		"a ladder too shallow":            shallow,
+		"a strategy without the flag":     off,
+		"a pending row without its event": textOnly,
 	} {
 		if got := TakeProfitPercentage(trade, price, breakEvenReading); got != breakEvenReading {
 			t.Errorf("%s must read its input, got %v", name, got)
@@ -227,10 +227,10 @@ func TestTakeProfitPercentageLeavesTheOtherTradesAlone(t *testing.T) {
 // A cancelled event ends the reading from the newest fill: a cancelled trade
 // reads its input at every price, at and over break even included, exactly as
 // the ladder without the pending event — it carries the pending event, but
-// its last slow-decline event is the cancelled one. A pending event after the
-// cancelled one makes it read its newest fill again.
+// its last event of the slow decline gate is the cancelled one. A pending event
+// after the cancelled one makes it read its newest fill again.
 func TestTakeProfitPercentageReadsTheInputOnACancelledTrade(t *testing.T) {
-	cancelled := withRows(pendingTrade(), CancelledRow("buy", slowDeclineLastFill, slowDeclineBreakReasons))
+	cancelled := withRows(pendingTrade(), CancelledRow(slowDeclineLastFill, quietFinding(slowDeclineBreakReasons)))
 	if st := rebuildState(cancelled); st.slowDeclinePending || !carriesTakeProfitEvent(cancelled) {
 		t.Fatal("fixture drifted: the cancelled trade must carry the pending event and read not pending")
 	}
@@ -242,28 +242,28 @@ func TestTakeProfitPercentageReadsTheInputOnACancelledTrade(t *testing.T) {
 		}
 	}
 
-	repended := withRows(cancelled, PendingRow("buy", slowDeclineLastFill, nil))
+	repended := withRows(cancelled, PendingRow(slowDeclineLastFill, quietFinding(nil)))
 	price := betweenTheTakeProfits(t, pendingTrade())
 	if got, want := TakeProfitPercentage(repended, price, breakEvenReading), moveAgainst(price, slowDeclineLastFill); got != want {
 		t.Fatalf("a pending event after the cancelled one must read the newest fill again: got %v, want %v", got, want)
 	}
 }
 
-// Switched off, the quiet slow decline reads no newest fill: a pending trade
-// hands back its input at every price, at and over break even included, as
-// the ladder without the marker does. Switched back on, it reads the newest
-// fill again.
+// Switched off, the quiet decline reads no newest fill: a ladder pending on it
+// alone hands back its input at every price, at and over break even included,
+// as the ladder without the event does, whatever else still watches the ladder.
+// Switched back on, it reads the newest fill again.
 func TestTakeProfitPercentageReadsTheInputWhileSwitchedOff(t *testing.T) {
 	price := betweenTheTakeProfits(t, pendingTrade())
 	breakEven := ladder.AverageEntryPrice(pendingTrade())
-	withQuietSlowDeclineExit(t, false)
+	withQuietDecline(t, false)
 	for _, at := range []float64{breakEven, price, 2 * slowDeclineBand} {
 		fromAverage := moveAgainst(at, breakEven)
 		if got := TakeProfitPercentage(pendingTrade(), at, fromAverage); got != fromAverage {
 			t.Errorf("switched off, at %v the pending trade must read its input %v, got %v", at, fromAverage, got)
 		}
 	}
-	withQuietSlowDeclineExit(t, true)
+	withQuietDecline(t, true)
 	if got := TakeProfitPercentage(pendingTrade(), price, breakEvenReading); got != moveAgainst(price, slowDeclineLastFill) {
 		t.Fatalf("control: switched on, the pending trade reads its newest fill, got %v", got)
 	}
@@ -274,12 +274,14 @@ func TestTakeProfitPercentageReadsTheInputWhileSwitchedOff(t *testing.T) {
 // event the take profit's scan (carriesTakeProfitEvent) finds, whatever
 // position the rows beside the events name. The scan reads the events' filing
 // alone and never a log row: text with no event beside it is found by neither
-// the scan nor the fold, and an event the switch of its rule ignores is found
-// by neither either.
+// the scan nor the fold. The slow decline gate's filing holds pending and
+// latched events alike, so it is found while any feature is on, and with all
+// three switched off the scan finds nothing.
 func TestTakeProfitEventScanAgreesWithRebuildState(t *testing.T) {
-	framed := withRows(heldBy(watchedTrade(), time.Time{}), PendingRow("stopLoss", slowDeclineLastFill, nil))
-	shallowest := carryingTheStateOf(testutil.LadderTrade(false, fills(SlowDeclineArmDepth, "17:38:00")...), pendingTrade())
-	for name, trade := range map[string]aggragates.Trades{"pending": pendingTrade(), "framed": framed, "shallowest watched": shallowest} {
+	framed := withRows(heldBy(watchedTrade(), time.Time{}), PendingRow(slowDeclineLastFill, quietFinding(nil)))
+	shallowest := carryingTheStateOf(testutil.LadderTrade(false, fills(QuietDeclineArmDepth, "17:38:00")...), pendingTrade())
+	swingPending := withRows(watchedTrade(), PendingRow(slowDeclineLastFill, swingFinding(nil)))
+	for name, trade := range map[string]aggragates.Trades{"pending": pendingTrade(), "framed": framed, "shallowest watched": shallowest, "pending on the swing decline": swingPending} {
 		if !rebuildState(trade).slowDeclinePending {
 			t.Fatalf("%s: fixture drifted: rebuildState must read it as pending", name)
 		}
@@ -291,7 +293,7 @@ func TestTakeProfitEventScanAgreesWithRebuildState(t *testing.T) {
 		t.Error("a ladder without the events carries none")
 	}
 
-	latchedFramed := withRows(heldBy(watchedTrade(), time.Time{}), LatchedRow("stopLoss", slowDeclineLastFill, indecisionReasons))
+	latchedFramed := withRows(heldBy(watchedTrade(), time.Time{}), LatchedRow(slowDeclineLastFill, indecisionFinding(indecisionReasons)))
 	shallowestLatched := latchedBy(testutil.LadderTrade(false, fills(IndecisionArmDepth, "17:38:00")...))
 	for name, trade := range map[string]aggragates.Trades{"latched": latchedBy(watchedTrade()), "framed": latchedFramed, "shallowest watched": shallowestLatched, "pending and latched": latchedBy(pendingTrade())} {
 		if !rebuildState(trade).indecision {
@@ -304,28 +306,31 @@ func TestTakeProfitEventScanAgreesWithRebuildState(t *testing.T) {
 
 	textOnly := watchedTrade()
 	textOnly.Logs = []aggragates.TradesLogs{
-		{Message: IndecisionMessage("buy", nil), Price: slowDeclineLastFill},
-		{Message: SlowDeclineMessage("buy", nil), Price: slowDeclineLastFill},
+		{Message: LatchedRow(slowDeclineLastFill, indecisionFinding(nil)).Message, Price: slowDeclineLastFill},
+		{Message: quietPending(slowDeclineLastFill).Message, Price: slowDeclineLastFill},
 	}
 	if carriesTakeProfitEvent(textOnly) || rebuildState(textOnly).indecision || rebuildState(textOnly).slowDeclinePending {
 		t.Error("a row without its event is found by neither the scan nor the fold")
 	}
 
-	withQuietSlowDeclineExit(t, false)
-	if carriesTakeProfitEvent(pendingTrade()) {
-		t.Error("switched off, the slow decline's events are found by no scan")
+	withQuietDecline(t, false)
+	withSwingDecline(t, false)
+	if !carriesTakeProfitEvent(latchedBy(watchedTrade())) {
+		t.Error("the indecision direction still on, the gate's filing can hold a latch and is found")
 	}
-	withQuietSlowDeclineExit(t, true)
-	withIndecisionDirection(t, false)
-	if carriesTakeProfitEvent(latchedBy(watchedTrade())) {
-		t.Error("switched off, the indecision direction's events are found by no scan")
+	if got := TakeProfitPercentage(pendingTrade(), betweenTheTakeProfits(t, pendingTrade()), breakEvenReading); got != breakEvenReading {
+		t.Errorf("found by the scan, the quiet decline's event is ignored by the fold with the declines switched off, got %v", got)
+	}
+	withIndecision(t, false)
+	if carriesTakeProfitEvent(pendingTrade()) || carriesTakeProfitEvent(latchedBy(watchedTrade())) {
+		t.Error("with every feature switched off the events are found by no scan")
 	}
 }
 
 // While a depth priority holds the ladder (depthPriorityHeld) the pending
 // reading — the move against the newest fill — waits for the next fill, and
 // the latched reading — the move against the position price — applies all the
-// same: the hold pauses the quiet slow-decline exit, never the indecision
+// same: the hold pauses the slow decline gate, never the indecision
 // direction. A ladder both pending and latched reads the larger of the move it
 // is handed and the latched move, the position price's re-anchor over or
 // under the newest fill, and under break even it reads its input. Each
@@ -342,7 +347,7 @@ func TestTheHeldTakeProfitSkipsThePendingReadingAndKeepsTheLatchedOne(t *testing
 	hold := func(trade aggragates.Trades) aggragates.Trades {
 		return heldBy(trade, testutil.At("22:00:00"))
 	}
-	pending := withRow(shallowDecline(), PendingRow("buy", newest, slowDeclineReasons), testutil.At("15:00:00"))
+	pending := withRow(shallowDecline(), PendingRow(newest, quietFinding(slowDeclineReasons)), testutil.At("15:00:00"))
 	latched := latchedBy(shallowDecline())
 	both := latchedBy(pending)
 	if st := rebuildState(hold(both)); !st.slowDeclinePending || !st.indecision || !st.depthPriorityHeld || !(handed < moveAgainst(price, newest)) {
@@ -386,30 +391,30 @@ func TestTheHeldTakeProfitSkipsThePendingReadingAndKeepsTheLatchedOne(t *testing
 	}
 }
 
-// A ladder the slow pattern decline made pending reads its newest fill from
-// break even up exactly as a quiet-pending one does, and nothing else does it
-// for the pattern: a cancelled ladder, a switched-off rule and a depth priority
-// hold leave the input as it was, and the sale changes nothing. The take
-// profit's scan finds the pattern's events too, while the rule is on.
-func TestTakeProfitPercentageReadsTheNewestFillOnAPatternPendingTrade(t *testing.T) {
-	withQuietSlowDeclineExit(t, false)
-	withIndecisionDirection(t, false)
-	pending := withRows(watchedTrade(), SlowPatternPendingRow("buy", slowDeclineLastFill, slowPatternReasons))
+// A ladder the swing decline made pending reads its newest fill from break even
+// up exactly as a quiet-pending one does, and nothing else does it for the
+// swing decline: a cancelled ladder, a switched-off feature and a depth
+// priority hold leave the input as it was, and the sale changes nothing. The
+// take profit's scan finds the gate's events while a feature is on.
+func TestTakeProfitPercentageReadsTheNewestFillOnASwingPendingTrade(t *testing.T) {
+	withQuietDecline(t, false)
+	withIndecision(t, false)
+	pending := withRows(watchedTrade(), PendingRow(slowDeclineLastFill, swingFinding(nil)))
 	price := betweenTheTakeProfits(t, pending)
 	handed := moveAgainst(price, ladder.AverageEntryPrice(pending))
 	fromNewestFill := moveAgainst(price, slowDeclineLastFill)
-	if !rebuildState(pending).slowPatternPending || !(handed < fromNewestFill) || !carriesTakeProfitEvent(pending) {
-		t.Fatalf("fixture drifted: pattern pending, the newest fill's move %v over the input %v, and found by the scan", fromNewestFill, handed)
+	if !rebuildState(pending).slowDeclinePending || !(handed < fromNewestFill) || !carriesTakeProfitEvent(pending) {
+		t.Fatalf("fixture drifted: swing pending, the newest fill's move %v over the input %v, and found by the scan", fromNewestFill, handed)
 	}
 	if got := TakeProfitPercentage(pending, price, handed); got != fromNewestFill {
-		t.Fatalf("a pattern-pending trade must read the move against its newest fill %v, got %v", fromNewestFill, got)
+		t.Fatalf("a swing-pending trade must read the move against its newest fill %v, got %v", fromNewestFill, got)
 	}
-	sold := withRows(pending, ExitRow(pending, reasonSlowPatternBand, slowDeclineBand))
+	sold := withRows(pending, ExitRow(pending, reasonSellBand, slowDeclineBand))
 	if got := TakeProfitPercentage(sold, price, handed); got != fromNewestFill {
 		t.Errorf("the sale changes nothing, got %v", got)
 	}
 	for name, trade := range map[string]aggragates.Trades{
-		"cancelled": withRows(pending, SlowPatternCancelledRow("buy", slowDeclineLastFill, nil)),
+		"cancelled": withRows(pending, CancelledRow(slowDeclineLastFill, swingFinding(nil))),
 		"held":      heldBy(pending, testutil.At("18:05:00")),
 	} {
 		if got := TakeProfitPercentage(trade, price, handed); got != handed {
@@ -420,7 +425,7 @@ func TestTakeProfitPercentageReadsTheNewestFillOnAPatternPendingTrade(t *testing
 	if input := moveAgainst(under, ladder.AverageEntryPrice(pending)); TakeProfitPercentage(pending, under, input) != input {
 		t.Error("under break even the input comes back")
 	}
-	withSlowPatternDeclineExit(t, false)
+	withSwingDecline(t, false)
 	if got := TakeProfitPercentage(pending, price, handed); got != handed || carriesTakeProfitEvent(pending) {
 		t.Errorf("switched off, the input comes back and the scan finds nothing, got %v", got)
 	}

@@ -4,44 +4,16 @@ import (
 	"fmt"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/log"
-	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/fees"
 	"github.com/giovani-sirbu/mercury/trades/profit"
-	"github.com/giovani-sirbu/mercury/trades/quantities"
 )
 
 // AcceptLoss calculates the trade net profit like HasProfit but accepts a negative
 // result, so a trade in take loss mode can sell below break even
 func AcceptLoss(event events.Events) (events.Events, error) {
-	// the quantity the close would actually submit (net of embodied fees), and
-	// the lot-size remainder it would leave behind
-	quantity, dust, historyType := quantities.SimulatedClose(event)
-
-	// simulate sell event to calculate profit & get trade profit
-	trade := event.Trade
-
-	// Sell keeps this remainder as Dust and GetProfit credits it at the
-	// position price, so the loss this path accepts and logs carries it too.
-	// Without it the cut is reported deeper than the close will book.
-	trade.Dust = dust
-
-	trade.History = append(trade.History, aggragates.TradesHistory{
-		Type:     historyType,
-		Quantity: quantity,
-		Price:    profit.SimulatedClosePrice(event.Trade),
-	})
-
-	// get gross profit
-	netProfit := profit.GetProfit(trade)
-
-	// One leg's worth estimates the closing fee the simulated fill lacks, plus
-	// whatever opening commission the fill quantities do not embody (see
-	// HasProfit and fees.UnembodiedOpeningFees).
-	closingFees := fees.GetFees(event)
-	openingFees := fees.UnembodiedOpeningFees(event)
-
-	// subtract fees and return net profit
-	netProfit -= closingFees + openingFees
+	// the close simulation — quantity, lot-size dust, closing price, fees — is
+	// profit.SimulatedCloseProfit's, the one figure the smart take loss's loss
+	// cap reads too
+	netProfit := profit.SimulatedCloseProfit(event)
 
 	// assign net profit to trade
 	event.Trade.Profit = netProfit

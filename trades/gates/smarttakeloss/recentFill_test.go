@@ -76,7 +76,7 @@ func TestApplyGoesPendingOnTheNewestFillAloneWhereverItSitsAfterTheWindow(t *tes
 	}
 	for _, from := range []time.Time{oldestClosedBar, between} {
 		got := Apply(trade, "", underTheBand, windowFrom(slowDeclineBlock(true), from))
-		assertRow(t, got.SlowDecline, SlowDeclineMessage("buy", slowDeclineReasons), slowDeclineLastFill)
+		assertRow(t, got, quietPending(slowDeclineLastFill))
 		assertNoSale(t, got, "")
 	}
 	assertNoSlowDeclineRow(t, Apply(trade, "", underTheBand, windowFrom(slowDeclineBlock(true), newest.Add(time.Millisecond))), "")
@@ -103,7 +103,7 @@ func TestSwitchedOffGoingPendingReadsNoFillWindow(t *testing.T) {
 					assertNoSlowDeclineRow(t, got, "")
 					continue
 				}
-				if got.SlowDecline == nil || got.SlowDecline.Price != slowDeclineLastFill || got.Reason != "" {
+				if len(got.Rows) != 1 || got.Rows[0].Price != slowDeclineLastFill || got.Reason != "" {
 					t.Fatalf("switched off, %s with the window from %v must mark the ladder at its newest fill, got %+v", name, from, got)
 				}
 			}
@@ -120,11 +120,11 @@ func TestTheJudgementOfANewFillIgnoresTheFillWindow(t *testing.T) {
 	stood, oldest := testutil.At("22:00:00"), testutil.At("12:00:00")
 	for _, from := range []time.Time{{}, afterTheSixth} {
 		confirmed := Apply(pendingAtFive(), "", underJudgeBand, windowFrom(legOnAndQuiet(), from))
-		assertRow(t, confirmed.SlowDecline, SlowDeclineMessage("buy", slowDeclineReasons), sixthFill)
+		assertRow(t, confirmed, sixthConfirmed())
 		recently := Apply(pendingAtFive(), "", underJudgeBand, windowFrom(withRecent(brokenReading(), stood, oldest), from))
-		assertRow(t, recently.SlowDecline, SlowDeclineMessage("buy", slowDeclineRecentReasons), sixthFill)
+		assertRow(t, recently, ConfirmedRow(sixthFill, quietFinding(slowDeclineRecentReasons)))
 		cancelled := Apply(pendingAtFive(), "", underJudgeBand, windowFrom(brokenReading(), from))
-		assertRow(t, cancelled.SlowDecline, SlowDeclineCancelMessage("buy", slowDeclineBreakReasons), sixthFill)
+		assertRow(t, cancelled, sixthCancelled())
 		for _, got := range []Result{confirmed, recently, cancelled} {
 			assertNoSale(t, got, "")
 		}
@@ -163,6 +163,6 @@ func TestTheIndecisionLatchIgnoresTheFillWindow(t *testing.T) {
 	trade := testutil.LadderTrade(false, fills(IndecisionArmDepth, "17:38:00")...)
 	for _, from := range []time.Time{{}, testutil.At("17:38:00").Add(time.Hour)} {
 		got := Apply(trade, "", underTheBand, windowFrom(indecisionReading(), from))
-		assertRow(t, got.Indecision, IndecisionMessage("buy", indecisionReasons), trade.PositionPrice)
+		assertRow(t, got, LatchedRow(trade.PositionPrice, indecisionFinding(indecisionReasons)))
 	}
 }

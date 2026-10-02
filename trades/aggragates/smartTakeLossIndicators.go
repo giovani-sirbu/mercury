@@ -1,12 +1,12 @@
 package aggragates
 
 // SmartTakeLossIndicators is the chart block sophos serves on
-// GET /:symbol/patterns for the SmartTakeLoss flag: the quiet slow decline's
+// GET /:symbol/patterns for the SmartTakeLoss flag: the quiet decline's
 // reading — its indecision included — and the capital protection reading,
 // both taken on the closed window of sophos' smart take loss. Every zero
 // field is inert in gates/smarttakeloss.Apply.
 type SmartTakeLossIndicators struct {
-	// SlowDeclineExit is sophos' quiet slow-decline verdict, read on the
+	// SlowDeclineExit is sophos' quiet decline verdict, read on the
 	// closed window of its slow-decline walk: an early down leg, still down
 	// sophos' SlowDeclineMinLegFallPct from its high close, on which a vote
 	// passes among the readings sophos switches into it — the recent volume,
@@ -15,7 +15,7 @@ type SmartTakeLossIndicators struct {
 	// with sophos' SMC trend dashboard, read at the same bar, bearish on every
 	// timeframe sophos' SmcTrendTimeframes names while that condition is on.
 	// gates/smarttakeloss marks a long ladder it watches (from
-	// SlowDeclineArmDepth filled entries) pending on it once that ladder
+	// QuietDeclineArmDepth filled entries) pending on it once that ladder
 	// bought a depth within the fill window (SlowDeclineFillFrom) — from
 	// break even up a pending ladder's take profit reads its newest fill as
 	// well (TakeProfitPercentage) — and holds a long first fill while it
@@ -115,7 +115,7 @@ type SmartTakeLossIndicators struct {
 	// last SlowDeclineFillBars closed bars — the window's first bar when it
 	// holds fewer — served whenever sophos read the window, whatever its
 	// verdicts, and zero otherwise. While gates/smarttakeloss'
-	// SlowDeclineNeedsRecentFill is on, a watched ladder goes pending, on the
+	// QuietDeclineNeedsRecentFill is on, a watched ladder goes pending, on the
 	// last closed bar's reading or on the look-back, only when its newest
 	// fill is stamped at or after it, a fill in the bar still forming
 	// included; zero makes no ladder pending. A pending ladder's new fill,
@@ -132,17 +132,28 @@ type SmartTakeLossIndicators struct {
 	// depth on the first tick at or over the band while it is true.
 	CapitalProtectionUpperBB    float64
 	CapitalProtectionSmcBearish bool
-	// SlowPatternOpens and SlowPatternCloses are the closed 1h bars of the
+	// SwingDeclineOpens and SwingDeclineCloses are the closed 1h bars of the
 	// window sophos read, as two parallel arrays, oldest first: the open time
-	// in ms of each bar and its close. They are the slow pattern decline's
+	// in ms of each bar and its close. They are the swing decline's
 	// input, ladder-agnostic on purpose — sophos never learns a ladder's fills
-	// — and gates/slowpattern cuts the window between two of a ladder's fills
-	// out of them. A fill's bar is found by its open time in SlowPatternOpens,
+	// — and gates/swingdecline cuts the window between two of a ladder's fills
+	// out of them. A fill's bar is found by its open time in SwingDeclineOpens,
 	// never by arithmetic on the index. Nil — a sophos without the keys, a
 	// window it could not read, or arrays of different lengths — means no
 	// series, and gates/smarttakeloss reads nothing from it: it never triggers
 	// the exit and never judges a fill, as the leg-less zero reading does for
-	// the quiet slow decline.
-	SlowPatternOpens  []int64
-	SlowPatternCloses []float64
+	// the quiet decline.
+	SwingDeclineOpens  []int64
+	SwingDeclineCloses []float64
+	// SwingDeclineSmcTrendDown and SwingDeclineSmcTrendValid are the Trend
+	// Direction row of sophos' SMC trend dashboard, read at the series' interval
+	// as of the close of the series' last bar: how many of the rows sophos read
+	// have their trend reading down, and how many rows it read at all — a row
+	// that is not valid counts for nothing. They ride beside the series and are
+	// ladder-agnostic like it, and gates/swingdecline holds a decline only while
+	// enough rows read down (SwingDeclineMinSmcTrendDown). Valid zero — a sophos
+	// without the keys, or a dashboard it could not read — means the trend was not
+	// read, and a trend not read never passes while that condition is on.
+	SwingDeclineSmcTrendDown  int
+	SwingDeclineSmcTrendValid int
 }

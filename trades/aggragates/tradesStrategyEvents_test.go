@@ -52,6 +52,9 @@ type filed struct {
 // The reasons carry the characters a JSON encoder escapes.
 func everyWriter(trade aggragates.Trades, at time.Time) []filed {
 	reasons := []string{"leg down 7.0% from its high close", `vol > 2x & <quiet> "bars" \ 日本`}
+	quiet := smarttakeloss.Finding{Feature: smarttakeloss.FeatureQuietDecline, Reasons: reasons}
+	swing := smarttakeloss.Finding{Feature: smarttakeloss.FeatureSwingDecline, Reasons: reasons}
+	latch := smarttakeloss.Finding{Feature: smarttakeloss.FeatureIndecision, Reasons: reasons}
 	fromRow := func(row smarttakeloss.Row) aggragates.TradesStrategyEvents {
 		_, event := smarttakeloss.Rows(trade, row, at)
 		return event
@@ -59,6 +62,11 @@ func everyWriter(trade aggragates.Trades, at time.Time) []filed {
 	fromOpened := func(opened dynamicparams.Opened) aggragates.TradesStrategyEvents {
 		_, event := opened.Rows(trade, 100, at)
 		return event
+	}
+	// What the gates before the merge wrote: no builder writes these any more, and
+	// the rows already in a database carry them.
+	legacy := func(gate, kind string, price float64) aggragates.TradesStrategyEvents {
+		return aggragates.NewStrategyEvent(trade.ID, aggragates.StrategyParamSmartTakeLoss, gate, map[string]any{"event": kind, "price": price, "reasons": reasons}, at)
 	}
 
 	return []filed{
@@ -68,11 +76,16 @@ func everyWriter(trade aggragates.Trades, at time.Time) []filed {
 		{"first fill verdict held", cooldown.NewFirstFillEvent(trade.ID, cooldown.FirstFillEvent{Event: cooldown.FirstFillVerdictHeld}, at), "cooldown", "firstFill", "verdictHeld"},
 		{"depth priority held", cooldown.NewDepthPriorityEvent(trade.ID, cooldown.DepthPriorityEvent{Event: gates.EventHeld, PrioritySymbol: "ETH/USDT", PriorityDepth: 5, PriorityMaxDepth: 8, Depth: 2, MaxDepth: 8}, at), "cooldown", "depthPriority", "held"},
 		{"depth spacing held", cooldown.NewDepthSpacingEvent(trade.ID, cooldown.DepthSpacingEvent{Event: gates.EventHeld, Depth: 3, Step: 2, Hold: 2 * time.Hour, Release: 97.4}, at), "cooldown", "depthSpacing", "held"},
-		{"slow decline pending row", fromRow(smarttakeloss.PendingRow("buy", 184.45, reasons)), "smartTakeLoss", "slowDecline", "pending"},
-		{"slow decline cancelled row", fromRow(smarttakeloss.CancelledRow("buy", 179.78, reasons)), "smartTakeLoss", "slowDecline", "cancelled"},
-		{"slow decline reset row", fromRow(smarttakeloss.ResetRow("stopLoss", 179.78)), "smartTakeLoss", "slowDecline", "reset"},
-		{"indecision latched row", fromRow(smarttakeloss.LatchedRow("buy", 175.83, reasons)), "smartTakeLoss", "indecision", "latched"},
+		{"slow decline pending row", fromRow(smarttakeloss.PendingRow(184.45, latch, quiet, swing)), "smartTakeLoss", "slowDecline", "pending"},
+		{"slow decline confirmed row", fromRow(smarttakeloss.ConfirmedRow(184.45, swing)), "smartTakeLoss", "slowDecline", "pending"},
+		{"slow decline cancelled row", fromRow(smarttakeloss.CancelledRow(179.78, quiet, swing)), "smartTakeLoss", "slowDecline", "cancelled"},
+		{"slow decline reset row", fromRow(smarttakeloss.ResetRow(179.78, quiet)), "smartTakeLoss", "slowDecline", "reset"},
+		{"indecision latched row", fromRow(smarttakeloss.LatchedRow(175.83, latch)), "smartTakeLoss", "slowDecline", "latched"},
+		{"slow decline sale held row", fromRow(smarttakeloss.SaleHeldRow(184.45, 3.1, smarttakeloss.FeatureQuietDecline, smarttakeloss.FeatureSwingDecline)), "smartTakeLoss", "slowDecline", "saleHeld"},
 		{"exit row", fromRow(smarttakeloss.ExitRow(trade, "a rule that sold", 175.39)), "smartTakeLoss", "slowDecline", "sold"},
+		{"legacy slow decline pending", legacy("slowDecline", "pending", 184.45), "smartTakeLoss", "slowDecline", "pending"},
+		{"legacy slow pattern pending", legacy("slowPattern", "pending", 184.45), "smartTakeLoss", "slowPattern", "pending"},
+		{"legacy indecision latched", legacy("indecision", "latched", 175.83), "smartTakeLoss", "indecision", "latched"},
 		{"opened", fromOpened(dynamicparams.Opened{Points: 0.4, Depths: 1}), "dynamicParams", "opened", "opened"},
 		{"opened with no amount", fromOpened(dynamicparams.Opened{}), "dynamicParams", "opened", "opened"},
 	}
@@ -313,7 +326,7 @@ func TestAnEventWithoutADocumentStaysInertOnEveryWire(t *testing.T) {
 func TestRandomEventListsSurviveBothCodecs(t *testing.T) {
 	codec := cache.New(&cache.Options{})
 	params := []string{"cooldown", "smartTakeLoss", "dynamicParams", "", "other"}
-	kinds := []string{"activated", "armed", "entered", "held", "pending", "latched", "opened", ""}
+	kinds := []string{"activated", "armed", "entered", "held", "pending", "latched", "saleHeld", "opened", ""}
 	words := []string{"quiet", "leg > 60 bars", "a&b", "<b>", "naïve", " ", "日本", `"quoted"`, `back\slash`, "tab\there"}
 
 	for seed := uint64(1); seed <= 40; seed++ {
@@ -330,6 +343,9 @@ func TestRandomEventListsSurviveBothCodecs(t *testing.T) {
 					reasons[j] = words[r.IntN(len(words))]
 				}
 				document["reasons"] = reasons
+			}
+			if r.IntN(3) == 0 {
+				document["features"] = []string{"indecision", "swingDecline", words[r.IntN(len(words))]}[:1+r.IntN(3)]
 			}
 			var at time.Time
 			if r.IntN(5) > 0 {
@@ -523,11 +539,16 @@ func TestEveryWriterFilesAKindedDocument(t *testing.T) {
 func TestAWritersRowAndItsEventArePairedByTradeStampAndPrice(t *testing.T) {
 	trade := aggragates.Trades{ID: 7}
 	at := clockAt(4)
+	quiet := func(reasons ...string) smarttakeloss.Finding {
+		return smarttakeloss.Finding{Feature: smarttakeloss.FeatureQuietDecline, Reasons: reasons}
+	}
 	for name, row := range map[string]smarttakeloss.Row{
-		"pending":   smarttakeloss.PendingRow("buy", 184.45, []string{"a"}),
-		"cancelled": smarttakeloss.CancelledRow("buy", 179.78, nil),
-		"reset":     smarttakeloss.ResetRow("stopLoss", 179.78),
-		"latched":   smarttakeloss.LatchedRow("buy", 175.83, []string{"b", "c"}),
+		"pending":   smarttakeloss.PendingRow(184.45, quiet("a")),
+		"confirmed": smarttakeloss.ConfirmedRow(184.45, quiet("a")),
+		"cancelled": smarttakeloss.CancelledRow(179.78, quiet()),
+		"reset":     smarttakeloss.ResetRow(179.78, quiet()),
+		"latched":   smarttakeloss.LatchedRow(175.83, smarttakeloss.Finding{Feature: smarttakeloss.FeatureIndecision, Reasons: []string{"b", "c"}}),
+		"saleHeld":  smarttakeloss.SaleHeldRow(184.45, 3.1, smarttakeloss.FeatureQuietDecline),
 		"exit":      smarttakeloss.ExitRow(trade, "a rule that sold", 175.39),
 	} {
 		logRow, event := smarttakeloss.Rows(trade, row, at)

@@ -17,6 +17,10 @@ import (
 // profit that reads the one is told from a take profit that reads the other.
 const indecisionFills = max(IndecisionArmDepth, 2)
 
+// indecisionLabel is the words a row prints for the indecision direction, the
+// ones the rows naming a latch have in common.
+const indecisionLabel = "indecision direction"
+
 // indecisionLadder is the w3s ladder the indecision direction watches from
 // its first tick: indecisionFills fills, the newest at 17:38.
 func indecisionLadder() aggragates.Trades {
@@ -32,17 +36,18 @@ func overBreakEven(trade aggragates.Trades) (price, fromAverage, fromPosition fl
 }
 
 // A watched ladder the depth priority holds is latched on the indecision as
-// on any other tick: it gets the row the same ladder gets unheld, framed with
-// the trade's state and carrying the newest fill's price — never the
-// position price, a re-anchor included — beside the proposal it leaves
-// untouched. The row marks and sells nothing. From the next tick the ladder
-// reads latched and held, and no second row or event goes out however often
-// sophos serves a reading. The indecision direction alone watching the ladder,
-// the other two rules switched off, changes none of it.
+// on any other tick: it gets the row the same ladder gets unheld, carrying the
+// newest fill's price — never the position price, a re-anchor included —
+// beside the proposal it leaves untouched. The row marks and sells nothing.
+// From the next tick the ladder reads latched and held, and no second row or
+// event goes out however often sophos serves a reading. The indecision
+// direction alone watching the ladder, the other features switched off, changes
+// none of it.
 func TestAHeldWatchedLadderIsLatchedOnTheIndecision(t *testing.T) {
 	trade := indecisionLadder()
 	newest := rebuildState(trade).lastFill().Price
-	assertRow(t, Apply(trade, "", underTheBand, indecisionReading()).Indecision, IndecisionMessage("buy", indecisionReasons), newest)
+	want := LatchedRow(newest, indecisionFinding(indecisionReasons))
+	assertRow(t, Apply(trade, "", underTheBand, indecisionReading()), want)
 
 	held := heldBy(trade, testutil.At("18:00:00"))
 	reanchored := held
@@ -50,11 +55,8 @@ func TestAHeldWatchedLadderIsLatchedOnTheIndecision(t *testing.T) {
 	for _, candidate := range []aggragates.Trades{held, reanchored} {
 		for _, position := range []string{"", "stopLoss", "takeProfit"} {
 			got := Apply(candidate, position, underTheBand, indecisionReading())
-			assertRow(t, got.Indecision, IndecisionMessage("buy", indecisionReasons), newest)
+			assertRow(t, got, want)
 			assertNoSale(t, got, position)
-			if got.SlowDecline != nil {
-				t.Fatalf("%q: the latch tick marks nothing, got %+v", position, got)
-			}
 		}
 	}
 
@@ -69,49 +71,52 @@ func TestAHeldWatchedLadderIsLatchedOnTheIndecision(t *testing.T) {
 			assertUntouched(t, next, position)
 		}
 	}
-	rows, events := carriedRows(latched, IndecisionMarker), carriedEvents(latched, GateIndecision, EventLatched)
+	rows, events := carriedRows(latched, indecisionLabel), carriedLatches(latched)
 	if rows != 1 || events != 1 {
-		t.Fatalf("one indecision row and one latched event over every held tick, got %d and %d in %+v and %+v", rows, events, latched.Logs, latched.StrategyEvents)
+		t.Fatalf("one row naming the latch and one event carrying it over every held tick, got %d and %d in %+v and %+v", rows, events, latched.Logs, latched.StrategyEvents)
 	}
 
-	withQuietSlowDeclineExit(t, false)
+	withQuietDecline(t, false)
+	withSwingDecline(t, false)
 	withCapitalProtectionExit(t, false)
 	alone := Apply(held, "", underTheBand, indecisionReading())
-	assertRow(t, alone.Indecision, IndecisionMessage("buy", indecisionReasons), newest)
+	assertRow(t, alone, want)
 	assertNoSale(t, alone, "")
 }
 
-// A held ladder both pending and served the indecision gets both rows on its
-// first held tick — the reset row, then the indecision row that latches it,
-// each at the newest fill's price — and sells nothing at the band the same
-// ladder unheld sells at, a protected close included. The engines write each
-// row with its event, so the trade carries the reset event and the latched
-// event after it. From the next tick it reads watched, latched and held, not
-// pending, and nothing more is written.
-func TestAHeldPendingLadderServedTheIndecisionIsResetAndLatchedOnOneTick(t *testing.T) {
+// A held ladder both pending and served the indecision gets ONE row on its
+// first held tick — the reset row, the indecision latch named in its head and
+// its reasons in a group of their own, at the newest fill's price — and sells
+// nothing at the band the same ladder unheld sells at, a protected close
+// included. The engines write the row with its event, so the trade carries one
+// reset event naming the latch. From the next tick it reads watched, latched
+// and held, not pending, and nothing more is written.
+func TestAHeldPendingLadderServedTheIndecisionIsResetAndLatchedOnOneRow(t *testing.T) {
 	control := Apply(pendingTrade(), "", slowDeclineBand+1, indecisionReading())
 	assertForced(t, control, reasonSellBand)
-	assertRow(t, control.Indecision, IndecisionMessage("buy", indecisionReasons), slowDeclineLastFill)
+	assertRow(t, control, LatchedRow(slowDeclineLastFill, indecisionFinding(indecisionReasons)))
 
+	reset := ResetRow(slowDeclineLastFill, indecisionFinding(indecisionReasons), quietFinding(nil))
+	if !strings.HasPrefix(reset.Message, "smartTakeLoss: indecision direction triggered, slow decline reset, depth priority holds this ladder (indecision direction: ") {
+		t.Fatalf("the reset row names the latch first, got %q", reset.Message)
+	}
 	held := heldBy(pendingTrade(), testutil.At("18:05:00"))
 	protected := Apply(held, "sell", slowDeclineBand+5, indecisionReading())
-	assertRow(t, protected.SlowDecline, resetMessage("buy"), slowDeclineLastFill)
-	assertRow(t, protected.Indecision, IndecisionMessage("buy", indecisionReasons), slowDeclineLastFill)
+	assertRow(t, protected, reset)
 	assertNoSale(t, protected, "sell")
 
 	trade, got := engineTick(held, "", slowDeclineBand+1, testutil.At("18:10:00"), indecisionReading())
-	assertRow(t, got.SlowDecline, resetMessage("buy"), slowDeclineLastFill)
-	assertRow(t, got.Indecision, IndecisionMessage("buy", indecisionReasons), slowDeclineLastFill)
+	assertRow(t, got, reset)
 	assertNoSale(t, got, "")
 	if st := rebuildState(trade); !st.slowDeclineWatched || st.slowDeclinePending || !st.indecision || !st.depthPriorityHeld {
 		t.Fatalf("the tick after: watched, not pending, latched and held, got %+v", st)
 	}
 	assertUntouched(t, Apply(trade, "", slowDeclineBand+1, indecisionReading()), "")
-	if rows := len(trade.Logs) - len(held.Logs); rows != 2 || carriedRows(trade, SlowDeclineResetMarker) != 1 || carriedRows(trade, IndecisionMarker) != 1 {
-		t.Fatalf("one reset row and one indecision row, got %+v", trade.Logs)
+	if rows := len(trade.Logs) - len(held.Logs); rows != 1 || carriedRows(trade, "slow decline reset") != 1 {
+		t.Fatalf("one row, the reset naming the latch, got %+v", trade.Logs)
 	}
-	if written := len(trade.StrategyEvents) - len(held.StrategyEvents); written != 2 || carriedEvents(trade, GateSlowDecline, EventReset) != 1 || carriedEvents(trade, GateIndecision, EventLatched) != 1 {
-		t.Fatalf("one reset event and one latched event, got %+v", trade.StrategyEvents)
+	if written := len(trade.StrategyEvents) - len(held.StrategyEvents); written != 1 || carriedEvents(trade, GateSlowDecline, EventReset) != 1 || carriedLatches(trade) != 1 {
+		t.Fatalf("one reset event naming the latch, got %+v", trade.StrategyEvents)
 	}
 }
 
@@ -153,17 +158,17 @@ func TestALatchedLadderTheDepthPriorityHoldsStillReadsItsPositionPrice(t *testin
 	if got := TakeProfitPercentage(resumed, price, fromAverage); got != fromPosition || !(fromAverage < fromPosition) {
 		t.Fatalf("resumed, the take profit reads the new fill %v, got %v", fromPosition, got)
 	}
-	if got := Apply(resumed, "", underTheBand, indecisionReading()); got.Indecision != nil || carriedRows(resumed, IndecisionMarker) != 1 || carriedEvents(resumed, GateIndecision, EventLatched) != 1 {
-		t.Fatalf("one indecision row and event, before the hold and after it, got %+v on %+v and %+v", got, resumed.Logs, resumed.StrategyEvents)
+	if got := Apply(resumed, "", underTheBand, indecisionReading()); latchNamed(got) || carriedRows(resumed, indecisionLabel) != 1 || carriedLatches(resumed) != 1 {
+		t.Fatalf("one row naming the latch and one event, before the hold and after it, got %+v on %+v and %+v", got, resumed.Logs, resumed.StrategyEvents)
 	}
 }
 
-// carriedRows counts the trade's rows naming marker: the text the operator
-// reads, twin of carriedEvents.
-func carriedRows(trade aggragates.Trades, marker string) int {
+// carriedRows counts the trade's rows whose text contains words: the text the
+// operator reads, twin of carriedEvents.
+func carriedRows(trade aggragates.Trades, words string) int {
 	count := 0
 	for _, logged := range trade.Logs {
-		if strings.Contains(logged.Message, marker) {
+		if strings.Contains(logged.Message, words) {
 			count++
 		}
 	}
@@ -182,6 +187,25 @@ func carriedEvents(trade aggragates.Trades, gate, kind string) int {
 	return count
 }
 
+// carriedLatches counts the trade's events of the slow decline gate that carry
+// the indecision among their features: one for every row that latched the
+// ladder.
+func carriedLatches(trade aggragates.Trades) int {
+	count := 0
+	for _, event := range trade.StrategyEventsOf(aggragates.StrategyParamSmartTakeLoss, GateSlowDecline) {
+		var data EventData
+		if event.DecodeData(&data) != nil {
+			continue
+		}
+		for _, feature := range data.Features {
+			if feature == FeatureIndecision {
+				count++
+			}
+		}
+	}
+	return count
+}
+
 // Switched off, the gate's events are ignored by every rule: a held pending
 // ladder sells at the band with no reset row, a held watched ladder goes
 // pending on the verdict and is latched on the indecision, a held pending
@@ -193,18 +217,15 @@ func TestSwitchedOffTheDepthPriorityRowsAreIgnored(t *testing.T) {
 	held := heldBy(pendingTrade(), testutil.At("18:05:00"))
 	got := Apply(held, "", slowDeclineBand, slowDeclineBlock(true))
 	assertForced(t, got, reasonSellBand)
-	if got.SlowDecline != nil {
+	if len(got.Rows) != 0 {
 		t.Fatalf("switched off, no reset row, got %+v", got)
 	}
 	watched := heldBy(watchedTrade(), testutil.At("18:05:00"))
-	assertRow(t, Apply(watched, "", underTheBand, slowDeclineBlock(true)).SlowDecline, SlowDeclineMessage("buy", slowDeclineReasons), slowDeclineLastFill)
-	assertRow(t, Apply(heldBy(indecisionLadder(), testutil.At("18:00:00")), "", underTheBand, indecisionReading()).Indecision, IndecisionMessage("buy", indecisionReasons), indecisionLadder().PositionPrice)
+	assertRow(t, Apply(watched, "", underTheBand, slowDeclineBlock(true)), quietPending(slowDeclineLastFill))
+	assertRow(t, Apply(heldBy(indecisionLadder(), testutil.At("18:00:00")), "", underTheBand, indecisionReading()), LatchedRow(indecisionLadder().PositionPrice, indecisionFinding(indecisionReasons)))
 	pendingServed := Apply(held, "", slowDeclineBand, indecisionReading())
 	assertForced(t, pendingServed, reasonSellBand)
-	assertRow(t, pendingServed.Indecision, IndecisionMessage("buy", indecisionReasons), slowDeclineLastFill)
-	if pendingServed.SlowDecline != nil {
-		t.Fatalf("switched off, a held pending ladder served the indecision gets no reset row, got %+v", pendingServed)
-	}
+	assertRow(t, pendingServed, LatchedRow(slowDeclineLastFill, indecisionFinding(indecisionReasons)))
 	price := betweenTheTakeProfits(t, held)
 	if got := TakeProfitPercentage(held, price, breakEvenReading); got != moveAgainst(price, slowDeclineLastFill) {
 		t.Fatalf("switched off, the take profit reads the newest fill, got %v", got)
@@ -217,63 +238,37 @@ func TestSwitchedOffTheDepthPriorityRowsAreIgnored(t *testing.T) {
 }
 
 // No row is taken for another by the filters that find a row by its text (cp,
-// the notification filter). No marker the smart take loss writes, nor its
-// first-fill hold reason, contains another or the depth priority marker, or
-// is contained in either; no framed smart take loss row names the depth
-// priority marker, and the gate's framed row names no smart take loss marker.
+// the notification filter). No row the gate writes — going pending, confirming,
+// cancelling, resetting, latching, the sale — contains the first-fill hold's
+// reason or the depth priority marker, or is contained in either, and the
+// gate's own rows carry no hold frame, which belongs to the refusals alone.
 func TestNoRowIsReadAsAnother(t *testing.T) {
-	texts := []string{SlowDeclineMarker, SlowDeclineCancelMarker, SlowDeclineResetMarker, IndecisionMarker, SlowPatternMarker, SlowPatternCancelMarker, SlowDeclineEntryHoldReason, cooldown.DepthPriorityHoldMarker}
-	for i, one := range texts {
-		for j, other := range texts {
-			if i != j && strings.Contains(one, other) {
-				t.Errorf("%q contains %q", one, other)
+	trade := lastDepthLadder()
+	rows := []Row{
+		PendingRow(slowDeclineLastFill, quietFinding(slowDeclineReasons)),
+		PendingRow(slowDeclineLastFill, indecisionFinding(nil), swingFinding(slowDeclineReasons)),
+		ConfirmedRow(sixthFill, quietFinding(slowDeclineReasons), swingFinding(slowDeclineRecentReasons)),
+		CancelledRow(sixthFill, quietFinding(slowDeclineBreakReasons), swingFinding(slowDeclineBreakReasons)),
+		ResetRow(slowDeclineLastFill, quietFinding(nil)),
+		LatchedRow(slowDeclineLastFill, indecisionFinding(indecisionReasons)),
+		ExitRow(trade, reasonSellBand, slowDeclineBand),
+		ExitRow(trade, reasonCapitalProtection, capitalProtectionBand),
+	}
+	others := []string{SlowDeclineEntryHoldReason, cooldown.DepthPriorityHoldMarker}
+	for _, row := range rows {
+		if strings.Contains(row.Message, "Hold ") {
+			t.Errorf("%q carries the hold frame", row.Message)
+		}
+		for _, other := range others {
+			if strings.Contains(row.Message, other) || strings.Contains(other, row.Message) {
+				t.Errorf("%q and %q contain one another", row.Message, other)
 			}
 		}
 	}
-	latchedByThePattern := IndecisionMessage("stopLoss", append([]string{slowPatternLatchReason}, slowPatternReasons...))
-	for _, framed := range []string{SlowDeclineMessage("stopLoss", slowDeclineReasons), SlowDeclineCancelMessage("stopLoss", slowDeclineBreakReasons), SlowDeclineResetMessage("stopLoss"), IndecisionMessage("stopLoss", indecisionReasons),
-		SlowPatternMessage("stopLoss", slowPatternReasons), SlowPatternCancelMessage("stopLoss", slowPatternReasons), latchedByThePattern} {
-		if strings.Contains(framed, cooldown.DepthPriorityHoldMarker) {
-			t.Errorf("%q names the depth priority marker", framed)
-		}
-	}
-	for _, marker := range []string{SlowPatternMarker, SlowPatternCancelMarker} {
-		if strings.Contains(latchedByThePattern, marker) {
-			t.Errorf("the row that latches on the slow pattern names %q and would read as the pattern's own", marker)
-		}
-	}
 	gate := heldBy(watchedTrade(), testutil.At("18:05:00")).Logs[0].Message
-	for _, marker := range texts[:len(texts)-1] {
-		if strings.Contains(gate, marker) {
-			t.Errorf("the gate's row %q names %q", gate, marker)
+	for _, row := range rows {
+		if strings.Contains(gate, row.Message) {
+			t.Errorf("the depth priority gate's row %q names %q", gate, row.Message)
 		}
 	}
-}
-
-// A depth priority hold pauses the slow pattern decline as it does the quiet
-// rule, and never resets it: a pending pattern stays pending through the hold
-// with no row and no sale at the band — the unheld control sells — a ladder not
-// yet pending is not read, and the ladder's next fill, which ends the hold, is
-// judged on the series that has closed its bar.
-func TestAHeldLadderIsNotReadBySlowPatternAndItsPendingSurvives(t *testing.T) {
-	pending := stairPending(t)
-	held := heldBy(pending, stairOpen(25))
-	if st := rebuildState(held); !st.slowPatternPending || !st.indecision || !st.depthPriorityHeld {
-		t.Fatalf("fixture drifted: pending, latched and held, got %+v", st)
-	}
-	block := withBlock(stairBlock(stairTurns, 24))
-	assertForced(t, Apply(pending, "", slowDeclineBand+1, block), reasonSlowPatternBand)
-	for _, price := range []float64{slowDeclineBand - 1, slowDeclineBand + 1} {
-		assertUntouched(t, Apply(held, "", price, block), "")
-	}
-	assertUntouched(t, Apply(heldBy(stairLadder(0, 9, 15, 24), stairOpen(25)), "", slowDeclineBand-1, block), "")
-	if st := rebuildState(held); !st.slowPatternPending || st.slowPatternPendingFrom != stairPrices[3] {
-		t.Fatalf("no row resets the pattern, it is pending from where it was, got %+v", st)
-	}
-
-	refilled := withFill(held, stairPrices[4], stairOpen(30).Add(time.Minute))
-	if st := rebuildState(refilled); st.depthPriorityHeld || !st.slowPatternPending {
-		t.Fatalf("the next fill ends the hold and the pattern is still pending, got %+v", st)
-	}
-	assertRow(t, Apply(refilled, "", slowDeclineBand-1, withBlock(stairBlock(stairTurns, 30))).SlowDecline, SlowPatternMessage("buy", patternReasonsAt30), stairPrices[4])
 }

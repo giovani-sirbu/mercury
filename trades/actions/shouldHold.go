@@ -25,7 +25,7 @@ import (
 // sake gains no gate for another (see StrategyParams.NeedsSophos).
 //
 //	first fill (OldPosition "new")   Cooldown      → the wallet reserve
-//	                                 SmartTakeLoss → quiet slow-decline hold (long parents, while the verdict stands)
+//	                                 SmartTakeLoss → quiet decline hold (long parents, while the verdict stands)
 //	                                 Cooldown      → the first-fill gate (higher-highs hold, released by price)
 //	                                 UseAI         → legacy bullish/bearish veto
 //	open position                    UsePatterns   → chart-pattern and fibonacci holds
@@ -34,8 +34,8 @@ import (
 //
 // SmartTakeLoss holds nothing on an open position: it forces exits after the
 // ladder decides (gates/smarttakeloss.Apply, called by the engines). Its one
-// hold is the first fill, so no new ladder opens into the decline its exit
-// sells a long ladder out of.
+// hold is the quiet decline's, on the first fill, so no new ladder opens into
+// the decline the slow decline gate sells a long ladder out of.
 //
 // Each family lives in its own package under trades/gates; this function
 // only orders them. Cooldown owns THREE gates. They share a flag because they
@@ -71,7 +71,7 @@ func ShouldHold(event events.Events) (events.Events, error) {
 }
 
 // shouldHoldEntry is the first fill: cooldown owns most of it, and the smart
-// take loss holds a long parent while its quiet slow-decline verdict stands.
+// take loss holds a long parent while its quiet decline verdict stands.
 //
 // The gates judge the direction the entry would take, resolved once by
 // aggragates.EntrySide. They used to take event.Trade.Inverse, which is the
@@ -92,7 +92,7 @@ func shouldHoldEntry(event events.Events) (events.Events, error) {
 		}
 	}
 	if params.SmartTakeLoss {
-		// No new ladder while sophos reads a quiet slow decline on the pair.
+		// No new ladder while sophos reads a quiet decline on the pair.
 		// Before the first-fill gate for the reason the wallet reserve is: a
 		// held entry must neither consume nor record a first-fill verdict.
 		if hold := smarttakeloss.EntryHold(event.Trade, side, event.Params.AIIndicators); hold.Held() {

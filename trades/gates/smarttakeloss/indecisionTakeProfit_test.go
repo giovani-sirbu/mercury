@@ -112,7 +112,7 @@ func TestTakeProfitPercentageReadsThePositionPriceNotTheNewestFill(t *testing.T)
 		t.Fatalf("a re-anchored latched trade reads its position price: got %v, want %v", got, want)
 	}
 
-	marker := PendingRow("buy", newest, slowDeclineReasons)
+	marker := PendingRow(newest, quietFinding(slowDeclineReasons))
 	both := latchedBy(withRow(shallowDecline(), marker, testutil.At("15:00:00")))
 	if st := rebuildState(both); !st.slowDeclinePending || !st.indecision {
 		t.Fatalf("fixture drifted: the trade must be pending and latched, got %+v", st)
@@ -133,7 +133,7 @@ func TestTakeProfitPercentageReadsThePositionPriceNotTheNewestFill(t *testing.T)
 // ladder, a child, a futures trade, a ladder one short of IndecisionArmDepth,
 // a strategy without the flag, an indecision row without its event — and a
 // latched trade on no price at all, and every latched trade while
-// IndecisionDirection is off.
+// Indecision is off.
 func TestTakeProfitPercentageLeavesTheUnlatchedTradesAlone(t *testing.T) {
 	_, fromAverage := takeProfitLines(shallowDecline())
 	price := fromAverage - 0.01
@@ -147,7 +147,7 @@ func TestTakeProfitPercentageLeavesTheUnlatchedTradesAlone(t *testing.T) {
 	off := latchedBy(shallowDecline())
 	off.Strategy.Params.SmartTakeLoss = false
 	textOnly := shallowDecline()
-	textOnly.Logs = []aggragates.TradesLogs{{Message: IndecisionMessage("buy", indecisionReasons), Price: wearing.PositionPrice}}
+	textOnly.Logs = []aggragates.TradesLogs{{Message: LatchedRow(wearing.PositionPrice, indecisionFinding(indecisionReasons)).Message, Price: wearing.PositionPrice}}
 	for name, trade := range map[string]aggragates.Trades{
 		"an inverse ladder":               inverse,
 		"a child":                         child,
@@ -169,7 +169,7 @@ func TestTakeProfitPercentageLeavesTheUnlatchedTradesAlone(t *testing.T) {
 	if got := TakeProfitPercentage(latched, price, breakEvenReading); got == breakEvenReading {
 		t.Fatal("control: the latched trade itself must read its position price")
 	}
-	withIndecisionDirection(t, false)
+	withIndecision(t, false)
 	if got := TakeProfitPercentage(latched, price, breakEvenReading); got != breakEvenReading {
 		t.Fatalf("switched off, the latched trade must read its input, got %v", got)
 	}

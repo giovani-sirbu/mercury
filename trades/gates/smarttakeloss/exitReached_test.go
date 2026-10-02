@@ -6,6 +6,7 @@ import (
 	"math/rand/v2"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,10 +24,11 @@ func TestExitReachedAgreesWithApply(t *testing.T) {
 	blocks, prices := gridBlocks(), gridPrices()
 	reached := map[bool]int{}
 	for _, switches := range [][3]bool{{true, true, true}, {true, false, true}, {false, true, true}, {false, false, true}, {true, true, false}, {true, false, false}, {false, true, false}, {false, false, false}} {
-		withQuietSlowDeclineExit(t, switches[0])
+		withQuietDecline(t, switches[0])
 		withCapitalProtectionExit(t, switches[1])
-		withSlowPatternDeclineExit(t, switches[2])
-		for _, trade := range gridTrades() {
+		withSwingDecline(t, switches[2])
+		for _, c := range gridCases() {
+			trade := c.trade
 			for _, state := range []string{"buy", "stopLoss", "takeProfit", "sellLoss"} {
 				trade.PositionType = state
 				for _, block := range blocks {
@@ -36,8 +38,8 @@ func TestExitReachedAgreesWithApply(t *testing.T) {
 						for _, position := range positions {
 							sold := Apply(trade, position, price, withBlock(block)).Reason != ""
 							if sold != (exit && !gridCloses[position]) {
-								t.Fatalf("switches %v, %d fills (state %q, events %d), %q at %v, block %+v: ExitReached %v, Apply sold %v",
-									switches, len(trade.History), state, len(trade.StrategyEvents), position, price, block, exit, sold)
+								t.Fatalf("switches %v, stand %q, %d fills (state %q, events %d), %q at %v, block %+v: ExitReached %v, Apply sold %v",
+									switches, c.stand.name, len(trade.History), state, len(trade.StrategyEvents), position, price, block, exit, sold)
 							}
 						}
 					}
@@ -94,7 +96,7 @@ func TestExitReachedReadsTheDeclineReadRecently(t *testing.T) {
 	}
 	reached := map[bool]int{}
 	for _, on := range []bool{true, false} {
-		withQuietSlowDeclineExit(t, on)
+		withQuietDecline(t, on)
 		for _, trade := range []aggragates.Trades{watchedTrade(), pendingTrade(), pendingAtFive()} {
 			for _, block := range blocks {
 				for _, price := range []float64{underJudgeBand, judgeBand, underTheBand, slowDeclineBand} {
@@ -112,7 +114,7 @@ func TestExitReachedReadsTheDeclineReadRecently(t *testing.T) {
 	if reached[true] == 0 || reached[false] == 0 {
 		t.Fatalf("fixture drifted: the readings must reach the exit and miss it, got %v", reached)
 	}
-	withQuietSlowDeclineExit(t, true)
+	withQuietDecline(t, true)
 	if !ExitReached(watchedTrade(), slowDeclineBand, withRecent(brokenAtTheBand(), stood, from).SmartTakeLoss) || ExitReached(watchedTrade(), slowDeclineBand, brokenAtTheBand().SmartTakeLoss) {
 		t.Fatal("the decline read recently marks the watched ladder pending and the band sells on that tick; without it nothing sells")
 	}
@@ -121,27 +123,49 @@ func TestExitReachedReadsTheDeclineReadRecently(t *testing.T) {
 	}
 }
 
+// latchedByEvents states whether the trade's events latch the ladder, with the
+// decoder alone and never through the fold it is held against: an event of the
+// slow decline gate that names FeatureIndecision, or a latched event of the
+// gate it replaced, each with a price.
+func latchedByEvents(trade aggragates.Trades) bool {
+	decodes := func(event aggragates.TradesStrategyEvents) (EventData, bool) {
+		var data EventData
+		return data, event.DecodeData(&data) == nil && data.Price > 0
+	}
+	for _, event := range trade.StrategyEventsOf(aggragates.StrategyParamSmartTakeLoss, GateSlowDecline) {
+		if data, ok := decodes(event); ok && slices.Contains(data.Features, FeatureIndecision) {
+			return true
+		}
+	}
+	for _, event := range trade.StrategyEventsOf(aggragates.StrategyParamSmartTakeLoss, gateIndecision) {
+		if data, ok := decodes(event); ok && data.Event == EventLatched {
+			return true
+		}
+	}
+	return false
+}
+
 // On sampled ladders (sampledLadder, sampledState, sampledBlock), rows, states,
 // readings and prices under every combination of the three switches,
 // ExitReached is Apply's forced sale on the empty proposal and writes
 // nothing. Every add-side proposal gets the same answer, and no close is
 // replaced. A capital protection sale needs the rule on the ladder's own
 // count, and that rule sells whenever the trade is not resting in a close. A
-// sell-band sale needs a watched ladder at a band above zero. An indecision
-// row comes back exactly for a long spot parent from IndecisionArmDepth fills
-// that carries none yet, on a reading serving the indecision, whatever the
-// state, and it sells nothing. Every row Apply hands back is filed under a
-// gate and kind and carries the price of a fill. The sample reaches a marker
-// naming the recent bar's reasons.
+// sell-band sale needs a watched ladder at a band above zero. A row naming the
+// indecision comes back exactly for a long spot parent from IndecisionArmDepth
+// fills that is latched by none of its events yet, on a reading serving the
+// indecision, whatever the state, and it sells nothing. Every row Apply hands
+// back is filed under a gate and kind and carries the price of a fill. The
+// sample reaches a row naming the recent bar's reasons.
 func TestExitReachedIsApplysSaleOnTheEmptyProposal(t *testing.T) {
 	r := rand.New(rand.NewPCG(1, 2))
 	states := []string{"buy", "stopLoss", "forceTrailingStopLoss", "", "takeProfit", "forceTrailingTakeProfit", "update_takeProfit", "sellLoss", "sell", "sellParent", "impasse"}
 	prices := []float64{-1, 0, math.Nextafter(capitalProtectionBand, 0), capitalProtectionBand, (capitalProtectionBand + slowDeclineBand) / 2, slowDeclineBand, slowDeclineBand + 1}
 	seen := map[string]int{}
 	for _, switches := range [][3]bool{{true, true, true}, {true, false, true}, {false, true, true}, {false, false, true}, {true, true, false}, {true, false, false}, {false, true, false}, {false, false, false}} {
-		withQuietSlowDeclineExit(t, switches[0])
+		withQuietDecline(t, switches[0])
 		withCapitalProtectionExit(t, switches[1])
-		withIndecisionDirection(t, switches[2])
+		withIndecision(t, switches[2])
 		for range 5000 {
 			trade := sampledLadder(r)
 			trade = sampledState(r, trade)
@@ -181,28 +205,35 @@ func TestExitReachedIsApplysSaleOnTheEmptyProposal(t *testing.T) {
 					t.Fatalf("switches %v, %s: the close %q was replaced: %+v", switches, where, position, got)
 				}
 			}
-			latched := gridHas(trade, GateIndecision, EventLatched)
 			rowHolds := switches[2] && trade.Strategy.Params.SmartTakeLoss && trade.ParentID == 0 && price > 0 &&
 				len(trade.StrategyPair.StrategySettings) > 0 && !trade.Inverse && trade.Strategy.TradeType != aggragates.Futures &&
-				ladder.CountFilledEntries(trade) >= IndecisionArmDepth && !latched && block.SlowDeclineIndecision
-			if (empty.Indecision != nil) != rowHolds {
-				t.Fatalf("switches %v, %s: indecision row %+v, want one %v", switches, where, empty.Indecision, rowHolds)
+				ladder.CountFilledEntries(trade) >= IndecisionArmDepth && !latchedByEvents(trade) && block.SlowDeclineIndecision
+			if len(empty.Rows) > 1 {
+				t.Fatalf("switches %v, %s: one row at most on a tick, got %+v", switches, where, empty.Rows)
+			}
+			names := len(empty.Rows) == 1 && slices.Contains(empty.Rows[0].Features, FeatureIndecision)
+			if names != rowHolds {
+				t.Fatalf("switches %v, %s: a row naming the indecision %+v, want one %v", switches, where, empty.Rows, rowHolds)
 			}
 			if rowHolds {
-				assertRow(t, empty.Indecision, IndecisionMessage(trade.PositionType, block.SlowDeclineBreakReasons), rebuildState(trade).lastFill().Price)
+				for _, reason := range block.SlowDeclineBreakReasons {
+					if !slices.Contains(empty.Rows[0].Reasons, reason) {
+						t.Fatalf("switches %v, %s: the latch names what sophos named, missing %q in %+v", switches, where, reason, empty.Rows[0])
+					}
+				}
 				seen["indecision row"]++
 			}
-			for _, row := range []*Row{empty.SlowDecline, empty.Indecision} {
-				if row != nil && (row.Price <= 0 || row.Gate == "" || row.Event == "") {
-					t.Fatalf("switches %v, %s: a row Apply hands back names its filing and a fill's price, got %+v", switches, where, *row)
+			for _, row := range empty.Rows {
+				if row.Price <= 0 || row.Gate == "" || row.Event == "" || row.Message == "" || strings.Contains(row.Message, "Hold ") {
+					t.Fatalf("switches %v, %s: a row Apply hands back names its filing and a fill's price and carries no hold frame, got %+v", switches, where, row)
 				}
 			}
 			outcome := "no row"
-			if empty.SlowDecline != nil {
+			if len(empty.Rows) == 1 {
 				outcome = "row"
-			}
-			if empty.SlowDecline != nil && empty.SlowDecline.Message == SlowDeclineMessage(trade.PositionType, slowDeclineRecentReasons) {
-				seen["recent row"]++
+				if strings.Contains(empty.Rows[0].Message, slowDeclineRecentReasons[0]) {
+					seen["recent row"]++
+				}
 			}
 			if exit {
 				outcome += " sold"

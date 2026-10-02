@@ -2,7 +2,7 @@ package smarttakeloss
 
 import (
 	"reflect"
-	"strings"
+	"slices"
 	"testing"
 	"time"
 
@@ -10,28 +10,15 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 )
 
-// The indecision row's text is pinned like the slow-decline rows': the marker
-// byte for byte, for cp and the notification filter that find the row by it,
-// framed like them with the reasons in parentheses, and neither holding nor
-// held by any other marker, nor by the first-fill hold's reason.
-func TestIndecisionMessageIsFramedLikeTheMarker(t *testing.T) {
-	if IndecisionMarker != "smartTakeLoss: indecision direction, take profit from the last buy" {
-		t.Fatalf("the marker is byte-stable text and must not move, got %q", IndecisionMarker)
-	}
-	if got, want := IndecisionMessage("stopLoss", nil), "Hold stopLoss: "+IndecisionMarker; got != want {
-		t.Fatalf("row %q, want %q", got, want)
-	}
-	if got := IndecisionMessage("buy", []string{"NATR over", "2 of 4 readings hold with a smooth ladder, 3 needed"}); got != "Hold buy: "+IndecisionMarker+" (NATR over, 2 of 4 readings hold with a smooth ladder, 3 needed)" {
-		t.Fatalf("the reasons follow the marker in parentheses, got %q", got)
-	}
-	markers := []string{SlowDeclineMarker, SlowDeclineCancelMarker, SlowDeclineEntryHoldReason, IndecisionMarker, SlowPatternMarker, SlowPatternCancelMarker}
-	for _, one := range markers {
-		for _, other := range markers {
-			if one != other && strings.Contains(one, other) {
-				t.Errorf("%q contains %q", one, other)
-			}
+// latchNamed is whether a row Apply handed back names the indecision latch: the
+// indecision direction among the features of the row's event.
+func latchNamed(got Result) bool {
+	for _, row := range got.Rows {
+		if slices.Contains(row.Features, FeatureIndecision) {
+			return true
 		}
 	}
+	return false
 }
 
 // The event carries the newest fill's price, and rebuildState folds an event
@@ -43,41 +30,42 @@ func TestIndecisionArmDepthNeedsAFill(t *testing.T) {
 }
 
 // A long spot parent ladder from IndecisionArmDepth fills gets the row on the
-// tick sophos serves the indecision on — IndecisionMessage naming what broke,
-// at the newest fill's price — beside the proposal it leaves untouched: an
-// add, nothing, or a close the ladder proposes or the trade rests in. It
-// sells nothing. An impasse strategy's parent is watched too.
+// tick sophos serves the indecision on — the latch naming what broke, at the
+// newest fill's price — beside the proposal it leaves untouched: an add,
+// nothing, or a close the ladder proposes or the trade rests in. It sells
+// nothing. An impasse strategy's parent is watched too.
 func TestApplyLatchesAWatchedLadderOnTheIndecision(t *testing.T) {
 	trade := testutil.LadderTrade(false, fills(IndecisionArmDepth, "17:38:00")...)
+	want := LatchedRow(trade.PositionPrice, indecisionFinding(indecisionReasons))
 	for _, position := range []string{"", "stopLoss", "buy", "takeProfit", "sell"} {
 		got := Apply(trade, position, slowDeclineBand+1, indecisionReading())
-		if got.Position != position || got.Reason != "" || got.SlowDecline != nil {
+		if got.Position != position || got.Reason != "" {
 			t.Fatalf("%q: the proposal must pass untouched with no sale, got %+v", position, got)
 		}
-		assertRow(t, got.Indecision, IndecisionMessage("buy", indecisionReasons), trade.PositionPrice)
+		assertRow(t, got, want)
 	}
 	resting := trade
 	resting.PositionType = "takeProfit"
-	assertRow(t, Apply(resting, "", slowDeclineBand, indecisionReading()).Indecision, IndecisionMessage("takeProfit", indecisionReasons), trade.PositionPrice)
+	assertRow(t, Apply(resting, "", slowDeclineBand, indecisionReading()), want)
 	impasse := trade
 	impasse.Strategy.Params.Impasse = true
-	assertRow(t, Apply(impasse, "", slowDeclineBand, indecisionReading()).Indecision, IndecisionMessage("buy", indecisionReasons), trade.PositionPrice)
+	assertRow(t, Apply(impasse, "", slowDeclineBand, indecisionReading()), want)
 }
 
 // The row goes out once: from the tick after it the ladder reads latched, and
 // a latched ladder gets no second row however often sophos serves the
 // reading again, nor after a new fill. Nothing takes the latch away: not a
 // reading without the indecision, a broken one, the verdict, the zero block,
-// nor the cancel row a new fill gets.
+// nor the cancelled row a new fill gets.
 func TestApplyWritesTheIndecisionRowOnce(t *testing.T) {
 	trade := testutil.LadderTrade(false, fills(IndecisionArmDepth, "17:38:00")...)
 	newest := trade.PositionPrice
 	trade, got := engineTick(trade, "", underTheBand, testutil.At("18:00:00"), indecisionReading())
-	assertRow(t, got.Indecision, IndecisionMessage("buy", indecisionReasons), newest)
+	assertRow(t, got, LatchedRow(newest, indecisionFinding(indecisionReasons)))
 	for index, reading := range []aggragates.AIIndicators{indecisionReading(), brokenReading(), withBlock(aggragates.SmartTakeLossIndicators{}), verdictReading(), indecisionReading()} {
 		var next Result
 		trade, next = engineTick(trade, "", underTheBand, testutil.At("18:15:00").Add(time.Duration(index)*time.Minute), reading)
-		if next.Indecision != nil {
+		if latchNamed(next) {
 			t.Fatalf("reading %d: a latched ladder gets no second row, got %+v", index, next)
 		}
 		if !rebuildState(trade).indecision {
@@ -87,20 +75,19 @@ func TestApplyWritesTheIndecisionRowOnce(t *testing.T) {
 	w3s := fills(IndecisionArmDepth+1, "19:00:00")
 	trade = withFill(trade, w3s[IndecisionArmDepth].Price, testutil.At("19:00:00"))
 	trade, got = engineTick(trade, "", underTheBand, testutil.At("19:15:00"), indecisionReading())
-	if got.Indecision != nil || got.SlowDecline == nil || !rebuildState(trade).indecision {
-		t.Fatalf("a new fill is judged on the reading and neither unlatches the ladder nor writes a second row, got %+v", got)
+	if len(got.Rows) != 1 || got.Rows[0].Event != EventCancelled || latchNamed(got) || !rebuildState(trade).indecision {
+		t.Fatalf("a new fill is judged on the reading and neither unlatches the ladder nor writes a second latch, got %+v", got)
 	}
-	rows, latched := carriedRows(trade, IndecisionMarker), carriedEvents(trade, GateIndecision, EventLatched)
-	if rows != 1 || latched != 1 {
-		t.Fatalf("one indecision row and one latched event over every tick, got %d and %d in %+v and %+v", rows, latched, trade.Logs, trade.StrategyEvents)
+	rows, latches := carriedRows(trade, indecisionLabel), carriedLatches(trade)
+	if rows != 1 || latches != 1 {
+		t.Fatalf("one row naming the latch and one event carrying it over every tick, got %d and %d in %+v and %+v", rows, latches, trade.Logs, trade.StrategyEvents)
 	}
 }
 
-// A ladder the rule does not watch gets no row on the indecision: one short
+// A ladder the rule does not watch gets no latch on the indecision: one short
 // of IndecisionArmDepth, with no fill, inverse, futures, a child, a strategy
-// without the flag, and every ladder while IndecisionDirection is off. A
-// watched ladder gets none on a reading without the indecision, whatever
-// else it serves.
+// without the flag, and every ladder while Indecision is off. A watched ladder
+// gets none on a reading without the indecision, whatever else it serves.
 func TestApplyWritesNoIndecisionRowOnALadderItDoesNotWatch(t *testing.T) {
 	futures := watchedTrade()
 	futures.Strategy.TradeType = aggragates.Futures
@@ -116,47 +103,51 @@ func TestApplyWritesNoIndecisionRowOnALadderItDoesNotWatch(t *testing.T) {
 		"a child":                         child,
 		"without the flag":                off,
 	} {
-		if got := Apply(trade, "", underTheBand, indecisionReading()); got.Indecision != nil {
+		if got := Apply(trade, "", underTheBand, indecisionReading()); latchNamed(got) {
 			t.Errorf("%s: got %+v", name, got)
 		}
 	}
 	for _, reading := range []aggragates.AIIndicators{brokenReading(), legOnAndQuiet(), verdictReading(), withBlock(aggragates.SmartTakeLossIndicators{SlowDeclineBreakReasons: indecisionReasons})} {
-		if got := Apply(watchedTrade(), "", underTheBand, reading); got.Indecision != nil {
-			t.Errorf("a reading without the indecision writes no row, got %+v", got)
+		if got := Apply(watchedTrade(), "", underTheBand, reading); latchNamed(got) {
+			t.Errorf("a reading without the indecision writes no latch, got %+v", got)
 		}
 	}
-	withIndecisionDirection(t, false)
-	if got := Apply(watchedTrade(), "", underTheBand, indecisionReading()); got.Indecision != nil {
-		t.Fatalf("switched off, no row, got %+v", got)
+	withIndecision(t, false)
+	if got := Apply(watchedTrade(), "", underTheBand, indecisionReading()); latchNamed(got) {
+		t.Fatalf("switched off, no latch, got %+v", got)
 	}
 }
 
-// A pending ladder whose new fill is judged on the indecision reading gets
-// both rows on that tick: the cancel row, since the leg is not on and quiet,
-// then the indecision row that latches it, each naming what broke and
-// carrying the new fill's price. From the next tick it is latched and not
-// pending, and its band sells nothing.
-func TestApplyCancelsAndLatchesOnOneTick(t *testing.T) {
+// A pending ladder whose new fill is judged on the indecision reading gets ONE
+// row on that tick: the cancelled row, since the leg is not on and quiet, with
+// the latch named in its head and the reasons — the same list for the latch and
+// for what broke — printed once under both labels, carrying the new fill's
+// price. From the next tick it is latched and not pending, and its band sells
+// nothing.
+func TestApplyCancelsAndLatchesOnOneRow(t *testing.T) {
 	trade, got := engineTick(pendingAtFive(), "", underJudgeBand, judgeTick, indecisionReading())
-	assertRow(t, got.SlowDecline, SlowDeclineCancelMessage("buy", indecisionReasons), sixthFill)
-	assertRow(t, got.Indecision, IndecisionMessage("buy", indecisionReasons), sixthFill)
+	want := CancelledRow(sixthFill, indecisionFinding(indecisionReasons), quietFinding(indecisionReasons))
+	assertRow(t, got, want)
+	if len(want.Features) != 2 || want.Event != EventCancelled || !slices.Equal(want.Reasons, indecisionReasons) {
+		t.Fatalf("one cancelled event naming the latch and the quiet decline, the shared reasons once, got %+v", want)
+	}
 	if st := rebuildState(trade); st.slowDeclinePending || !st.indecision {
 		t.Fatalf("the tick after: not pending and latched, got %+v", st)
 	}
 	assertNoSale(t, Apply(trade, "", slowDeclineBand, indecisionReading()), "")
 }
 
-// The depth priority hold pauses the quiet slow decline and capital
-// protection, never the indecision direction: a held watched ladder gets the
-// row the same ladder gets unheld — the row and the event it files, which the
-// Row carries — and a held latched ladder's take profit reads the move
+// The depth priority hold pauses the slow decline gate and capital
+// protection, never the sophos reading of the indecision: a held watched ladder
+// gets the row the same ladder gets unheld — the row and the event it files,
+// which the Row carries — and a held latched ladder's take profit reads the move
 // against its position price as the unheld one does.
 func TestADepthPriorityHoldLeavesTheIndecisionDirectionOn(t *testing.T) {
 	trade := indecisionLadder()
 	unheld := Apply(trade, "", underTheBand, indecisionReading())
-	assertRow(t, unheld.Indecision, IndecisionMessage("buy", indecisionReasons), trade.PositionPrice)
+	assertRow(t, unheld, LatchedRow(trade.PositionPrice, indecisionFinding(indecisionReasons)))
 	held := Apply(heldBy(trade, testutil.At("18:00:00")), "", underTheBand, indecisionReading())
-	if held.Indecision == nil || !reflect.DeepEqual(*held.Indecision, *unheld.Indecision) || held.SlowDecline != nil || held.Position != "" || held.Reason != "" {
+	if len(held.Rows) != 1 || !reflect.DeepEqual(held.Rows[0], unheld.Rows[0]) || held.Position != "" || held.Reason != "" {
 		t.Fatalf("held, the ladder gets the unheld row and nothing else, got %+v want %+v", held, unheld)
 	}
 
@@ -177,36 +168,26 @@ func TestADepthPriorityHoldLeavesTheIndecisionDirectionOn(t *testing.T) {
 	}
 }
 
-// The slow pattern decline latches a ladder the indecision direction watches
-// the tick it goes pending, once: one latched row at the newest fill naming the
-// rule and the reasons of the window that held. A ladder already latched, and
-// one the indecision reading latches on that very tick, get no second row; one
-// the indecision direction does not watch goes pending without a latch.
-func TestTheSlowPatternLatchesOnceAndOnlyWhereTheIndecisionWatches(t *testing.T) {
-	withSlowPatternDeclineExit(t, true)
-	block := withBlock(stairBlock(stairTurns, 24))
-	latchReasons := append([]string{"slow pattern decline"}, patternReasonsAt24...)
+// The swing decline latches a ladder the indecision direction watches the tick
+// it goes pending, once: the row that makes the ladder pending names the latch
+// beside the swing decline, with no reasons of its own. A ladder already
+// latched, and one the sophos reading latches on that very tick, get no second
+// latch — the second names its own reasons and the swing decline's both; one the
+// indecision direction does not watch goes pending without a latch.
+func TestTheSwingDeclineLatchesOnceAndOnlyWhereTheIndecisionWatches(t *testing.T) {
+	block := withBlock(stairFourthBlock())
+	reasons := stairReading(t, stairFourth(), stairFourthBlock(), true).Reasons
 
-	got := Apply(stairLadder(0, 9, 15, 24), "", underTheBand, block)
-	assertRow(t, got.SlowDecline, SlowPatternMessage("buy", patternReasonsAt24), stairPrices[3])
-	assertRow(t, got.Indecision, IndecisionMessage("buy", latchReasons), stairPrices[3])
+	assertRow(t, Apply(stairFourth(), "", underTheBand, block), PendingRow(stairPrices[3], indecisionFinding(nil), swingFinding(reasons)))
 
-	got = Apply(latchedBy(stairLadder(0, 9, 15, 24)), "", underTheBand, block)
-	if got.SlowDecline == nil || got.SlowDecline.Gate != GateSlowPattern || got.Indecision != nil {
-		t.Errorf("a latched ladder goes pending without a second latch, got %+v", got)
-	}
+	got := Apply(latchedBy(stairFourth()), "", underTheBand, block)
+	assertRow(t, got, PendingRow(stairPrices[3], swingFinding(reasons)))
 
-	reading := stairBlock(stairTurns, 24)
+	reading := stairFourthBlock()
 	reading.SlowDeclineIndecision, reading.SlowDeclineBreakReasons = true, indecisionReasons
-	got = Apply(stairLadder(0, 9, 15, 24), "", underTheBand, withBlock(reading))
-	assertRow(t, got.Indecision, IndecisionMessage("buy", indecisionReasons), stairPrices[3])
-	if got.SlowDecline == nil || got.SlowDecline.Gate != GateSlowPattern {
-		t.Errorf("the reading's latch is the one written and the pattern still goes pending, got %+v", got)
-	}
+	got = Apply(stairFourth(), "", underTheBand, withBlock(reading))
+	assertRow(t, got, PendingRow(stairPrices[3], indecisionFinding(indecisionReasons), swingFinding(reasons)))
 
-	withIndecisionDirection(t, false)
-	got = Apply(stairLadder(0, 9, 15, 24), "", underTheBand, block)
-	if got.SlowDecline == nil || got.SlowDecline.Gate != GateSlowPattern || got.Indecision != nil {
-		t.Errorf("with the indecision direction off the ladder goes pending without a latch, got %+v", got)
-	}
+	withIndecision(t, false)
+	assertRow(t, Apply(stairFourth(), "", underTheBand, block), PendingRow(stairPrices[3], swingFinding(reasons)))
 }

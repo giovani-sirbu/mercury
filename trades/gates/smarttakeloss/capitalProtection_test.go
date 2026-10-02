@@ -104,7 +104,7 @@ func TestApplyCapitalProtectionSellsFromEveryAddSideProposal(t *testing.T) {
 		for _, position := range []string{"", "buy", "stopLoss", "update_stopLoss", "update_buy", "forceTrailingStopLoss"} {
 			got := Apply(trade, position, capitalProtectionBand, withBlock(solBlock()))
 			assertForced(t, got, reasonCapitalProtection)
-			if got.SlowDecline != nil {
+			if len(got.Rows) != 0 {
 				t.Fatalf("capital protection writes no row, got %+v", got)
 			}
 			assertUntouched(t, Apply(trade, position, math.Nextafter(capitalProtectionBand, 0), withBlock(solBlock())), position)
@@ -142,14 +142,14 @@ func TestApplyCapitalProtectionNeverReplacesAClose(t *testing.T) {
 	}
 }
 
-// A pending slow decline and capital protection can both reach their bands on
-// one tick: it is the same sale, and the sell band names it. Under the sell
-// band capital protection names it, and so it does with the slow decline
-// switched off.
+// A ladder pending on the quiet decline and capital protection can both reach
+// their bands on one tick: it is the same sale, and the sell band names it.
+// Under the sell band capital protection names it, and so it does with the
+// quiet decline switched off.
 func TestApplySellBandNamesTheSaleWhenBothBandsAreReached(t *testing.T) {
 	withCapitalProtectionExit(t, true)
 	pending := lastDepthLadder()
-	pending = withRows(pending, PendingRow("buy", pending.PositionPrice, nil))
+	pending = withRows(pending, PendingRow(pending.PositionPrice, quietFinding(nil)))
 	block := solBlock()
 	block.SlowDeclineSellBand = capitalProtectionBand
 	assertForced(t, Apply(pending, "", capitalProtectionBand, withBlock(block)), reasonSellBand)
@@ -157,7 +157,7 @@ func TestApplySellBandNamesTheSaleWhenBothBandsAreReached(t *testing.T) {
 	block.SlowDeclineSellBand = capitalProtectionBand + 1
 	assertForced(t, Apply(pending, "", capitalProtectionBand, withBlock(block)), reasonCapitalProtection)
 
-	withQuietSlowDeclineExit(t, false)
+	withQuietDecline(t, false)
 	block.SlowDeclineSellBand = capitalProtectionBand
 	assertForced(t, Apply(pending, "", capitalProtectionBand, withBlock(block)), reasonCapitalProtection)
 }

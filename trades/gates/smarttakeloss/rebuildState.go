@@ -1,51 +1,55 @@
 package smarttakeloss
 
-import "github.com/giovani-sirbu/mercury/trades/aggragates"
+import (
+	"slices"
+
+	"github.com/giovani-sirbu/mercury/trades/aggragates"
+)
 
 // state is what the trade's own strategy events say about the smart take
-// loss: the entry fills, where the ladder stands with the quiet slow-decline
-// exit, whether capital protection watches it, where it stands with the
-// indecision direction, and where it stands with the slow pattern decline. It is rebuilt from trade.StrategyEvents and
-// trade.History on every tick, the way cooldown.firstFillState rebuilds the
-// first-fill gate: the events are the only state. Nothing is kept in Redis, in
-// a column or on trade.PositionPrice, and the log rows beside the events are
-// output that nothing reads back.
+// loss: the entry fills, where the ladder stands with the slow decline gate —
+// whether it is pending, and on which decline features — whether capital
+// protection watches it, and whether the indecision direction latched it. It is
+// rebuilt from trade.StrategyEvents and trade.History on every tick, the way
+// cooldown.firstFillState rebuilds the first-fill gate: the events are the only
+// state. Nothing is kept in Redis, in a column or on trade.PositionPrice, and
+// the log rows beside the events are output that nothing reads back.
 type state struct {
 	fills []entryFill
-	// slowDeclineWatched: the quiet slow-decline exit watches this ladder
-	// (slowDeclineWatched). slowDeclinePending: the last slow-decline event of
-	// a watched ladder is a pending event, so Apply reads its band; a
-	// cancelled or reset event after it takes that away until the next
-	// pending event. slowDeclinePendingFrom is that event's Price: the fill
-	// the ladder is pending from, the one slowDeclineFillUnjudged compares its
-	// newest fill with. Zero while not pending.
-	slowDeclineWatched     bool
+	// quietDeclineWatched and swingDeclineWatched: the quiet decline and the
+	// swing decline watch this ladder (quietDeclineWatched,
+	// swingDeclineWatched). slowDeclineWatched: either does, which is what
+	// watches the ladder for the gate's pending machinery (slowDeclineWatched).
+	quietDeclineWatched bool
+	swingDeclineWatched bool
+	slowDeclineWatched  bool
+	// slowDeclinePending: the gate's last pending event of a watched ladder is
+	// not followed by a cancelled or reset one, so Apply reads its band.
+	// slowDeclinePendingFrom is that event's Price: the fill the ladder is
+	// pending from, the one slowDeclineFillUnjudged compares its newest fill
+	// with, zero while not pending. pendingFeatures are the decline features the
+	// ladder is pending on, in the order the rows name them.
 	slowDeclinePending     bool
 	slowDeclinePendingFrom float64
+	pendingFeatures        []string
+	// saleHeld: the loss cap already held the sale at the band in this pending
+	// episode (EventSaleHeld), so the held sale's row is not due again. Pending (a
+	// confirmation at a new fill included), cancelled, reset and sold events clear
+	// it, and nothing else does: the fill that takes the ladder to its last depth
+	// is never judged and leaves it as it was.
+	saleHeld bool
 	// capitalProtectionWatched: the capital protection exit watches this
 	// ladder (capitalProtectionWatched).
 	capitalProtectionWatched bool
 	// indecisionWatched: the indecision direction watches this ladder
-	// (indecisionWatched). indecision: a watched ladder carries a latched
-	// event, so it is latched; no event takes the latch away, and it holds
-	// until the trade closes.
+	// (indecisionWatched). indecision: a watched ladder carries an event that
+	// latched it; no event takes the latch away, and it holds until the trade
+	// closes.
 	indecisionWatched bool
 	indecision        bool
-	// slowPatternWatched: the slow pattern decline watches this ladder
-	// (slowPatternWatched). slowPatternPending: the last event of the slow
-	// pattern gate of a watched ladder is a pending event, so Apply sells it at
-	// the sell band; a cancelled event after it takes that away until the next
-	// pending event. slowPatternPendingFrom is that event's Price: the fill the
-	// ladder is pending from, the one slowPatternFillUnjudged compares its
-	// newest fill with. Zero while not pending. The pattern is its own state,
-	// apart from the quiet slow decline's: either can be pending without the
-	// other, and a depth priority hold ends neither (there is no reset kind).
-	slowPatternWatched     bool
-	slowPatternPending     bool
-	slowPatternPendingFrom float64
 	// depthPriorityHeld: a depth priority holds this ladder
-	// (depthPriorityHeld), which pauses the quiet slow-decline exit and capital
-	// protection on it until its next fill; the indecision direction goes on.
+	// (depthPriorityHeld), which pauses the slow decline gate and capital
+	// protection on it until its next fill; the sophos latch goes on.
 	depthPriorityHeld bool
 }
 
@@ -57,23 +61,52 @@ func (st state) lastFill() entryFill {
 	return st.fills[len(st.fills)-1]
 }
 
+// pendingOn is the state with the ladder pending from its newest fill on the
+// decline features of the findings, and no sale held for it yet.
+func (st state) pendingOn(findings []Finding) state {
+	st.slowDeclinePending = true
+	st.slowDeclinePendingFrom = st.lastFill().Price
+	st.saleHeld = false
+	st.pendingFeatures = nil
+	for _, finding := range findings {
+		if finding.Feature != FeatureIndecision {
+			st.pendingFeatures = append(st.pendingFeatures, finding.Feature)
+		}
+	}
+	return st
+}
+
+// notPending is the state with the ladder watched and not pending: where a
+// cancelled or a reset event leaves it, with no sale held either.
+func (st state) notPending() state {
+	st.slowDeclinePending = false
+	st.slowDeclinePendingFrom = 0
+	st.saleHeld = false
+	st.pendingFeatures = nil
+	return st
+}
+
 // rebuildState folds the trade's smartTakeLoss events in slice order — hermes
-// loads them in id order, sisyphus appends them — never their stamps. A
-// slow-decline event makes a watched ladder pending from the fill its price
-// names (the pending kind), and a cancelled or reset event makes it not
-// pending — the last of them wins, the sold kind changes nothing, and none
-// touches a ladder the exit does not watch, so while QuietSlowDeclineExit is
-// off every such event is ignored. The slow pattern gate folds apart
-// (foldSlowPattern): pending makes a ladder the slow pattern decline watches
-// pending, cancelled makes it not pending, and the sold kind changes nothing —
-// while SlowPatternDeclineExit is off every such event is ignored. The depth priority hold is read apart, on
-// every trade, off the cooldown events' stamps and the newest fill
-// (depthPriorityHeld). A latched event of the indecision gate latches a
-// ladder the indecision direction watches, and nothing takes the latch away;
-// it touches no ladder that rule does not watch, so while IndecisionDirection
-// is off every such event is ignored too. The two folds are independent: a
-// ladder one rule watches folds that rule's events whether or not the other
-// watches it.
+// loads them in id order, sisyphus appends them — never their stamps. An event
+// of the slow decline gate that names features is read by them: a pending event
+// makes the ladder pending from the fill its price names, on the decline
+// features it names that watch the ladder; a cancelled or reset event makes it
+// not pending, whichever feature made it so; FeatureIndecision on a pending,
+// cancelled, reset or latched event latches a ladder the indecision direction
+// watches, and nothing takes the latch away; a sale held event remembers that
+// the loss cap held the episode's sale (saleHeld), whatever fill its row
+// carries, and a sold one forgets it, as pending, cancelled and reset do,
+// changing nothing else. A feature a switch has turned off is ignored with its
+// events, as is the whole fold of a ladder nothing watches. The depth priority
+// hold is read apart, on every trade, off the cooldown events' stamps and the
+// newest fill (depthPriorityHeld).
+//
+// Events written before the merge are read as the gates they were written under
+// (legacyStates): a feature-less event of the slow decline gate drives the
+// pending state of the quiet decline, an event of gateSlowPattern the one of the
+// swing decline, a latched event of gateIndecision latches; the first event
+// that names features and makes a ladder pending, or not pending, supersedes
+// those states and the events after it are the gate's own.
 //
 // An event the fold cannot use is skipped, and the fold goes on: a document
 // that does not decode, a kind the gate does not have — a `{}` event names
@@ -83,92 +116,84 @@ func (st state) lastFill() entryFill {
 //
 // Every watch is read off the fills already folded here: entryFills counts
 // them the way ladder.CountFilledEntries does, row for row, so they agree
-// with slowDeclineWatched, capitalProtectionWatched, indecisionWatched and
-// slowPatternWatched exactly.
+// with quietDeclineWatched, swingDeclineWatched, capitalProtectionWatched and
+// indecisionWatched exactly.
 func rebuildState(trade aggragates.Trades) state {
 	fills := entryFills(trade)
 	st := state{
 		fills:                    fills,
-		slowDeclineWatched:       quietSlowDeclineExit && !trade.Inverse && len(fills) >= SlowDeclineArmDepth,
+		quietDeclineWatched:      quietDecline && !trade.Inverse && len(fills) >= QuietDeclineArmDepth,
+		swingDeclineWatched:      swingDeclineEligible(trade) && len(fills) >= SwingDeclineArmDepth,
 		capitalProtectionWatched: capitalProtectionEligible(trade) && lastDepthFilled(trade, len(fills)),
 		indecisionWatched:        indecisionEligible(trade) && len(fills) >= IndecisionArmDepth,
-		slowPatternWatched:       slowPatternEligible(trade) && len(fills) >= SlowPatternArmDepth,
 	}
+	st.slowDeclineWatched = st.quietDeclineWatched || st.swingDeclineWatched
 	st.depthPriorityHeld = depthPriorityHeld(trade, st.lastFill())
-	if !st.slowDeclineWatched && !st.indecisionWatched && !st.slowPatternWatched {
+	if !st.slowDeclineWatched && !st.indecisionWatched {
 		return st
 	}
-	for _, event := range trade.StrategyEvents {
+	var legacy legacyStates
+	for index, event := range trade.StrategyEvents {
 		if event.Param != aggragates.StrategyParamSmartTakeLoss {
 			continue
 		}
+		data, ok := readEvent(event)
+		if !ok {
+			continue
+		}
 		switch {
-		case st.slowDeclineWatched && event.Gate == GateSlowDecline:
-			st = foldSlowDecline(st, event)
-		case st.indecisionWatched && event.Gate == GateIndecision:
-			st = foldIndecision(st, event)
-		case st.slowPatternWatched && event.Gate == GateSlowPattern:
-			st = foldSlowPattern(st, event)
+		case event.Gate == GateSlowDecline && len(data.Features) > 0:
+			st, legacy = foldGateEvent(st, legacy, data)
+		case event.Gate == GateSlowDecline && st.quietDeclineWatched:
+			legacy = legacy.foldQuiet(data, index)
+		case event.Gate == gateSlowPattern && st.swingDeclineWatched:
+			legacy = legacy.foldSwing(data, index)
+		case event.Gate == gateIndecision && st.indecisionWatched && data.Event == EventLatched:
+			st.indecision = true
 		}
 	}
-	return st
+	return legacy.settle(st)
 }
 
-// foldSlowDecline is the state after one event of the slow-decline gate:
-// pending makes the ladder pending from the price it carries, cancelled and
-// reset make it not pending, and every other kind — the sale included —
-// changes nothing.
-func foldSlowDecline(st state, event aggragates.TradesStrategyEvents) state {
-	data, ok := readEvent(event)
-	if !ok {
-		return st
-	}
+// foldGateEvent is the state after one event of the slow decline gate that
+// names features: pending makes the ladder pending from the price it carries on
+// the decline features it names that watch the ladder — on none of them, not
+// pending: the event stood for features that are switched off — cancelled and
+// reset make it not pending, either supersedes the legacy states, the sale
+// kinds move the held sale alone (afterSale), and every other kind changes
+// nothing but the latch, which FeatureIndecision sets on the kinds that write it.
+func foldGateEvent(st state, legacy legacyStates, data EventData) (state, legacyStates) {
 	switch data.Event {
 	case EventPending:
-		st.slowDeclinePending = true
-		st.slowDeclinePendingFrom = data.Price
+		st = st.notPending()
+		if declines := watchedDeclines(st, data.Features); len(declines) > 0 {
+			st.slowDeclinePending, st.slowDeclinePendingFrom, st.pendingFeatures = true, data.Price, declines
+		}
+		legacy = legacyStates{superseded: true}
 	case EventCancelled, EventReset:
-		st.slowDeclinePending = false
-		st.slowDeclinePendingFrom = 0
+		st = st.notPending()
+		legacy = legacyStates{superseded: true}
+	case EventSaleHeld, EventSold:
+		return st.afterSale(data), legacy
+	case EventLatched:
+	default:
+		return st, legacy
 	}
-	return st
-}
-
-// foldSlowPattern is the state after one event of the slow pattern gate:
-// pending makes the ladder pending from the price it carries, cancelled makes
-// it not pending, and every other kind — the sale included, and a reset kind
-// this gate never writes — changes nothing.
-func foldSlowPattern(st state, event aggragates.TradesStrategyEvents) state {
-	data, ok := readEvent(event)
-	if !ok {
-		return st
-	}
-	switch data.Event {
-	case EventPending:
-		st.slowPatternPending = true
-		st.slowPatternPendingFrom = data.Price
-	case EventCancelled:
-		st.slowPatternPending = false
-		st.slowPatternPendingFrom = 0
-	}
-	return st
-}
-
-// foldIndecision is the state after one event of the indecision gate: latched
-// latches the ladder, and nothing else does anything.
-func foldIndecision(st state, event aggragates.TradesStrategyEvents) state {
-	if data, ok := readEvent(event); ok && data.Event == EventLatched {
+	if st.indecisionWatched && slices.Contains(data.Features, FeatureIndecision) {
 		st.indecision = true
 	}
-	return st
+	return st, legacy
 }
 
-// readEvent is the event's document when a fold can use it: it decodes and
-// carries a price above zero, as a fill's does.
-func readEvent(event aggragates.TradesStrategyEvents) (EventData, bool) {
-	var data EventData
-	if err := event.DecodeData(&data); err != nil || data.Price <= 0 {
-		return EventData{}, false
+// watchedDeclines are the decline features among those an event names that
+// watch the ladder, in the order the rows name them.
+func watchedDeclines(st state, features []string) []string {
+	var declines []string
+	if st.quietDeclineWatched && slices.Contains(features, FeatureQuietDecline) {
+		declines = append(declines, FeatureQuietDecline)
 	}
-	return data, true
+	if st.swingDeclineWatched && slices.Contains(features, FeatureSwingDecline) {
+		declines = append(declines, FeatureSwingDecline)
+	}
+	return declines
 }

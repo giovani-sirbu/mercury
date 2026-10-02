@@ -80,11 +80,11 @@ type (
 		FibSwingHigh float64
 		FibLevels    []float64
 		// Smart take loss: the chart block from GET /:symbol/patterns — the
-		// quiet slow-decline verdict with its sell band, and the capital
+		// quiet decline verdict with its sell band, and the capital
 		// protection band with its SMC trend reading, both read on the closed
 		// window of sophos' smart take loss. Every zero field is inert; the
 		// engines hand it to gates/smarttakeloss.Apply after the ladder has
-		// decided, and ShouldHold reads the slow-decline verdict on the first
+		// decided, and ShouldHold reads the quiet decline verdict on the first
 		// fill.
 		SmartTakeLoss SmartTakeLossIndicators
 		// Dynamic params: the Super Guppy and Bull Market Support Band reads

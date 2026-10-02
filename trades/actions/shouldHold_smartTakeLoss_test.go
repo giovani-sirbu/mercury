@@ -15,7 +15,7 @@ import (
 )
 
 // The smart take loss's one hold: no new ladder on a pair while sophos reads
-// a quiet slow decline on it. Flag first, long parents only, verdict only —
+// a quiet decline on it. Flag first, long parents only, verdict only —
 // and before the cooldown's first-fill gate, after its wallet reserve. Its
 // hold is a pair: the INFO row and, beside it under the same stamp, the held
 // event of the entry hold gate.

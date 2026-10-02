@@ -26,7 +26,7 @@ type entryFill struct {
 // partial fill updates its order in place and never adds a depth — and a
 // synthetic id for legacy rows that carry none. The first row of an order
 // supplies its price and stamp. A zero stamp is kept: it only keeps the leg
-// from being read smooth from that fill (slowDeclineReadsForTheLadder), it
+// from being read smooth from that fill (quietDeclineReadsForTheLadder), it
 // does not void the ladder.
 func entryFills(trade aggragates.Trades) []entryFill {
 	entrySide := "BUY"

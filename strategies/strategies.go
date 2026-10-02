@@ -41,7 +41,7 @@ type (
 		// The upside branches of the `buy` rows read `profitPercentage`, the
 		// move measured against it, so a take profit is proposed at break even
 		// + percentage + tolerance at every depth — and, from break even up, on
-		// a trade the quiet slow-decline exit holds pending at the newest
+		// a trade the slow decline gate holds pending at the newest
 		// fill's take profit, and on a trade the indecision direction has
 		// latched at Price's take profit, wherever that is lower
 		// (GetPosition). Price — the last fill or the last re-anchor — keeps
@@ -66,7 +66,7 @@ type (
 // Position.AverageEntryPrice (GetPercentage / GetProfitPercentage, both
 // negated by the engines for an inverse trade) — or, while that move is at
 // or over break even, the larger of it and the move against the newest fill
-// on a trade the quiet slow-decline exit holds pending, and the move against
+// on a trade the slow decline gate holds pending, and the move against
 // Position.Price — percentage itself — on a trade the indecision direction
 // has latched, which the engines read through
 // smarttakeloss.TakeProfitPercentage.

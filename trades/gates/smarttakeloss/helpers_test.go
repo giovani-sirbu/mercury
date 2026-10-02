@@ -3,7 +3,8 @@ package smarttakeloss
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
+	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -46,7 +47,7 @@ func lastDepthLadder() aggragates.Trades {
 
 // solBlock is the capital protection reading sophos serves over the SOL
 // fixture ladder: the upper Bollinger band at capitalProtectionBand and the
-// SMC trend bearish on every timeframe. It carries no slow-decline reading.
+// SMC trend bearish on every timeframe. It carries no slow decline reading.
 func solBlock() aggragates.SmartTakeLossIndicators {
 	return aggragates.SmartTakeLossIndicators{
 		CapitalProtectionUpperBB:    capitalProtectionBand,
@@ -58,12 +59,54 @@ func withBlock(block aggragates.SmartTakeLossIndicators) aggragates.AIIndicators
 	return aggragates.AIIndicators{SmartTakeLoss: block}
 }
 
+// quietFinding, swingFinding and indecisionFinding are the findings of one
+// feature each, the reasons given: what the builders of the rows take, and
+// what a tick's row names.
+func quietFinding(reasons []string) Finding {
+	return Finding{Feature: FeatureQuietDecline, Reasons: reasons}
+}
+
+func swingFinding(reasons []string) Finding {
+	return Finding{Feature: FeatureSwingDecline, Reasons: reasons}
+}
+
+func indecisionFinding(reasons []string) Finding {
+	return Finding{Feature: FeatureIndecision, Reasons: reasons}
+}
+
 // assertUntouched fails unless Apply handed the proposal back untouched, with
 // no sale and no row.
 func assertUntouched(t *testing.T, got Result, position string) {
 	t.Helper()
-	if got.Position != position || got.Reason != "" || got.SlowDecline != nil || got.Indecision != nil {
+	if got.Position != position || got.Reason != "" || len(got.Rows) != 0 {
 		t.Fatalf("expected %q untouched with no row, got %+v", position, got)
+	}
+}
+
+// assertRow fails unless Apply handed back exactly this one row, whole: the
+// message, the price, the filing, the features and the reasons.
+func assertRow(t *testing.T, got Result, want Row) {
+	t.Helper()
+	if len(got.Rows) != 1 || !reflect.DeepEqual(got.Rows[0], want) {
+		t.Fatalf("rows = %+v, want exactly %+v", got.Rows, want)
+	}
+}
+
+// assertNoSale is the answer of a ladder the gate does not sell: the proposal
+// untouched, no reason.
+func assertNoSale(t *testing.T, got Result, position string) {
+	t.Helper()
+	if got.Position != position || got.Reason != "" {
+		t.Fatalf("expected %q with no sale, got %+v", position, got)
+	}
+}
+
+// assertForced fails unless Apply replaced the proposal with the sellLoss
+// chain under reason.
+func assertForced(t *testing.T, got Result, reason string) {
+	t.Helper()
+	if got.Position != "sellLoss" || got.Reason != reason {
+		t.Fatalf("expected a forced sellLoss for %q, got %+v", reason, got)
 	}
 }
 
@@ -81,12 +124,16 @@ func indecisionReading() aggragates.AIIndicators {
 	})
 }
 
+// latchRow is the row the engine wrote for a ladder the indecision latched at
+// its newest fill on the sophos reading: the latch's own row.
+func latchRow(trade aggragates.Trades) Row {
+	return LatchedRow(rebuildState(trade).lastFill().Price, indecisionFinding(indecisionReasons))
+}
+
 // latchedBy is the trade carrying the latched pair the engine wrote for its
-// newest fill — the indecision row and its event — after the rows and events
-// it already carries.
+// newest fill, after the rows and events it already carries.
 func latchedBy(trade aggragates.Trades) aggragates.Trades {
-	row := LatchedRow("buy", rebuildState(trade).lastFill().Price, indecisionReasons)
-	return withRow(trade, row, testutil.At("21:45:00"))
+	return withRow(trade, latchRow(trade), testutil.At("21:45:00"))
 }
 
 // withRow is the trade with one more row, written the way the engines write
@@ -114,14 +161,20 @@ func withEvents(trade aggragates.Trades, events ...aggragates.TradesStrategyEven
 }
 
 // eventOf is a smartTakeLoss event of gate whose document is exactly this
-// JSON, unstamped: the documents no writer produces and the ones a database
-// hands back in its own rendering.
+// JSON, unstamped: the documents no writer produces, the ones a database hands
+// back in its own rendering, and the ones the gates before the merge wrote.
 func eventOf(gate, document string) aggragates.TradesStrategyEvents {
 	return aggragates.TradesStrategyEvents{
 		Param: aggragates.StrategyParamSmartTakeLoss,
 		Gate:  gate,
 		Data:  json.RawMessage(document),
 	}
+}
+
+// legacyDocument is the document the gates before the merge wrote for a kind at
+// a price: no features, no reasons.
+func legacyDocument(kind string, price float64) string {
+	return fmt.Sprintf(`{"event":%q,"price":%v}`, kind, price)
 }
 
 // carryingTheStateOf is the trade wearing the log rows and the strategy events
@@ -133,45 +186,73 @@ func carryingTheStateOf(trade, source aggragates.Trades) aggragates.Trades {
 	return trade
 }
 
-// gridHas is whether a trade carries a smartTakeLoss event of gate and kind
-// with a price — stated on the events with the decoder alone, so the
-// expectations built on it never lean on the fold they check.
-func gridHas(trade aggragates.Trades, gate, kind string) bool {
-	for _, event := range trade.StrategyEventsOf(aggragates.StrategyParamSmartTakeLoss, gate) {
-		var data EventData
-		if err := event.DecodeData(&data); err == nil && data.Event == kind && data.Price > 0 {
-			return true
-		}
-	}
-	return false
-}
-
-// rowFiling is the gate and kind the event beside a row is filed under, read
-// off the marker the row's message carries: the one table every writer is
-// held to. A message that names none has no filing.
-func rowFiling(message string) (gate, kind string) {
-	for _, filing := range []struct{ marker, gate, kind string }{
-		{SlowDeclineMarker, GateSlowDecline, EventPending},
-		{SlowDeclineCancelMarker, GateSlowDecline, EventCancelled},
-		{SlowDeclineResetMarker, GateSlowDecline, EventReset},
-		{IndecisionMarker, GateIndecision, EventLatched},
-		{SlowPatternMarker, GateSlowPattern, EventPending},
-		{SlowPatternCancelMarker, GateSlowPattern, EventCancelled},
-	} {
-		if strings.Contains(message, filing.marker) {
-			return filing.gate, filing.kind
-		}
-	}
-	return "", ""
-}
-
-// withIndecisionDirection is withQuietSlowDeclineExit for the indecision
-// direction.
-func withIndecisionDirection(t *testing.T, on bool) {
+// withIndecision runs the calling test with the indecision direction switched
+// on or off, and puts the package's switch back when the test ends. The
+// switches are package state, so a test that calls it never runs in parallel.
+func withIndecision(t *testing.T, on bool) {
 	t.Helper()
-	previous := indecisionDirection
-	indecisionDirection = on
-	t.Cleanup(func() { indecisionDirection = previous })
+	previous := indecision
+	indecision = on
+	t.Cleanup(func() { indecision = previous })
+}
+
+// withQuietDecline is withIndecision for the quiet decline.
+func withQuietDecline(t *testing.T, on bool) {
+	t.Helper()
+	previous := quietDecline
+	quietDecline = on
+	t.Cleanup(func() { quietDecline = previous })
+}
+
+// withSwingDecline is withIndecision for the swing decline. The package's tests
+// run with it as shipped, like every other switch: a test that assumes no
+// feature watches a deep long ladder switches it off for itself, a swing test
+// that needs the off-to-on contrast switches it on, and it is put back to
+// whatever it was.
+func withSwingDecline(t *testing.T, on bool) {
+	t.Helper()
+	previous := swingDecline
+	swingDecline = on
+	t.Cleanup(func() { swingDecline = previous })
+}
+
+// withCapitalProtectionExit is withIndecision for the capital protection exit.
+func withCapitalProtectionExit(t *testing.T, on bool) {
+	t.Helper()
+	previous := capitalProtectionExit
+	capitalProtectionExit = on
+	t.Cleanup(func() { capitalProtectionExit = previous })
+}
+
+// withRecentFillRule is withIndecision for the recent-fill rule.
+func withRecentFillRule(t *testing.T, on bool) {
+	t.Helper()
+	previous := quietDeclineNeedsRecentFill
+	quietDeclineNeedsRecentFill = on
+	t.Cleanup(func() { quietDeclineNeedsRecentFill = previous })
+}
+
+// TestMain runs every test of the package with the loss cap OFF
+// (slowDeclineMaxLossPct at zero), the default the tests that are not about the
+// cap assume: the fixture ladders sell at the sell band, and most of them lose
+// more than the shipped cap there, so under it their sales would be held and
+// each test would stop being about what its name says. The tests of the cap
+// switch it on for themselves (withLossCap, at SlowDeclineMaxLossPct unless a
+// test moves it), and it is put back to off when they end.
+func TestMain(m *testing.M) {
+	slowDeclineMaxLossPct = 0
+	os.Exit(m.Run())
+}
+
+// withLossCap runs the calling test with the loss cap at pct percent of the used
+// amount — SlowDeclineMaxLossPct as shipped, in the tests of the cap — and puts
+// the package's value back when the test ends. Like the switches it is package
+// state, so a test that calls it never runs in parallel.
+func withLossCap(t *testing.T, pct float64) {
+	t.Helper()
+	previous := slowDeclineMaxLossPct
+	slowDeclineMaxLossPct = pct
+	t.Cleanup(func() { slowDeclineMaxLossPct = previous })
 }
 
 // doublingLadder is a long spot ladder on the LadderTrade row, one entry
@@ -196,55 +277,6 @@ func doublingLadder(prices ...float64) aggragates.Trades {
 func takeProfitLines(trade aggragates.Trades) (fromPosition, fromAverage float64) {
 	step := takeProfitStep(trade) / 100
 	return trade.PositionPrice / (1 - step), ladder.AverageEntryPrice(trade) / (1 - step)
-}
-
-// assertForced fails unless Apply replaced the proposal with the sellLoss
-// chain under reason.
-func assertForced(t *testing.T, got Result, reason string) {
-	t.Helper()
-	if got.Position != "sellLoss" || got.Reason != reason {
-		t.Fatalf("expected a forced sellLoss for %q, got %+v", reason, got)
-	}
-}
-
-// withQuietSlowDeclineExit runs the calling test with the quiet slow-decline
-// exit switched on or off, and puts the package's switch back when the test
-// ends. The switch is package state, so a test that calls it never runs in
-// parallel.
-func withQuietSlowDeclineExit(t *testing.T, on bool) {
-	t.Helper()
-	previous := quietSlowDeclineExit
-	quietSlowDeclineExit = on
-	t.Cleanup(func() { quietSlowDeclineExit = previous })
-}
-
-// withSlowPatternDeclineExit is withQuietSlowDeclineExit for the slow pattern
-// decline. The package's tests run with it as shipped (on), like every other
-// switch: a test that assumes no rule watches a deep long ladder switches it
-// off for itself, a pattern test that needs the off-to-on contrast switches it
-// on, and it is put back to whatever it was.
-func withSlowPatternDeclineExit(t *testing.T, on bool) {
-	t.Helper()
-	previous := slowPatternDeclineExit
-	slowPatternDeclineExit = on
-	t.Cleanup(func() { slowPatternDeclineExit = previous })
-}
-
-// withCapitalProtectionExit is withQuietSlowDeclineExit for the capital
-// protection exit.
-func withCapitalProtectionExit(t *testing.T, on bool) {
-	t.Helper()
-	previous := capitalProtectionExit
-	capitalProtectionExit = on
-	t.Cleanup(func() { capitalProtectionExit = previous })
-}
-
-// withRecentFillRule is withQuietSlowDeclineExit for the recent-fill rule.
-func withRecentFillRule(t *testing.T, on bool) {
-	t.Helper()
-	previous := slowDeclineNeedsRecentFill
-	slowDeclineNeedsRecentFill = on
-	t.Cleanup(func() { slowDeclineNeedsRecentFill = previous })
 }
 
 // pastTheNewestFillUnderBreakEven reports whether price reaches the take

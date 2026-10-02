@@ -4,10 +4,12 @@ import "github.com/giovani-sirbu/mercury/trades/aggragates"
 
 // ExitReached reports whether Apply forces a sale at this price whatever the
 // ladder proposes on the add side, the dead zone included: the same guards
-// and the same watches, this tick's slow-decline judgement taken first, then
+// and the same watches, this tick's slow decline judgement taken first, then
 // a pending ladder at its sell band or a ladder capital protection watches at
 // its upper band. A trade resting in a close reads false, because Apply
-// replaces none.
+// replaces none, and so does a pending ladder whose sale at the sell band the
+// loss cap holds: the answer inherits the cap, with the capital protection band
+// still read.
 //
 // It is Apply's own answer on the empty proposal — never a close — so the two
 // cannot drift apart, and it is pure: the row that answer may carry is

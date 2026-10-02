@@ -34,7 +34,7 @@ type SophosFib struct {
 
 // SophosSmartTakeLoss is the nested `smartTakeLoss` object on
 // GET /:symbol/patterns: flat keys, always present, all zero when sophos
-// read nothing. The slowDecline* keys are the quiet slow-decline exit — the
+// read nothing. The slowDecline* keys are sophos' quiet slow-decline exit — the
 // slowDeclineRecent* keys its reading on the last closed bars sophos looks
 // back over, slowDeclineFillFrom the oldest bar a ladder's newest fill must
 // sit in for the ladder to go pending, and slowDeclineIndecision the
@@ -55,15 +55,24 @@ type SophosFib struct {
 // pending; one without slowDeclineIndecision alone decodes to no indecision,
 // and the indecision direction latches no ladder.
 //
-// The slowPattern* keys are the closed 1h series of the slow pattern decline:
-// slowPatternOpens the open time in ms of each bar and slowPatternCloses its
+// The swingDecline* keys are the closed 1h series of the swing decline:
+// swingDeclineOpens the open time in ms of each bar and swingDeclineCloses its
 // close, parallel and oldest first, the last bars of the window sophos read
-// (slowpattern.SlowPatternBars). Sophos never learns a ladder's fills, so it
-// serves the series for every ladder and mercury cuts the window between two
-// fills out of it. A sophos without them, or one that could not read the
-// window, decodes to no series, and the slow pattern decline reads nothing —
+// (sophos' swingdecline.SwingDeclineBars). Sophos never learns a ladder's
+// fills, so it serves the series for every ladder and mercury cuts the window
+// between two fills out of it. A sophos without them, or one that could not
+// read the window, decodes to no series, and the swing decline reads nothing —
 // it is inert; arrays of different lengths are read as no series too
-// (slowpattern.Series).
+// (swingdecline.Series).
+//
+// The swingDeclineSmcTrend* keys are the Trend Direction row of the SMC trend
+// dashboard sophos reads at that series' interval as of its last bar:
+// swingDeclineSmcTrendDown the rows whose trend reads down, swingDeclineSmcTrendValid
+// the rows read. A sophos without them, or one whose dashboard could not be
+// read, decodes to zero valid rows — the trend not read — which never passes
+// while the swing decline's trend condition is on
+// (swingdecline.SwingDeclineMinSmcTrendDown): such a sophos triggers no swing
+// decline.
 type SophosSmartTakeLoss struct {
 	SlowDeclineExit             bool      `json:"slowDeclineExit"`
 	SlowDeclineLegQuiet         bool      `json:"slowDeclineLegQuiet"`
@@ -79,13 +88,16 @@ type SophosSmartTakeLoss struct {
 	SlowDeclineFillFrom         int64     `json:"slowDeclineFillFrom"`
 	CapitalProtectionUpperBB    float64   `json:"capitalProtectionUpperBB"`
 	CapitalProtectionSmcBearish bool      `json:"capitalProtectionSmcBearish"`
-	SlowPatternOpens            []int64   `json:"slowPatternOpens"`
-	SlowPatternCloses           []float64 `json:"slowPatternCloses"`
+	SwingDeclineOpens           []int64   `json:"swingDeclineOpens"`
+	SwingDeclineCloses          []float64 `json:"swingDeclineCloses"`
+	SwingDeclineSmcTrendDown    int       `json:"swingDeclineSmcTrendDown"`
+	SwingDeclineSmcTrendValid   int       `json:"swingDeclineSmcTrendValid"`
 }
 
 // Indicators folds the flat wire keys into the block the gate reads. The two
-// slow-pattern series map as they decode: a nil one stays nil, so a sophos
-// without them hands the gate no series at all.
+// swing decline series map as they decode: a nil one stays nil, so a sophos
+// without them hands the gate no series at all, and the two Trend Direction
+// counts map as they decode too: zero valid rows is a trend not read.
 func (s SophosSmartTakeLoss) Indicators() SmartTakeLossIndicators {
 	return SmartTakeLossIndicators{
 		SlowDeclineExit:             s.SlowDeclineExit,
@@ -102,8 +114,10 @@ func (s SophosSmartTakeLoss) Indicators() SmartTakeLossIndicators {
 		SlowDeclineFillFrom:         s.SlowDeclineFillFrom,
 		CapitalProtectionUpperBB:    s.CapitalProtectionUpperBB,
 		CapitalProtectionSmcBearish: s.CapitalProtectionSmcBearish,
-		SlowPatternOpens:            s.SlowPatternOpens,
-		SlowPatternCloses:           s.SlowPatternCloses,
+		SwingDeclineOpens:           s.SwingDeclineOpens,
+		SwingDeclineCloses:          s.SwingDeclineCloses,
+		SwingDeclineSmcTrendDown:    s.SwingDeclineSmcTrendDown,
+		SwingDeclineSmcTrendValid:   s.SwingDeclineSmcTrendValid,
 	}
 }
 
