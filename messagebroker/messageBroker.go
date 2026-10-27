@@ -12,15 +12,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// defaultPoolMaxConns bounds the messagebus pool per service. The managed
-// Postgres cluster has a small, shared max_connections; left at pgx's default
-// of max(4, NumCPU) every replica's pool tracks the host core count and the
-// fleet can exhaust the cluster. Override per service with MESSAGEBUS_MAX_CONNS.
+// defaultPoolMaxConns bounds the messagebus pool per service; MESSAGEBUS_MAX_CONNS overrides it.
 const defaultPoolMaxConns = 4
 
-// MessageBroker configures the Postgres-backed pub/sub broker.
-// Messages are persisted to the message_queue outbox table (durability) and
-// pg_notify fires as a wakeup signal for listening consumers.
+// MessageBroker configures the Postgres-backed pub/sub broker: an outbox table plus pg_notify.
 type MessageBroker struct {
 	DSN         string
 	ServiceName string
@@ -31,8 +26,7 @@ type Producer struct {
 	Pool *pgxpool.Pool
 }
 
-// fn is the consumer handler callback type. Signature preserved from the
-// previous Kafka-based implementation so existing handlers work unchanged.
+// fn is the legacy consumer handler callback.
 type fn func([]byte)
 
 type BrokerMethods struct {
@@ -41,15 +35,9 @@ type BrokerMethods struct {
 	Consumer func(topic string, handler fn)
 
 	// ProduceWithCorrelation persists a message tagged with a correlation id.
-	// Use it from any code path that already has one (HTTP handlers via
-	// ginAdaptors.GetCorrelationID, pub/sub consumers via
-	// log.CorrelationFromContext, hermes action chains via events.CorrelationID).
 	ProduceWithCorrelation func(topic string, value []byte, correlationID string, producer *Producer) error
 
-	// ConsumerCtx subscribes a context-aware handler. The context delivered to
-	// the handler carries the message's correlation id (via
-	// log.ContextWithCorrelation), so downstream HTTP / pub/sub / log calls
-	// can propagate the id without it being passed as an explicit argument.
+	// ConsumerCtx subscribes a handler whose context carries the message's correlation id.
 	ConsumerCtx func(topic string, handler ContextHandler)
 }
 
@@ -71,10 +59,7 @@ func (broker MessageBroker) Init() BrokerMethods {
 	if state.pool == nil {
 		poolCfg, err := pgxpool.ParseConfig(broker.DSN)
 		if err != nil {
-			// Malformed DSN is a fatal misconfiguration — do not proceed with a
-			// nil pool (the previous code fell through into ensureSchema and
-			// nil-derefed). Return an empty BrokerMethods so the failure surfaces
-			// at bootstrap rather than masquerading as a working broker.
+			// A malformed DSN surfaces at bootstrap as an empty BrokerMethods.
 			log.Error(fmt.Sprintf("Failed to parse messagebus DSN: %s", err), "Init", "MessageBroker")
 			return BrokerMethods{}
 		}
@@ -107,8 +92,7 @@ func topicWithPrefix(topic string) string {
 	return fmt.Sprintf("%s%s", os.Getenv("TOPIC_PREFIX"), topic)
 }
 
-// envInt reads a positive integer from the environment, falling back to def
-// when the variable is unset or invalid.
+// envInt reads a positive integer env var, falling back to def otherwise.
 func envInt(key string, def int) int {
 	if v, err := strconv.Atoi(os.Getenv(key)); err == nil && v > 0 {
 		return v
@@ -116,22 +100,14 @@ func envInt(key string, def int) int {
 	return def
 }
 
-// currentPool returns the live messagebus pool under stateMu. Consumer-loop
-// helpers (claimBatch / markProcessed / releaseLock) must read the pool through
-// this accessor rather than touching state.pool directly: Close() nils the
-// pointer under the same mutex during shutdown, so an unsynchronized read both
-// races that write and can observe a nil mid-flight.
+// currentPool reads the live pool under stateMu; Close nils it under the same mutex.
 func currentPool() *pgxpool.Pool {
 	stateMu.Lock()
 	defer stateMu.Unlock()
 	return state.pool
 }
 
-// Ping verifies the messagebus pool is reachable. Used by the /readyz health
-// endpoint to assert the broker is functional before k8s routes traffic to
-// the pod. Returns an error if the pool was never initialized, if the
-// underlying Postgres connection is down, or if the ping times out within
-// ctx.
+// Ping verifies the messagebus pool is initialised and reachable within ctx.
 func Ping(ctx context.Context) error {
 	stateMu.Lock()
 	pool := state.pool
@@ -142,9 +118,7 @@ func Ping(ctx context.Context) error {
 	return pool.Ping(ctx)
 }
 
-// Close releases the messagebus pool. Used by services during graceful
-// shutdown after consumers have drained. Safe to call when no pool was ever
-// initialized.
+// Close releases the messagebus pool; safe when none was initialised.
 func Close() {
 	stateMu.Lock()
 	defer stateMu.Unlock()

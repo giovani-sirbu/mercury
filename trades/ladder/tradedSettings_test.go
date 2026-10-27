@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/giovani-sirbu/mercury/strategies/gates/dynamicparams"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/gates/dynamicparams"
 )
 
 // Every amount form the opened event carries raises a COPY of every stored row

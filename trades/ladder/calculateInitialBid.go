@@ -17,14 +17,12 @@ import (
 const InitialBidReservePercent = 10.0
 
 // CalculateInitialBid sizes a ladder's first entry off amount, less
-// InitialBidReservePercent, from the row strategyIndex of the rows the trade
-// it is handed carries: at the deepest depth on the half-depth grid, from the
-// row's depths down to its minimum depths, whose bid clears the pair's
-// minimum notional — an impasse child at the row's impasse depth — and with
-// an insufficient-funds error when none does. A first entry the engine named
-// rows for (aggragates.Params.EntrySettings) is sized by handing it
-// aggragates.Params.SizingTrade's copy, so the caller's trade and its rows are
-// never touched.
+// InitialBidReservePercent, on row strategyIndex of the trade it is handed:
+// the deepest depth on the half-depth grid, from the row's depths down to its
+// minimum depths, whose bid clears the pair's minimum notional; an impasse
+// child at the row's impasse depth; an insufficient-funds error when none
+// clears it. Hand it aggragates.Params.SizingTrade's copy to size a first
+// entry on raised rows without touching the caller's trade.
 func CalculateInitialBid(amount float64, trade aggragates.Trades, strategyIndex int) (float64, error) {
 	var initialBid float64
 	var initialBidInQuote float64
@@ -36,15 +34,10 @@ func CalculateInitialBid(amount float64, trade aggragates.Trades, strategyIndex 
 	minDepths := strategySettings.MinDepths
 	decimalDecrease := 0.5
 
-	// Size the ladder against a haircut budget, never the full wallet, so the
-	// deepest rung stays fundable after fees and rounding.
+	// A haircut budget, never the full wallet.
 	budget := amount * (1 - InitialBidReservePercent/100)
 
-	// An inverse ladder spends the base asset, and every rung doubles the base
-	// quantity with the bare multiplier — the percentage discount only shapes
-	// the quote proceeds. Sizing inverse with the discounted ratio plans ~88%
-	// of the ladder's real cost and blocks every max-depth trade on its final
-	// rung.
+	// An inverse ladder doubles bare base quantities; the percentage shapes only the quote proceeds.
 	percentage := strategySettings.Percentage
 	if trade.Inverse {
 		percentage = 0

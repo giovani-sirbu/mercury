@@ -9,17 +9,10 @@ import (
 	"time"
 )
 
-// ErrMissingTokenKey is returned when ENCRYPTION_TOKEN_KEY is unset/empty.
-// Signing with an empty HMAC key, and verifying against one, are both trivially
-// forgeable — so we fail closed (refuse to sign, reject on verify) rather than
-// authenticate with a zero-byte key. Services should also guard this at
-// startup via config.RequireEnv("ENCRYPTION_TOKEN_KEY").
+// ErrMissingTokenKey is returned when ENCRYPTION_TOKEN_KEY is unset: signing and verifying fail closed.
 var ErrMissingTokenKey = errors.New("ENCRYPTION_TOKEN_KEY is not set")
 
-// secretKey reads ENCRYPTION_TOKEN_KEY at call time rather than at package
-// init. Services load .env via godotenv.Load() inside main(), which runs
-// AFTER package initialization — a package-level `var = os.Getenv(...)` would
-// freeze an empty key and silently sign/verify every JWT with zero bytes.
+// secretKey reads ENCRYPTION_TOKEN_KEY at call time, after godotenv has loaded it.
 func secretKey() []byte {
 	return []byte(os.Getenv("ENCRYPTION_TOKEN_KEY"))
 }
@@ -32,7 +25,7 @@ type UserClaims struct {
 	Exp   int64
 }
 
-// createToken generate an access token
+// createToken signs an access token.
 func createToken(user UserClaims) (string, error) {
 	key := secretKey()
 	if len(key) == 0 {
@@ -55,7 +48,7 @@ func createToken(user UserClaims) (string, error) {
 	return tokenString, nil
 }
 
-// VerifyToken verify an access token
+// VerifyToken verifies an access token.
 func VerifyToken(tokenString string) error {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		key := secretKey()
@@ -81,7 +74,7 @@ type Tokens struct {
 	RefreshToken string `form:"refreshToken" json:"refreshToken" xml:"refreshToken"`
 }
 
-// GenerateTokens generate refresh and access tokens
+// GenerateTokens signs an access and a refresh token.
 func GenerateTokens(id uint, email string, role string) (Tokens, error) {
 	accessTokenDuration, _ := time.ParseDuration(os.Getenv("ACCESS_TOKEN_DURATION"))
 	token, createError := createToken(UserClaims{
@@ -121,7 +114,6 @@ func ParseToken(jwtToken string) (UserClaims, error) {
 		return userClaim, err
 	}
 
-	// Checking token validity
 	if !token.Valid {
 		return userClaim, fmt.Errorf("invalid token")
 	}

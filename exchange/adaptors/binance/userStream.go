@@ -6,10 +6,7 @@ import (
 	"github.com/adshao/go-binance/v2/common"
 )
 
-// StartUserStream creates a new user-data stream and returns its listen key.
-// The key is valid for 60 minutes; callers must PingUserStream every 30
-// minutes to keep it alive, otherwise WsUserDataServe emits listenKeyExpired
-// and UserWs returns.
+// StartUserStream creates a user-data stream and returns its listen key, kept alive by PingUserStream.
 func (e Binance) StartUserStream() (string, *common.APIError) {
 	client, initErr := InitExchange(e)
 	if initErr != nil {
@@ -22,8 +19,7 @@ func (e Binance) StartUserStream() (string, *common.APIError) {
 	return clientInfo, nil
 }
 
-// PingUserStream extends the TTL of a listen key. Safe to call at any point
-// — binance is idempotent over the operation.
+// PingUserStream extends a listen key's TTL.
 func (e Binance) PingUserStream(listenKey string) *common.APIError {
 	client, initErr := InitExchange(e)
 	if initErr != nil {

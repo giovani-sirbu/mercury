@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/giovani-sirbu/mercury/internal/testutil"
+	"github.com/giovani-sirbu/mercury/strategies/gates"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown/depthpriority"
+	"github.com/giovani-sirbu/mercury/strategies/gates/dynamicparams"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/gates"
-	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
-	"github.com/giovani-sirbu/mercury/trades/gates/dynamicparams"
-	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
-	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
 // The amounts the opened events of this file carry: their own, apart from the
@@ -69,7 +69,7 @@ func assertRaisedFreeToArm(t *testing.T, trade aggragates.Trades, wallet []aggra
 // that names the raised ceiling. With the ladder stored at that depth it is
 // full, and the sibling buys.
 func TestShouldHoldKeepsTheWalletForARaisedLadderAtItsStoredCeiling(t *testing.T) {
-	keeper := ladder.DepthOf(raisedLadderOf(14, priorityLadder, walletDepths))
+	keeper := depthpriority.LadderOf(raisedLadderOf(14, priorityLadder, walletDepths))
 	if keeper.MaxDepth != walletDepths+raisedDepths || keeper.RemainingCost <= 0 {
 		t.Fatalf("view = %+v, want the raised ladder to have its %d extra depths left to pay for", keeper, raisedDepths)
 	}
@@ -92,14 +92,14 @@ func TestShouldHoldKeepsTheWalletForARaisedLadderAtItsStoredCeiling(t *testing.T
 
 	// The same ladder stored at that depth is full and keeps nothing, so the
 	// balance that held the sibling above lets it through.
-	full := ladder.DepthOf(testutil.LadderDepthTrade(14, priorityLadder, walletDepths, walletDepths))
+	full := depthpriority.LadderOf(testutil.LadderDepthTrade(14, priorityLadder, walletDepths, walletDepths))
 	assertFreeToArm(t, sibling, []aggragates.LadderDepth{full}, walletShortOf(t, sibling, keeper.RemainingCost))
 }
 
 // The reserve ends where the raised ceiling does, not the stored one: a raised
 // ladder that filled the extra depths too is full and the sibling buys.
 func TestShouldHoldReleasesARaisedLadderAtItsRaisedCeiling(t *testing.T) {
-	full := ladder.DepthOf(raisedLadderOf(14, priorityLadder, walletDepths+raisedDepths))
+	full := depthpriority.LadderOf(raisedLadderOf(14, priorityLadder, walletDepths+raisedDepths))
 	if full.Depth != full.MaxDepth || full.RemainingCost != 0 {
 		t.Fatalf("view = %+v, want the raised ladder full at its raised ceiling, keeping nothing", full)
 	}
@@ -184,7 +184,7 @@ func TestShouldHoldReadsTheRaisedLadderFromItsEventNeverItsRow(t *testing.T) {
 	raised := raisedLadderOf(14, priorityLadder, walletDepths)
 	textOnly := raised
 	textOnly.StrategyEvents = nil
-	keeper, full := ladder.DepthOf(raised), ladder.DepthOf(textOnly)
+	keeper, full := depthpriority.LadderOf(raised), depthpriority.LadderOf(textOnly)
 	if len(textOnly.Logs) != 1 || full.MaxDepth != walletDepths || full.RemainingCost != 0 {
 		t.Fatalf("view = %+v, want the opened row alone to leave the ladder full and reserving nothing", full)
 	}

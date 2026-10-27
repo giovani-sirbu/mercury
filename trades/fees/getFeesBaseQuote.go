@@ -8,16 +8,10 @@ import (
 	"github.com/giovani-sirbu/mercury/log"
 )
 
-// GetFeesBaseQuote processes trading history and returns the aggregated fees
-// expressed in both the trade's base and quote denominations.
-//
-// Fees paid in the base asset are added to feeInBase directly and converted into
-// quote via the fill price. Fees paid in the quote asset are added to feeInQuote
-// directly and converted into base via the fill price. Fees paid in a third
-// asset (e.g. BNB) are priced via getSymbolPrice and contributed to both totals.
-//
-// This is the source of truth for fee aggregation. GetFees is a thin wrapper
-// that selects one of the two values based on event.Trade.Inverse.
+// GetFeesBaseQuote returns the history's fees in both the base and the quote
+// denomination: a base fee is converted into quote at its fill price and a
+// quote fee into base, while a third-asset fee (the BNB discount) is priced
+// through getSymbolPrice into both. GetFees picks one of the two by Inverse.
 func GetFeesBaseQuote(event events.Events) (feeInBase, feeInQuote float64) {
 	baseSymbol, quoteSymbol := helpers.SplitSymbol(event.Trade.Symbol)
 
@@ -41,7 +35,7 @@ func GetFeesBaseQuote(event events.Events) (feeInBase, feeInQuote float64) {
 				feeInBase += fee.Fee / data.Price
 				continue
 			default:
-				// handle price for fees paid in a third asset (e.g. BNB)
+				// A fee paid in a third asset.
 				if !slices.Contains([]string{baseSymbol, quoteSymbol}, fee.Asset) {
 					feeAssetPrice, err := getSymbolPrice(event, fee.Asset)
 					if err != nil {

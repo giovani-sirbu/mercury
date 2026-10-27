@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
+	"github.com/giovani-sirbu/mercury/internal/testutil"
 	"github.com/giovani-sirbu/mercury/trades/funds"
-	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 )
 
 func TestGetAssetBudget(t *testing.T) {

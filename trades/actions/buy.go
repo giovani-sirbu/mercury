@@ -14,6 +14,10 @@ import (
 	"strings"
 )
 
+// Buy places the next entry: a market order for the first fill, sized by
+// CalculateInitialBid off the wallet's budget, and a limit order at the
+// position price for every add, sized from the last entry times the row's
+// multiplier. A shortfall HasFunds waived trims the entry to the wallet.
 func Buy(event events.Events) (events.Events, error) {
 	client, clientError := event.Exchange.Client()
 	if clientError != nil {
@@ -29,15 +33,11 @@ func Buy(event events.Events) (events.Events, error) {
 	buyQty, sellQty := quantities.GetGrossQuantities(event)
 
 	// A first entry is sized from the rows the engine named for it
-	// (Params.EntrySettings, through SizingTrade); every entry after it, and a
-	// first entry the engine named none for, reads the trade's own rows. The
-	// sizing copy stays here: event.Trade and its rows are not touched.
+	// (Params.EntrySettings through SizingTrade); every other entry reads the trade's own rows.
 	sizing := event.Params.SizingTrade(event.Trade)
 	strategySettings := sizing.StrategyPair.StrategySettings
 	filledEntries := ladder.CountFilledEntries(event.Trade)
-	// The row for the entry being placed now: entry N reads row N-1; a depth
-	// with no configured row falls back to the base row 0. A single-row
-	// configuration therefore applies to every depth.
+	// Entry N reads row N-1; a missing row falls back to the base row.
 	settingsIndex := ladder.SettingsIndexOrBase(strategySettings, filledEntries)
 
 	multiplier := strategySettings[settingsIndex].Multiplier
@@ -89,10 +89,7 @@ func Buy(event events.Events) (events.Events, error) {
 		quantity = quantity - sellQty
 	}
 
-	// The wallet is short of what this entry needs by less than HasFunds
-	// tolerates, and HasFunds named the balance rather than blocking the
-	// trade: place the entry for what that balance buys. Zero leaves the
-	// ladder's own quantity standing.
+	// HasFunds waived a small shortfall and named the balance: place the entry for what it buys.
 	if event.Params.AvailableQuantity > 0 {
 		affordableQuantity := event.Params.AvailableQuantity
 		if !event.Trade.Inverse {
@@ -101,7 +98,6 @@ func Buy(event events.Events) (events.Events, error) {
 		quantity = math.Min(quantity, affordableQuantity)
 	}
 
-	// get quantity
 	quantity = helpers.ToFixed(quantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
 	minQuantity := quantities.CalculateMinOrderQty(event.Trade)
 	quantity = math.Max(quantity, minQuantity)

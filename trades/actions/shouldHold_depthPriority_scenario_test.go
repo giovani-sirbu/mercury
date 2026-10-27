@@ -5,9 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/giovani-sirbu/mercury/internal/testutil"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown/depthpriority"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
-	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
@@ -16,7 +17,7 @@ import (
 // number of depths, and one of them deeper than the rest.
 //
 // Everything here is built as real trades and mapped into the view through
-// ladder.DepthOf — the helper every engine builds its own view with — so the
+// depthpriority.LadderOf — the helper every engine builds its own view with — so the
 // depths AND the costs the gate reads are taken off the ladders instead of
 // written out beside them. A view written by hand could agree with an engine
 // that counts or prices differently; this one cannot.
@@ -32,8 +33,9 @@ var fallenLadders = []struct {
 	{15, "HBAR/USDT", 2},
 }
 
-// scenarioDepths is the grid every pair of this wallet is configured for.
-const scenarioDepths = 8
+// scenarioDepths is the grid every pair of this wallet is configured for:
+// the depths the gate costs plus the ones DepthOffset leaves out.
+const scenarioDepths = 8 + depthpriority.DepthOffset
 
 // priorityLadder is the deepest ladder of the wallet, the one its remaining
 // depths are kept for.
@@ -57,7 +59,7 @@ func fallenWallet() []aggragates.Trades {
 func walletDepthsOf(trades []aggragates.Trades) []aggragates.LadderDepth {
 	wallet := make([]aggragates.LadderDepth, 0, len(trades))
 	for _, trade := range trades {
-		wallet = append(wallet, ladder.DepthOf(trade))
+		wallet = append(wallet, depthpriority.LadderOf(trade))
 	}
 	return wallet
 }
@@ -336,7 +338,7 @@ func TestFallenWalletKeepsTheWalletForTheRunnerUpWhenTheDeepLadderFills(t *testi
 	// Every ladder behind it: a wallet that covers the runner-up's remainder
 	// and this entry lets it through, and one unit less holds it on the row
 	// that names the runner-up.
-	next := ladder.DepthOf(runnerUp)
+	next := depthpriority.LadderOf(runnerUp)
 	for _, trade := range finished {
 		if trade.Symbol == priorityLadder || trade.Symbol == runnerUpLadder {
 			continue
@@ -426,7 +428,7 @@ func TestFallenWalletHandsTheReservationToTheNextDeepestLadder(t *testing.T) {
 
 // A hold that stands writes one row, not one per tick: the message is
 // byte-identical while the ladders are, which is the property
-// gates.SaveHoldLog deduplicates on. It is also why the row carries no
+// tradelog.SaveHoldLog deduplicates on. It is also why the row carries no
 // amounts — the balance moves on every tick, and an operator reading a
 // multi-day reservation would be reading a wall of near-identical lines.
 func TestFallenWalletWritesOneRowWhileTheHoldStands(t *testing.T) {

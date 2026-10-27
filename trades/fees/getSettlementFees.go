@@ -9,27 +9,14 @@ import (
 	"github.com/giovani-sirbu/mercury/log"
 )
 
-// GetSettlementFees returns the fees that still have to be charged against the
-// trade's realized profit, in the profit denomination: quote for spot, base
-// for inverse.
-//
-// The exchange takes each leg's commission from the asset the account
-// RECEIVES, so the opening side's commission is already embodied in the fills
-// the closing side could afford: a spot buy's base-asset fee leaves less base
-// to sell, an inverse sell's quote-asset fee leaves less quote to buy back
-// with. GetProfit's gross figure has therefore already paid the opening leg
-// once, and subtracting its cross-converted value again (as profit math did
-// via GetFees) charges the opening commission a second time, overstating the
-// cost of every round trip and booking marginally profitable trades as
-// losses.
-//
-// What still reduces profit explicitly:
-//   - fees taken in the profit asset itself (spot: quote fees, which come off
-//     the sell proceeds; inverse: base fees, which come off the buy-back) —
-//     no later fill embodies them;
-//   - fees paid from a separate wallet (the BNB discount): they never touch
-//     the trade's own assets, so they are priced into the profit denomination
-//     the same way GetFeesBaseQuote prices them.
+// GetSettlementFees returns the fees still to charge against the trade's
+// realized profit, in the profit denomination (quote for spot, base for
+// inverse). The exchange takes each leg's commission from the asset received,
+// so the opening leg's fee is already embodied in the fills the closing leg
+// could afford and GetProfit's gross figure has paid it once; charging it
+// again double-counts it. What still reduces profit: the fees taken in the
+// profit asset itself, which no later fill embodies, and the fees paid from a
+// separate wallet (the BNB discount), priced as GetFeesBaseQuote prices them.
 func GetSettlementFees(event events.Events) float64 {
 	baseSymbol, quoteSymbol := helpers.SplitSymbol(event.Trade.Symbol)
 

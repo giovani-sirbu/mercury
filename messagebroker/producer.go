@@ -8,23 +8,17 @@ import (
 	"github.com/giovani-sirbu/mercury/metrics"
 )
 
-// Produce persists a message to the outbox and fires pg_notify as a wakeup
-// signal. The write and notify run in a single transaction, so listeners never
-// wake up for a row that isn't committed. The `key` parameter is accepted for
-// API compatibility with the prior Kafka implementation but is unused.
+// Produce persists a message to the outbox and fires pg_notify in one transaction; key is unused.
 func (m MessageBroker) Produce(topic string, key, value []byte, producer *Producer) error {
 	return m.produceWithCorrelation(topic, value, "", producer, "Produce")
 }
 
-// ProduceWithCorrelation is Produce that also tags the row with a correlation
-// id, so the downstream consumer (and its own outbound calls) can carry the
-// same id through every hop. Pass "" to produce without an id.
+// ProduceWithCorrelation is Produce with the row tagged by a correlation id; "" produces without one.
 func (m MessageBroker) ProduceWithCorrelation(topic string, value []byte, correlationID string, producer *Producer) error {
 	return m.produceWithCorrelation(topic, value, correlationID, producer, "ProduceWithCorrelation")
 }
 
-// produceWithCorrelation is the shared implementation; the public methods are
-// thin wrappers so the legacy Kafka-shaped signature stays intact.
+// produceWithCorrelation is the shared implementation of the two Produce methods.
 func (m MessageBroker) produceWithCorrelation(topic string, value []byte, correlationID string, producer *Producer, trackName string) error {
 	ctx := context.Background()
 	prefixedTopic := topicWithPrefix(topic)
@@ -57,9 +51,6 @@ func (m MessageBroker) produceWithCorrelation(topic string, value []byte, correl
 		return err
 	}
 
-	// Count produced messages, partitioning by whether the correlation_id
-	// is set. Helps track adoption as more callers migrate from Produce to
-	// ProduceWithCorrelation.
 	cidLabel := "false"
 	if correlationID != "" {
 		cidLabel = "true"

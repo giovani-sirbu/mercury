@@ -12,10 +12,10 @@ func TestIsAPIErrorDetectsAPIErrorPrefix(t *testing.T) {
 }
 
 func TestHasInsufficientBalanceDetectsPhrase(t *testing.T) {
-	if !hasInsufficientBalance("Insufficient funds (1.5 USDT) for requested action") {
-		t.Fatal("expected hasInsufficientBalance true")
+	if !HasInsufficientBalance("Insufficient funds (1.5 USDT) for requested action") {
+		t.Fatal("expected HasInsufficientBalance true")
 	}
-	if hasInsufficientBalance("Order failed") {
-		t.Fatal("expected hasInsufficientBalance false when phrase absent")
+	if HasInsufficientBalance("Order failed") {
+		t.Fatal("expected HasInsufficientBalance false when phrase absent")
 	}
 }

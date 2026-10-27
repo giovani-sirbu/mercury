@@ -1,22 +1,25 @@
 package actions
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/internal/testutil"
+	"github.com/giovani-sirbu/mercury/strategies/gates"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown/depthpriority"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/gates"
-	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
-	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
 // walletDepths is the depths every ladder of the fixture wallet is
-// configured for.
-const walletDepths = 8
+// configured for: the depths the gate costs plus the ones DepthOffset leaves
+// out, so the deepest fixture ladder still has costed depths left.
+const walletDepths = 8 + depthpriority.DepthOffset
 
 // walletAsset is what every ladder of the fixture wallet spends.
 const walletAsset = "USDT"
@@ -25,7 +28,7 @@ const walletAsset = "USDT"
 // tick, through the helper all four surfaces build their view with — so the
 // depths and the costs the gate reads come off a real ladder.
 func walletLadderOf(id uint, symbol string, depth int) aggragates.LadderDepth {
-	return ladder.DepthOf(testutil.LadderDepthTrade(id, symbol, depth, walletDepths))
+	return depthpriority.LadderOf(testutil.LadderDepthTrade(id, symbol, depth, walletDepths))
 }
 
 // priorityWallet is a wallet whose pairs fell together: several part-filled
@@ -109,7 +112,7 @@ func TestDepthPriorityHoldsAnAddThroughShouldHold(t *testing.T) {
 	}
 
 	row := held.Trade.Logs[0]
-	want := "Hold stopLoss: cooldown: depth priority, LINK/USDT at depth 7 of 8 keeps the wallet for its remaining depths, this ladder waits at depth 4 of 8"
+	want := fmt.Sprintf("Hold stopLoss: cooldown: depth priority, LINK/USDT at depth 7 of %d keeps the wallet for its remaining depths, this ladder waits at depth 4 of %d", walletDepths, walletDepths)
 	if row.Message != want {
 		t.Fatalf("row = %q, want %q", row.Message, want)
 	}
@@ -127,9 +130,9 @@ func TestDepthPriorityHoldsAnAddThroughShouldHold(t *testing.T) {
 		Event:            gates.EventHeld,
 		PrioritySymbol:   "LINK/USDT",
 		PriorityDepth:    7,
-		PriorityMaxDepth: 8,
+		PriorityMaxDepth: walletDepths,
 		Depth:            4,
-		MaxDepth:         8,
+		MaxDepth:         walletDepths,
 	}, time.Time{})
 	if !reflect.DeepEqual(held.Trade.StrategyEvents, []aggragates.TradesStrategyEvents{wantEvent}) {
 		t.Fatalf("events = %+v, want the one depth priority event %+v", held.Trade.StrategyEvents, wantEvent)

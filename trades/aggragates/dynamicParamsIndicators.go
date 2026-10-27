@@ -1,22 +1,16 @@
 package aggragates
 
-// DynamicParamsIndicators is the DynamicParams flag's two reads: the chart row
-// of the SMC trend dashboard sophos serves on GET /:symbol/smc-trend at
-// dynamicparams.Interval, read on that interval's last closed bar
-// (SophosSmcTrend.DynamicParams). Guppy is the Super Guppy read and BMSB the
-// Bull Market Support Band read, each bullish (+1), neutral (0) or bearish
-// (−1), the encoding of sophos' smctypes.Direction. Timeframe is the label of
-// the row they were read on, and Valid whether sophos read that row at all.
-//
-// The zero value is "not read" — a failed fetch, a body without the chart
-// row — and gates/dynamicparams treats a block that is not Valid as the
-// configured rows, whatever its reads say. The engines consult it only when
-// a ladder opens (dynamicparams.Opening), which turns it into the ladder's
-// opened event; every later tick rebuilds the rows from that event
-// (dynamicparams.RaisedSettings), never from the block. It holds nothing.
+// DynamicParamsIndicators is the DynamicParams flag's two reads off the chart
+// row of sophos' SMC trend dashboard (SophosSmcTrend.DynamicParams): Guppy the
+// Super Guppy and BMSB the Bull Market Support Band direction, each bullish
+// (+1), neutral (0) or bearish (−1), with the row's timeframe label and
+// whether sophos read it. The zero value is "not read" and opens a ladder on
+// its configured rows; the engines consult the block only when a ladder opens.
 type DynamicParamsIndicators struct {
 	Timeframe string
 	Guppy     int
 	BMSB      int
 	Valid     bool
+	// FreeFall is the labels of the rows in free fall, comma-joined in payload order ("" for none) so the block stays comparable (the engines compare it with ==/!= and JSON-cache it).
+	FreeFall string
 }

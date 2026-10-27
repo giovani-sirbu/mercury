@@ -8,8 +8,9 @@ import (
 )
 
 // The engines' `buy` row: the downside keeps the last fill as its anchor, the
-// upside reads profitPercentage, the move against the average entry price.
-const buyLogic = "percentage <= -tradePercentage-tolerance ? 'stopLoss' : (profitPercentage >= tradePercentage+tolerance ? 'takeProfit' : '')"
+// upside reads profitPercentage, the move against the average entry price, and
+// a resting add the print ran away from is cancelled (getPosition_restingOrder_test.go).
+const buyLogic = "(restingOrder && percentage > tradePercentage+tolerance) ? 'update_buy' : (percentage <= -tradePercentage-tolerance ? 'stopLoss' : (profitPercentage >= tradePercentage+tolerance ? 'takeProfit' : ''))"
 
 // TestGetPositionBuyArmsTakeProfitFromTheAverageEntryPrice pins what each side
 // of the `buy` row is measured against on a deep ladder. Against the LAST fill

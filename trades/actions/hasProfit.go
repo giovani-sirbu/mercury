@@ -10,20 +10,18 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/quantities"
 )
 
+// HasProfit refuses a close that would book under CalculateMinProfit: it
+// values the close SimulatedClose says Sell would submit, at
+// SimulatedClosePrice, through GetProfit, less one closing leg's fee and the
+// opening commissions the quantities do not embody, and assigns the net
+// profit to the trade.
 func HasProfit(event events.Events) (events.Events, error) {
-	// the quantity the close would actually submit (net of embodied fees), and
-	// the lot-size remainder it would leave behind
 	quantity, dust, historyType := quantities.SimulatedClose(event)
 
-	// simulate sell event to calculate profit & get trade profit
 	trade := event.Trade
 
-	// Sell assigns this remainder to Dust and GetProfit credits it at the
-	// position price. Without it the gate prices the close below what closing
-	// actually books, by one lot step — enough to hold a minimum-notional
-	// position open at every price it could have closed at. Set on the copy,
-	// never on event.Trade: Dust is the close's own output and persisting it
-	// from a gate that may not close would carry it into the next pass.
+	// Sell keeps the remainder as Dust and GetProfit credits it at the position
+	// price; set on the copy, never on event.Trade, since a gate may not close.
 	trade.Dust = dust
 
 	trade.History = append(trade.History, aggragates.TradesHistory{
@@ -32,30 +30,19 @@ func HasProfit(event events.Events) (events.Events, error) {
 		Price:    profit.SimulatedClosePrice(event.Trade),
 	})
 
-	// get gross profit
 	netProfit := profit.GetProfit(trade)
 
-	// Estimate the closing leg's fee, which the simulated fill above does not
-	// carry. The close sells what the whole ladder bought, so the accrued
-	// opening fees cross-converted by GetFees are that same notional at the
-	// same rate — one leg's worth.
+	// One closing leg's fee, which the simulated fill lacks.
 	closingFees := fees.GetFees(event)
 
-	// The opening legs are only paid for by the smaller quantity when the
-	// exchange took their commission out of the asset the account received.
-	// Whatever it took from somewhere else — a third-asset (BNB) fee, or a
-	// quote fee on a spot trade — is embodied nowhere and has to be charged
-	// here, or the round trip pays one leg where it owes two.
+	// The opening commissions the smaller quantity does not embody.
 	openingFees := fees.UnembodiedOpeningFees(event)
 
-	// subtract fees and return net profit
 	netProfit -= closingFees + openingFees
 
-	// assign net profit to trade
 	event.Trade.Profit = netProfit
 	event.Params.Profit = netProfit
 
-	// get min profit
 	minProfit := profit.CalculateMinProfit(event.Trade)
 
 	log.Debug(fmt.Sprintf("hasProfit(TradeID:#%d): PositionPrice(%f), minProfit(%f), fees(%f), netProfit(%f)", event.Trade.ID, event.Trade.PositionPrice, minProfit, closingFees, netProfit))

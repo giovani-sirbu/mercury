@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/giovani-sirbu/mercury/internal/testutil"
+	"github.com/giovani-sirbu/mercury/strategies/gates"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown/depthpriority"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/gates"
-	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
-	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
@@ -27,8 +28,9 @@ import (
 // from the trade it is asked about and not from the view it is compared
 // against.
 
-// blockedRunDepths is the grid every pair of that wallet was configured for.
-const blockedRunDepths = 9
+// blockedRunDepths is the grid every pair of that wallet was configured for,
+// plus the depths DepthOffset leaves out of the reserve.
+const blockedRunDepths = 9 + depthpriority.DepthOffset
 
 // reservedSymbol is the deepest ladder: the one the wallet is kept for while
 // it is in the view.
@@ -58,8 +60,8 @@ var blockedRunLadders = []struct {
 func requireObservedShape(t *testing.T) {
 	t.Helper()
 
-	if !cooldown.DepthPriority {
-		t.Skip("cooldown.DepthPriority is off: the wallet reserves nothing")
+	if !depthpriority.Enabled {
+		t.Skip("depthpriority.Enabled is off: the wallet reserves nothing")
 	}
 
 	deepest, runnerUp := blockedRunLadders[0], blockedRunLadders[1]
@@ -86,7 +88,7 @@ func blockedRunTrades() []aggragates.Trades {
 func blockedRunView(trades []aggragates.Trades) []aggragates.LadderDepth {
 	view := make([]aggragates.LadderDepth, 0, len(trades))
 	for _, trade := range trades {
-		view = append(view, ladder.DepthOf(trade))
+		view = append(view, depthpriority.LadderOf(trade))
 	}
 	return view
 }
@@ -100,7 +102,7 @@ func blockedRunViewWithout(trades []aggragates.Trades, symbol string) []aggragat
 		if trade.Symbol == symbol {
 			continue
 		}
-		view = append(view, ladder.DepthOf(trade))
+		view = append(view, depthpriority.LadderOf(trade))
 	}
 	return view
 }
@@ -297,7 +299,7 @@ func TestDepthPriorityReadsOwnDepthAndCostFromTheTradeNotTheView(t *testing.T) {
 	// The wallet the engines built on that tick: the blocked ladder is out of
 	// it, the deeper active one is in it.
 	reserved := []aggragates.LadderDepth{
-		ladder.DepthOf(testutil.LadderDepthTrade(14, reservedSymbol, blockedRunDepthOf(t, reservedSymbol), blockedRunDepths)),
+		depthpriority.LadderOf(testutil.LadderDepthTrade(14, reservedSymbol, blockedRunDepthOf(t, reservedSymbol), blockedRunDepths)),
 	}
 	_, reserve := reserveOf(t, reserved)
 
@@ -321,8 +323,8 @@ func TestDepthPriorityKeepsNothingForAWalletOfUnstartedLadders(t *testing.T) {
 	requireObservedShape(t)
 
 	wallet := []aggragates.LadderDepth{
-		ladder.DepthOf(testutil.LadderDepthTrade(14, reservedSymbol, 0, blockedRunDepths)),
-		ladder.DepthOf(testutil.LadderDepthTrade(13, "SOL/USDT", 0, blockedRunDepths)),
+		depthpriority.LadderOf(testutil.LadderDepthTrade(14, reservedSymbol, 0, blockedRunDepths)),
+		depthpriority.LadderOf(testutil.LadderDepthTrade(13, "SOL/USDT", 0, blockedRunDepths)),
 	}
 
 	for _, trade := range blockedRunWithout(blockedRunTrades(), reservedSymbol) {
@@ -339,7 +341,7 @@ func TestDepthPriorityHoldsAnUnaffordableEntryBehindAFullLadder(t *testing.T) {
 	requireObservedShape(t)
 
 	wallet := []aggragates.LadderDepth{
-		ladder.DepthOf(testutil.LadderDepthTrade(14, reservedSymbol, blockedRunDepths, blockedRunDepths)),
+		depthpriority.LadderOf(testutil.LadderDepthTrade(14, reservedSymbol, blockedRunDepths, blockedRunDepths)),
 	}
 
 	for _, trade := range blockedRunWithout(blockedRunTrades(), reservedSymbol) {

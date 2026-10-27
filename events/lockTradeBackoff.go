@@ -8,19 +8,12 @@ import (
 	"github.com/giovani-sirbu/mercury/helpers"
 )
 
-// backoffEntry tracks both the current backoff duration and when it was last
-// touched, so the sweeper can evict trades that have been stuck erroring for
-// longer than backoffEntryTTL. Previously the map only shrunk on a successful
-// Next() — a permanently failing trade (deleted strategy, exchange API key
-// revoked) kept its entry forever, slowly leaking memory.
+// backoffEntry is one trade's backoff: the current duration, when it was last
+// touched (the sweeper evicts entries older than backoffEntryTTL) and the
+// failure this episode already logged, numbers stripped.
 type backoffEntry struct {
 	duration    time.Duration
 	lastTouched time.Time
-	// lastFailure is the failure this backoff episode already logged, with its
-	// numbers stripped the way tradelog.SaveError collapses repeats. A gate that
-	// refuses the same thing on every print — regulatePriceChange on an add the
-	// state machine keeps proposing too close to the last fill, a funds check
-	// on a ladder out of money — otherwise writes the same line per tick.
 	lastFailure string
 }
 
@@ -40,9 +33,7 @@ func init() {
 	go sweepBackoffTries()
 }
 
-// sweepBackoffTries periodically evicts backoffEntry rows older than
-// backoffEntryTTL. The pass is cheap (one Lock, one range over the whole map)
-// and the cadence is conservative so it never shows up in profiles.
+// sweepBackoffTries evicts the entries older than backoffEntryTTL every backoffSweepRate.
 func sweepBackoffTries() {
 	t := time.NewTicker(backoffSweepRate)
 	defer t.Stop()
@@ -58,17 +49,8 @@ func sweepBackoffTries() {
 	}
 }
 
-// LockTrade locks the trade with a specified duration.
-//
-// Nil Storage is treated as a no-op because some callers (notably backtesting
-// in sisyphus, which passes a zero-value events.Events) do not populate a
-// cache client. Previously that path panicked when it hit the backoff — now
-// it silently skips the lock and returns nil so the caller's retry logic
-// can proceed.
-//
-// Writes via Memory.Set, which is Redis-only by default. The lock is consumed
-// exclusively via Memory.Exists from the reader side — both sides operate on
-// Redis directly, so cross-process visibility is immediate.
+// LockTrade sets the trade lock for lockDuration, straight to Redis so the
+// readers' Memory.Exists sees it at once; a nil Storage (the backtest) is a no-op.
 func (e Events) LockTrade(lockDuration time.Duration) error {
 	if e.Storage == nil {
 		return nil
@@ -77,14 +59,9 @@ func (e Events) LockTrade(lockDuration time.Duration) error {
 	return e.Storage.Set(lockKey, true, lockDuration)
 }
 
-// LockTradeWithBackOff locks the trade with an exponential backoff strategy.
-//
-// The prior implementation released rwLocker before calling Storage.Set and
-// then deferred a re-acquire; combined with the outer `defer rwLocker.Unlock`,
-// the lock-ordering was relying on defer LIFO and left a window where the
-// map was readable from other goroutines between the two locks. This version
-// computes the new duration entirely under the lock, releases it, then issues
-// the (independent, thread-safe) Storage.Set outside the critical section.
+// LockTradeWithBackOff locks the trade for a duration that doubles per
+// failure from startingBackOff up to maxBackOff; the duration is computed
+// under rwLocker and the Set issued outside it.
 func (e Events) LockTradeWithBackOff() error {
 	rwLocker.Lock()
 	current := backoffTries[e.Trade.ID]
@@ -104,13 +81,10 @@ func (e Events) LockTradeWithBackOff() error {
 	return e.LockTrade(lockDuration)
 }
 
-// repeatsLastFailure reports whether err is the failure this trade's current
-// backoff episode already logged — the same text once the numbers are
-// stripped — and records it otherwise. The episode is the backoff entry
-// itself: Next() deletes it on the first chain that gets through, and the
-// sweeper evicts it after backoffEntryTTL of silence, so a failure that
-// returns after a success is logged again, once. A different failure on the
-// same trade is always logged.
+// repeatsLastFailure reports whether err is the failure this trade's backoff
+// episode already logged (same text, numbers stripped) and records it
+// otherwise; the episode ends when Next clears the entry or the sweeper
+// evicts it, so a failure that returns after a success is logged again, once.
 func (e Events) repeatsLastFailure(err error) bool {
 	failure := helpers.RemoveNumbersFromString(err.Error())
 

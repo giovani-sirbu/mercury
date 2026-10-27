@@ -7,14 +7,8 @@ import (
 	"io"
 )
 
-// Encrypt encrypts text with AES-256-GCM under a key derived from secret
-// (SHA-256). Output is base64( versionGCM || 12-byte random nonce ||
-// ciphertext+tag ).
-//
-// GCM is authenticated (tamper-evident) and uses a fresh random nonce per call,
-// which fixes the two weaknesses of the legacy AES-CFB scheme: the hard-coded
-// fixed IV and the lack of integrity. Reading legacy ciphertext is still
-// supported via Decrypt (auto-detected) / DecryptLegacy during migration.
+// Encrypt encrypts text with AES-256-GCM under a key derived from secret:
+// base64(versionGCM || random nonce || ciphertext+tag).
 func Encrypt(text, secret string) (string, error) {
 	block, err := aes.NewCipher(deriveKey(secret))
 	if err != nil {

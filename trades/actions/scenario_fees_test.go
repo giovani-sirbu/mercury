@@ -139,11 +139,11 @@ func TestFees_GetFeesBaseQuoteSeparatesBaseAndQuote(t *testing.T) {
 // received, and the simulated close quantity embodies none of it — the round
 // trip owes that opening leg plus the closing one.
 //
-//	close price   101000 less the 0.25% tolerance   = 100747.50
-//	gross profit  0.001 * 100747.50 - 0.001 * 100000 =      0.7475
+//	close price   101000 less 2 x the 0.25% tolerance = 100495.00
+//	gross profit  0.001 * 100495.00 - 0.001 * 100000 =      0.495
 //	closing leg   GetFees                            =      0.1
 //	opening leg   UnembodiedOpeningFees              =      0.1
-//	net                                              =      0.5475
+//	net                                              =      0.295
 func TestFees_HasProfitChargesBothLegsOfAQuoteFee(t *testing.T) {
 	trade := scenarioBuildTrade("takeProfit", 101000, false)
 	scenarioAppendHistory(&trade, "BUY", 0.001, 100000, "USDC", 0.1)
@@ -154,7 +154,7 @@ func TestFees_HasProfitChargesBothLegsOfAQuoteFee(t *testing.T) {
 		t.Fatalf("HasProfit returned error: %v", err)
 	}
 
-	const want = 0.001*100747.50 - 0.001*100000 - 0.1 - 0.1
+	const want = 0.001*100495.00 - 0.001*100000 - 0.1 - 0.1
 	if math.Abs(got.Trade.Profit-want) > 1e-9 {
 		t.Errorf("net profit = %v, want %v", got.Trade.Profit, want)
 	}

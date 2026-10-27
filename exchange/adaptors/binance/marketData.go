@@ -63,10 +63,7 @@ func (e Binance) GetPrice(symbol string) (float64, *common.APIError) {
 	return price, nil
 }
 
-// GetPrices returns the last price of every symbol the exchange lists, keyed by
-// the raw binance symbol ("ETHBTC"). One request covers the whole book, which is
-// what makes it usable for valuing a wallet whose assets are not known up front
-// — the per-symbol GetPrice would need one round trip per asset held.
+// GetPrices returns the last price of every listed symbol, keyed by the raw binance symbol.
 func (e Binance) GetPrices() (map[string]float64, *common.APIError) {
 	client, initErr := InitExchange(e)
 	if initErr != nil {

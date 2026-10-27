@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/internal/testutil"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown/firstfill"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
-	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 )
 
 // The first-fill gate's contract with the chain: a refused verdict holds the
-// new trade through gates.SaveHoldLog at the tick price, and the release
+// new trade through tradelog.SaveHoldLog at the tick price, and the release
 // through the reference hands the chain an event carrying the entered row —
 // shouldHoldEntry must pass that event on, or the row NextDepthDoubled reads
 // never reaches updateTrade.
@@ -47,7 +48,7 @@ func TestShouldHoldFirstFillActivatesAtTheTickPrice(t *testing.T) {
 	if len(held.Trade.StrategyEvents) != 1 {
 		t.Fatalf("expected the one activated event, got %d", len(held.Trade.StrategyEvents))
 	}
-	if cooldown.FirstFillVerdictNeeded(held.Trade, "new") {
+	if firstfill.FirstFillVerdictNeeded(held.Trade, "new") {
 		t.Fatal("once the hold stands the engines stop fetching the verdict")
 	}
 }
@@ -81,7 +82,7 @@ func TestShouldHoldFirstFillCarriesTheEnteredRowToTheChain(t *testing.T) {
 
 	// The market fill that follows is the one depth the correction applies to.
 	released.Trade.History = []aggragates.TradesHistory{{Type: "BUY", Quantity: 1, Price: 103, OrderId: 1}}
-	if !cooldown.NextDepthDoubled(released.Trade) {
+	if !firstfill.NextDepthDoubled(released.Trade) {
 		t.Fatal("the depth after an entry above the reference arms at double the step")
 	}
 }

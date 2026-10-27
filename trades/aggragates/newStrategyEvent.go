@@ -10,16 +10,10 @@ import (
 // the event is inert.
 const emptyStrategyEventData = "{}"
 
-// NewStrategyEvent is the event of one gate execution: the data marshalled as
-// the event's document, stamped at. The one function every writer and every
-// fixture builds an event with, so they cannot drift apart.
-//
-// It is total. The only marshal error a gate's data can raise is a NaN or an
-// infinite float, and the event then carries an empty document instead of
-// none, so Data is never nil. The same goes for data that marshals to null.
-// The fold that reads such an event skips it, as it skips a row without a
-// price. A zero `at` is kept: an event without a stamp never expires a first
-// fill and never holds a depth priority, as a row without one does not.
+// NewStrategyEvent is the event of one gate execution, data marshalled as its
+// document and stamped at: the one constructor every writer and fixture uses.
+// It is total: data that fails to marshal, or marshals to null, gives an
+// empty document, never nil, which the folds skip; a zero at is kept.
 func NewStrategyEvent(tradeID uint, param, gate string, data any, at time.Time) TradesStrategyEvents {
 	document, err := json.Marshal(data)
 	if err != nil || string(document) == "null" {

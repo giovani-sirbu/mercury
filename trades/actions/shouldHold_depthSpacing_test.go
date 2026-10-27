@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/internal/testutil"
+	"github.com/giovani-sirbu/mercury/strategies/gates"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown/depthspacing"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/gates"
-	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
-	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 )
 
 var trade25858 = testutil.Trade25858()
@@ -52,7 +53,7 @@ func heldDepth(trade aggragates.Trades, depth int, at time.Time) aggragates.Trad
 // seeded at the first fill let through, minutes after the entry.
 func TestDepthSpacingHoldsTheSecondDepthFromTheFirstFill(t *testing.T) {
 	trade := testutil.DepthTrade(trade25858[0])
-	eligible := testutil.At("13:41:08").Add(cooldown.DepthSpacingBaseHold)
+	eligible := testutil.At("13:41:08").Add(depthspacing.BaseHold)
 
 	if _, err := ShouldHold(depthEvent(trade, testutil.At("13:48:33"))); err == nil {
 		t.Fatal("the 13:48:33 depth of trade 32309 must be parked")
@@ -71,7 +72,7 @@ func TestDepthSpacingHoldsTheSecondDepthFromTheFirstFill(t *testing.T) {
 // would have freed it, and it does lift eventually.
 //
 // The exact escalated duration is NOT asserted here: it is base * factor, and
-// the factor is unexported — the schedule itself is pinned in the cooldown
+// the factor is unexported — the schedule itself is pinned in the depthspacing
 // package (TestDepthSpacingClampsTheHoldAtTheCeiling). What this test owns is
 // the wiring: that ShouldHold honours the escalation at all. Still parked one
 // base hold past the fill is exactly that evidence, since the first level
@@ -82,11 +83,11 @@ func TestDepthSpacingHoldsTheSecondDepthFromTheFirstFill(t *testing.T) {
 // to count, reads as a first activation at every tick and is freed there.
 func TestDepthSpacingEscalatesWhenADepthFillsInsideThePreviousHold(t *testing.T) {
 	first := testutil.At("09:00:00")
-	expiry := first.Add(cooldown.DepthSpacingBaseHold)
+	expiry := first.Add(depthspacing.BaseHold)
 	bought := expiry.Add(-time.Minute)
 	trade := testutil.DepthTrade(first, bought)
 	trade = heldDepth(trade, 1, first.Add(time.Minute))
-	atBase := bought.Add(cooldown.DepthSpacingBaseHold)
+	atBase := bought.Add(depthspacing.BaseHold)
 
 	if _, err := ShouldHold(depthEvent(trade, atBase)); err == nil {
 		t.Fatal("the escalated hold must park the next depth past one base hold")
@@ -108,10 +109,10 @@ func TestDepthSpacingEscalatesWhenADepthFillsInsideThePreviousHold(t *testing.T)
 // freed exactly there, where an escalated one would still be parked.
 func TestDepthSpacingKeepsStepOneWhenADepthFillsTheInstantTheHoldLifts(t *testing.T) {
 	first := testutil.At("09:00:00")
-	expiry := first.Add(cooldown.DepthSpacingBaseHold)
+	expiry := first.Add(depthspacing.BaseHold)
 	trade := testutil.DepthTrade(first, expiry)
 	trade = heldDepth(trade, 1, first.Add(time.Minute))
-	eligible := expiry.Add(cooldown.DepthSpacingBaseHold)
+	eligible := expiry.Add(depthspacing.BaseHold)
 
 	if _, err := ShouldHold(depthEvent(trade, eligible.Add(-time.Second))); err == nil {
 		t.Fatal("the depth carries its own base hold: a second under it must still be parked")
@@ -125,7 +126,7 @@ func TestDepthSpacingKeepsStepOneWhenADepthFillsTheInstantTheHoldLifts(t *testin
 // however long the trade has been open.
 func TestDepthSpacingReleasesASingleFillAfterTheBaseHold(t *testing.T) {
 	trade := testutil.DepthTrade(trade25858[0])
-	for _, elapsed := range []time.Duration{cooldown.DepthSpacingBaseHold, 4 * time.Hour, 30 * 24 * time.Hour} {
+	for _, elapsed := range []time.Duration{depthspacing.BaseHold, 4 * time.Hour, 30 * 24 * time.Hour} {
 		if _, err := ShouldHold(depthEvent(trade, trade25858[0].Add(elapsed))); err != nil {
 			t.Fatalf("one fill parks nothing past the base hold (+%s), got %v", elapsed, err)
 		}
@@ -140,7 +141,7 @@ func TestDepthSpacingReleasesASingleFillAfterTheBaseHold(t *testing.T) {
 // activation to count and none of them escalates.
 func TestDepthSpacingNeverHoldsALadderAFullWindowPastEachExpiry(t *testing.T) {
 	start := testutil.At("09:00:00")
-	spacing := cooldown.DepthSpacingBaseHold + cooldown.DepthSpacingWindow
+	spacing := depthspacing.BaseHold + depthspacing.Window
 	var placements []time.Time
 	for i := 0; i < 7; i++ {
 		placements = append(placements, start.Add(time.Duration(i)*spacing))
@@ -208,13 +209,13 @@ func TestDepthSpacingOnlyGatesStopLoss(t *testing.T) {
 }
 
 // The row names the cooldown family (the flag that owns the gate) and stays
-// byte-identical while the hold stands, so gates.SaveHoldLog collapses it to
+// byte-identical while the hold stands, so tradelog.SaveHoldLog collapses it to
 // one entry instead of one per tick.
 func TestDepthSpacingWritesOneStableCooldownRow(t *testing.T) {
 	trade := testutil.DepthTrade(trade25858[0], trade25858[1])
 	// The clock half of the row alone: without a ladder row there is no
 	// release price to print, and the price half is pinned by the release
-	// tests in the cooldown package.
+	// tests in the depthspacing package.
 	trade.StrategyPair.StrategySettings = nil
 
 	held, err := ShouldHold(depthEvent(trade, trade25858[1].Add(time.Minute)))
@@ -231,7 +232,7 @@ func TestDepthSpacingWritesOneStableCooldownRow(t *testing.T) {
 	// Everything the row owes an operator except the wait itself: the family,
 	// the depth and the escalation step. The wait is base * factor and the
 	// factor is unexported, so pinning it here would only re-encode the
-	// schedule the cooldown package already tests — and this test is about
+	// schedule the depthspacing package already tests — and this test is about
 	// the row, not the calibration. That it stays byte-identical tick to tick
 	// is asserted below, which is the property SaveHoldLog depends on.
 	want := "Hold stopLoss: cooldown: depths too close (depth 2, step 1), next add parked for "
@@ -287,7 +288,7 @@ func TestDepthSpacingReadsTheInverseEntrySide(t *testing.T) {
 // the same trade on the same tick.
 func TestDepthSpacingRowReportsTheLadderDepthNotTheStep(t *testing.T) {
 	start := testutil.At("09:00:00")
-	pause := start.Add(cooldown.DepthSpacingBaseHold + cooldown.DepthSpacingWindow)
+	pause := start.Add(depthspacing.BaseHold + depthspacing.Window)
 	ladder := []time.Time{
 		start, pause,
 		pause.Add(5 * time.Minute), pause.Add(10 * time.Minute), pause.Add(15 * time.Minute),

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/giovani-sirbu/mercury/internal/testutil"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 )
 
 // The planned cost is the wallet gate's tie-break between two ladders at the

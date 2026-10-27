@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/giovani-sirbu/mercury/trades/gates/dynamicparams"
-	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
+	"github.com/giovani-sirbu/mercury/internal/testutil"
+	"github.com/giovani-sirbu/mercury/strategies/gates/dynamicparams"
 )
 
 // A ladder that opened raised is ranked on the cost of the depths it still has

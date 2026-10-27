@@ -1,17 +1,18 @@
 package aggragates
 
-// AppendStrategyRow is the trade with a gate's log row and the strategy event
-// written beside it appended: the pair every writer that runs BEFORE the
-// action chain appends, so a row never goes without its event.
-//
-// Both slices are copied on append. The trade value the writer holds aliases
-// the backing arrays of the engine's own copy (the backtest's memory trade,
-// hermes' cached one), and appending in place could write into an array
-// another reader still holds. The writers inside the chain append in place
-// instead, on the event they hand on.
+// AppendStrategyRow is the trade with a gate's log row and its strategy event
+// appended, the pair every writer that runs before the action chain appends.
+// Both slices are copied: the trade value aliases the engine's own arrays,
+// which another reader may still hold.
 func AppendStrategyRow(trade Trades, row TradesLogs, event TradesStrategyEvents) Trades {
-	trade.Logs = append(append([]TradesLogs(nil), trade.Logs...), row)
-	trade.StrategyEvents = append(append([]TradesStrategyEvents(nil), trade.StrategyEvents...), event)
+	return AppendStrategyRows(trade, []TradesLogs{row}, []TradesStrategyEvents{event})
+}
+
+// AppendStrategyRows is AppendStrategyRow for a tick's log rows and the events beside them, whose
+// counts may differ (a merged log row stands for several events), both slices copied.
+func AppendStrategyRows(trade Trades, rows []TradesLogs, events []TradesStrategyEvents) Trades {
+	trade.Logs = append(append([]TradesLogs(nil), trade.Logs...), rows...)
+	trade.StrategyEvents = append(append([]TradesStrategyEvents(nil), trade.StrategyEvents...), events...)
 
 	return trade
 }

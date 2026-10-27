@@ -1,6 +1,3 @@
-// Package tradelog writes the non-action rows of Trade.Logs: the ERROR entry
-// an exchange or funds failure leaves on the trade, with the exchange error
-// text normalized so repeats collapse.
 package tradelog
 
 import (
@@ -31,7 +28,7 @@ func SaveError(event events.Events, err error) (events.Events, error) {
 	}
 
 	// set error type based on message
-	if isAPIError(message) || hasInsufficientBalance(message) {
+	if isAPIError(message) || HasInsufficientBalance(message) {
 		event.Trade.Status = aggragates.Blocked
 		errorType = aggragates.LOG_ERROR
 	}
@@ -66,6 +63,7 @@ func isAPIError(input string) bool {
 	return strings.Contains(helpers.RemoveNumbersFromString(input), "<APIError>")
 }
 
-func hasInsufficientBalance(input string) bool {
+// HasInsufficientBalance is whether the message is a funds error, the one that blocks the trade.
+func HasInsufficientBalance(input string) bool {
 	return strings.Contains(helpers.RemoveNumbersFromString(input), "Insufficient funds")
 }

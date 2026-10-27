@@ -1,6 +1,7 @@
-// Package helpers holds domain-free utilities (rounding, symbol and interval
-// parsing, millisecond clocks) shared by every mercury package and by the
-// services. It imports nothing from mercury, so any package may depend on it.
+// Package helpers holds utilities (rounding, symbol and interval parsing,
+// millisecond clocks) shared by the mercury packages and by the services. It
+// imports only trades/aggragates from mercury, for FindUsedAmount and
+// FormatPriceLevel, so aggragates must never import it.
 package helpers
 
 import "github.com/shopspring/decimal"

@@ -1,18 +1,7 @@
 package aggregates
 
-// WsUserDataEvent is the unified Go shape for every event delivered on the
-// Binance user-data stream (order updates, balance updates, account updates,
-// OCO updates).
-//
-// Binance reuses single-letter JSON tags (e.g. "T", "s", "d") across the
-// sub-events that share the user-data stream. Flattening every sub-struct
-// via embedding produces ambiguous tags that vet flags and that silently
-// drop fields when (un)marshalled. The struct is never (un)marshalled in
-// our codebase — wire types live in go-binance and fields are transferred
-// via jinzhu/copier — but to keep vet happy and make ambiguity impossible,
-// only WsOrderUpdate (the variant actually consumed downstream) remains
-// promoted. The other variants live as named fields accessed through their
-// own namespace.
+// WsUserDataEvent is every event of the Binance user-data stream; only
+// WsOrderUpdate is promoted, the other variants keep their own namespace.
 type WsUserDataEvent struct {
 	Event               string              `json:"e"`
 	Time                int64               `json:"E"`

@@ -64,8 +64,9 @@ func TestSpotDCA_FourBuysPriceDownThenSellAtProfit(t *testing.T) {
 // TestSpotDCA_HasProfitAcceptsAfterRecovery proves the HasProfit gate opens
 // once enough averaging-down rows have improved cost basis. With three buys
 // at 100k / 98k / 96.04k and a position price of 99k, the simulated sell on
-// the remaining 0.007 BTC nets ~50 USDC after the tolerance haircut, well
-// above MinNotional * Percentage/100 = 0.1 USDC.
+// the remaining 0.007 BTC nets about 11 USDC after the tolerance haircut, well
+// above the floor: Percentage / Depths (2 / 8) of the 680.16 USDC the entries
+// cost, 1.70 USDC.
 func TestSpotDCA_HasProfitAcceptsAfterRecovery(t *testing.T) {
 	trade := scenarioBuildTrade("takeProfit", 99000, false)
 	scenarioAppendHistory(&trade, "BUY", 0.001, 100000, "", 0)

@@ -2,24 +2,26 @@ package ladder
 
 import "github.com/giovani-sirbu/mercury/trades/aggragates"
 
-// EntryNotional is the amount the position has used: the quantity times the
-// price of every entry fill — BUYs for a normal trade, SELLs for an inverse
-// one — summed, so a partial fill of one order simply adds up. It is the
-// numerator of AverageEntryPrice, the same fold, and what a loss is measured
-// against when it is read as a share of the trade. Accounting rows
-// (child-profit transfers onto an impasse parent) are bookkeeping, not
-// entries, and are skipped by their sentinel price like CountFilledEntries
-// does. Zero when nothing has filled yet.
+// EntryNotional is the amount the position has used, quantity times price
+// over every entry fill: the numerator of AverageEntryPrice and what a loss
+// is measured against as a share of the trade. Zero before the first fill.
 func EntryNotional(trade aggragates.Trades) float64 {
 	_, notional := entryTotals(trade)
 
 	return notional
 }
 
-// entryTotals folds the entry fills into the quantity bought and what it
-// cost: the one fold under EntryNotional and AverageEntryPrice, so the amount
-// a trade has used and its average price can never disagree on which rows are
-// entries.
+// EntryQuantity is the base the position's entry fills moved: the denominator
+// of AverageEntryPrice and what an inverse trade's profit, counted in base, is
+// measured against. Zero before the first fill.
+func EntryQuantity(trade aggragates.Trades) float64 {
+	quantity, _ := entryTotals(trade)
+
+	return quantity
+}
+
+// entryTotals is the one fold over the entry fills (accounting rows skipped)
+// under EntryNotional, EntryQuantity and AverageEntryPrice.
 func entryTotals(trade aggragates.Trades) (quantity, notional float64) {
 	entrySide := "BUY"
 	if trade.Inverse {

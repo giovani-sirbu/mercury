@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/giovani-sirbu/mercury/helpers"
+	"github.com/giovani-sirbu/mercury/internal/testutil"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 )
 
 // The add: the last filled quantity times the multiplier of the row the NEXT

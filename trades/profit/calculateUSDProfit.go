@@ -7,32 +7,14 @@ import (
 	"github.com/giovani-sirbu/mercury/log"
 )
 
-// fiatConversionSymbol pegs the quote asset used to convert non-USD profit
-// into USD. Kept as USDT for now to preserve historical behavior; note that
-// getSymbolPrice in getFees.go uses USDC — the inconsistency should be
-// resolved in a separate change.
+// fiatConversionSymbol is the quote asset non-USD profit is converted into
+// (getSymbolPrice in fees converts into USDC: an inconsistency to resolve apart).
 const fiatConversionSymbol = "USDT"
 
-// CalculateUSDProfit converts trade.Profit into USD. Lookup order:
-//
-//  1. trade.ProfitAsset already pegged to USD (USDT/USDC/etc.) — return
-//     trade.Profit verbatim.
-//  2. event.WsPrices contains the <ProfitAsset>/<fiatConversionSymbol> pair —
-//     multiply. Hermes-fed snapshot; zero exchange round-trips, deterministic
-//     in tests.
-//  3. Fallback: event.Exchange.Client().GetPrice. Honors IsCustom so the
-//     virtual exchange (backtesting) and test stubs can substitute a
-//     deterministic price.
-//
-// Returns 0 on any price-lookup error (logged with context). Callers
-// should not treat 0 as a hard failure — a closed trade with zero
-// USDProfit is still valid downstream.
-//
-// Signature was changed from (trade aggragates.Trades) to (event events.Events)
-// to remove the os.Getenv + crypto.Decrypt + fresh-Client construction
-// hidden inside the previous implementation. The exchange client comes from
-// the event, already built and decrypted upstream, which also makes the
-// function unit-testable.
+// CalculateUSDProfit converts trade.Profit into USD: verbatim for a USD-pegged
+// profit asset, else through the event's wallet prices, then the exchange's
+// GetPrice. Returns 0 on a lookup error, logged; a closed trade with zero
+// USDProfit stays valid downstream.
 func CalculateUSDProfit(event events.Events) float64 {
 	trade := event.Trade
 

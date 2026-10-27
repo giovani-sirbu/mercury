@@ -3,8 +3,8 @@ package ladder
 import (
 	"testing"
 
+	"github.com/giovani-sirbu/mercury/strategies/gates/dynamicparams"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/gates/dynamicparams"
 )
 
 // The raise adds exactly the depths the shipped constant names, and the ladder

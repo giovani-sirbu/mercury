@@ -8,8 +8,9 @@ import (
 	"testing"
 
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/internal/testutil"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown/depthpriority"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 	"github.com/giovani-sirbu/mercury/trades/ladder"
 )
 
@@ -69,7 +70,7 @@ func reserveGridTrades() []aggragates.Trades {
 func reserveGridView(trades []aggragates.Trades) []aggragates.LadderDepth {
 	view := make([]aggragates.LadderDepth, 0, len(trades))
 	for _, trade := range trades {
-		view = append(view, ladder.DepthOf(trade))
+		view = append(view, depthpriority.LadderOf(trade))
 	}
 	return view
 }
@@ -83,7 +84,7 @@ func reserveGridWithout(trades []aggragates.Trades, symbol string) []aggragates.
 		if trade.Symbol == symbol {
 			continue
 		}
-		view = append(view, ladder.DepthOf(trade))
+		view = append(view, depthpriority.LadderOf(trade))
 	}
 	return view
 }
@@ -169,9 +170,10 @@ func reserveGridSettling(trade aggragates.Trades, executed float64) aggragates.T
 
 // reserveGridInverse is a ladder of the same wallet on the other side: an
 // inverse trade enters by SELLING base, so its entries are SELL rows and
-// everything it spends is counted in the base asset.
+// everything it spends is counted in the base asset. Its grid is DepthOffset
+// taller, so one depth under the long ceiling it still has costed depths left.
 func reserveGridInverse(id uint, symbol string, depth int) aggragates.Trades {
-	trade := reserveGridTrade(id, symbol, depth)
+	trade := testutil.LadderDepthTrade(id, symbol, depth, reserveGridDepths+depthpriority.DepthOffset)
 	trade.Inverse = true
 
 	for index := range trade.History {
@@ -446,7 +448,7 @@ func TestReserveHandsOnToTheNextDeepestLadderWhenTheKeeperLeaves(t *testing.T) {
 
 // A reservation that stands for many ticks is one row, not one per tick. The
 // balance moves on every tick and the row carries none of it, which is the
-// property gates.SaveHoldLog deduplicates on — so a ladder held across a
+// property tradelog.SaveHoldLog deduplicates on — so a ladder held across a
 // drifting wallet writes the row once and an operator reads a reservation
 // instead of a wall of near-identical lines.
 func TestReserveWritesOneRowWhileTheHoldStands(t *testing.T) {
@@ -508,7 +510,7 @@ func TestReserveKeepsItsSizeWhileTheDeepestEntryIsStillSettling(t *testing.T) {
 	keeper := reserveGridShape[0]
 	full := reserveGridTrade(keeper.id, keeper.symbol, keeper.depth)
 
-	settled := ladder.DepthOf(full)
+	settled := depthpriority.LadderOf(full)
 	if settled.RemainingCost <= 0 {
 		t.Fatalf("the reserved ladder must name what its remaining depths cost, got %f", settled.RemainingCost)
 	}
@@ -531,7 +533,7 @@ func TestReserveKeepsItsSizeWhileTheDeepestEntryIsStillSettling(t *testing.T) {
 			t.Fatalf("%s: the fixture must leave the deepest row under its planned %v, got %v", name, planned, executed)
 		}
 
-		settling := ladder.DepthOf(reserveGridSettling(full, executed))
+		settling := depthpriority.LadderOf(reserveGridSettling(full, executed))
 
 		if settling.Depth != settled.Depth || settling.MaxDepth != settled.MaxDepth {
 			t.Fatalf("%s: a settling entry is still one depth, got %+v want %+v", name, settling, settled)
@@ -590,7 +592,7 @@ func TestReserveHoldsSiblingsBehindAFullLadderUntilItCloses(t *testing.T) {
 	const fullSymbol = "LINK/USDT"
 
 	full := reserveGridTrade(14, fullSymbol, reserveGridDepths)
-	fullView := ladder.DepthOf(full)
+	fullView := depthpriority.LadderOf(full)
 	if fullView.Depth != fullView.MaxDepth {
 		t.Fatalf("the fixture must fill its last depth, got %+v", fullView)
 	}
@@ -621,7 +623,7 @@ func TestReserveHoldsSiblingsBehindAFullLadderUntilItCloses(t *testing.T) {
 		}
 	}
 
-	view := []aggragates.LadderDepth{fullView, ladder.DepthOf(deeper), ladder.DepthOf(level), ladder.DepthOf(shallow)}
+	view := []aggragates.LadderDepth{fullView, depthpriority.LadderOf(deeper), depthpriority.LadderOf(level), depthpriority.LadderOf(shallow)}
 
 	nextInLine := reserveGridKeeper(t, view)
 	if nextInLine.Symbol != deeper.Symbol {
@@ -677,7 +679,7 @@ func TestReserveHoldsSiblingsBehindAFullLadderUntilItCloses(t *testing.T) {
 	// The wallet is still kept for the deepest ladder LEFT — split from its
 	// level twin on the trade id — which now waits for nobody, while the
 	// others wait behind it on the very row they carried before the close.
-	closed := []aggragates.LadderDepth{ladder.DepthOf(deeper), ladder.DepthOf(level), ladder.DepthOf(shallow)}
+	closed := []aggragates.LadderDepth{depthpriority.LadderOf(deeper), depthpriority.LadderOf(level), depthpriority.LadderOf(shallow)}
 
 	next := reserveGridKeeper(t, closed)
 	if next.Symbol != deeper.Symbol {
@@ -710,7 +712,7 @@ func TestReserveHoldsSiblingsBehindAFullLadderUntilItCloses(t *testing.T) {
 // it and wait there, which inverts the very ranking the gate exists to keep.
 func TestReserveRanksTheManagedTradeAgainstTheViewItIsMissingFrom(t *testing.T) {
 	shallower := reserveGridTrade(11, "BTC/USDT", 4)
-	view := []aggragates.LadderDepth{ladder.DepthOf(shallower)}
+	view := []aggragates.LadderDepth{depthpriority.LadderOf(shallower)}
 
 	// Deeper than anything in the view, and absent from it.
 	deepest := reserveGridTrade(14, "LINK/USDT", 5)
@@ -743,7 +745,7 @@ func TestReserveRanksTheManagedTradeAgainstTheViewItIsMissingFrom(t *testing.T) 
 // ladder that spends base.
 func TestReserveNeverKeepsAQuoteWalletForAnInverseLadder(t *testing.T) {
 	deepInverse := reserveGridInverse(31, "BTC/USDT", 8)
-	inverseView := ladder.DepthOf(deepInverse)
+	inverseView := depthpriority.LadderOf(deepInverse)
 	if inverseView.Asset != "BTC" {
 		t.Fatalf("an inverse ladder spends %q, want the base side of its pair", inverseView.Asset)
 	}
@@ -752,7 +754,7 @@ func TestReserveNeverKeepsAQuoteWalletForAnInverseLadder(t *testing.T) {
 	}
 
 	longKeeper := reserveGridTrade(13, reserveGridShape[1].symbol, reserveGridShape[1].depth)
-	view := []aggragates.LadderDepth{inverseView, ladder.DepthOf(longKeeper)}
+	view := []aggragates.LadderDepth{inverseView, depthpriority.LadderOf(longKeeper)}
 
 	keeper := reserveGridKeeper(t, view)
 	if keeper.Symbol != reserveGridShape[1].symbol {

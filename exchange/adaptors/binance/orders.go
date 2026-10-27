@@ -97,14 +97,8 @@ func (e Binance) GetTrades(orderId int64, symbol string) ([]aggregates.Trade, *c
 	return orderResult, nil
 }
 
-// binanceCreateOrder is the shared order-placement primitive. Internal-only;
-// the exported Buy/Sell/MarketBuy/MarketSell helpers above pick the right
-// side + type combination before calling it.
+// binanceCreateOrder is the shared order-placement primitive behind Buy, Sell, MarketBuy and MarketSell.
 func (e Binance) binanceCreateOrder(sideType binance.SideType, orderType binance.OrderType, symbol string, quantity float64, price string) (order *binance.CreateOrderResponse, apiErr *common.APIError) {
-	// Single histogram observation per order placement, regardless of which
-	// shape (market vs limit) the SDK call takes. Deferred closure captures
-	// the final apiErr via the named return — see instrumentation.go for the
-	// reasoning behind the closure-returning-closure shape.
 	observe := observeBinanceCall("create-order", "spot")
 	defer func() { observe(apiErr) }()
 

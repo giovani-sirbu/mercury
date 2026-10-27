@@ -12,64 +12,32 @@ import (
 const (
 	claimBatchSize = 10
 	pollInterval   = 5 * time.Second
-	// staleLockAfter is the window after which a row's locked_at is
-	// considered abandoned and the row can be re-claimed by another worker.
-	// It sits above the time any healthy handler takes to finish — the trade
-	// / email / user handlers all complete well inside it — so a live
-	// handler's row is never re-claimed under it, and a handler that ran
-	// past this window would see its message delivered a second time. It
-	// sits no higher, because the same window IS the redelivery tail a real
-	// worker crash costs. A crashed worker sends no further notification, so
-	// its rows wait for the next poll: that tail is staleLockAfter plus up to
-	// one pollInterval, which is also why cutting it under pollInterval buys
-	// nothing.
+	// staleLockAfter is the window after which a claimed row counts as
+	// abandoned and is re-claimed: above any healthy handler's run, and no
+	// higher, since it is also the redelivery tail of a crash.
 	staleLockAfter      = 60 * time.Second
 	reconnectMaxBackoff = 30 * time.Second
-	// listenKeepaliveInterval bounds how long the dedicated LISTEN connection
-	// waits for a notification before sending a keepalive ping. That socket
-	// carries no application bytes between notifications, and the gateway's
-	// nginx stream proxy closes a connection idle past its proxy_timeout —
-	// surfacing here as "unexpected EOF" and forcing a reconnect on every
-	// low-traffic topic. Pinging well inside that window keeps bytes on the
-	// wire so an idle connection is never reaped. It is set far under that
-	// proxy_timeout, and under any plausible intermediate idle timeout, at a
-	// cost of one trivial query per idle connection per interval; the ping it
-	// schedules is bounded by listenKeepalivePingTimeout, which stays well
-	// under this interval so a stalled ping fails and reconnects long before
-	// the next keepalive is due.
+	// listenKeepaliveInterval bounds how long the LISTEN connection sits idle
+	// before a keepalive ping, under the gateway's proxy idle timeout.
 	listenKeepaliveInterval = 5 * time.Minute
-	// listenKeepalivePingTimeout bounds the keepalive ping so a half-open
-	// connection fails fast (and reconnects) instead of blocking the listener.
+	// listenKeepalivePingTimeout bounds the keepalive ping so a half-open connection fails fast.
 	listenKeepalivePingTimeout = 10 * time.Second
 )
 
-// ContextHandler is the context-aware consumer callback. The context carries
-// the per-message correlation id (set under log.correlationIDKey) so handlers
-// can propagate it to outbound HTTP / pub/sub / log calls without the caller
-// having to plumb it explicitly.
+// ContextHandler is the consumer callback whose context carries the message's correlation id.
 type ContextHandler func(ctx context.Context, msg []byte)
 
 // Consumer subscribes to a topic via LISTEN/NOTIFY and dispatches payloads to
-// handler. Claims rows competitively (SELECT FOR UPDATE SKIP LOCKED) so each
-// message is processed by exactly one replica. Runs forever; reconnects with
-// exponential backoff on connection loss.
-//
-// Top-level panic recovery guarantees that a panic inside pgx or a handler
-// does not take down the consumer goroutine (and therefore the entire stream
-// of messages for that topic). Individual handler panics are also caught
-// inside runHandler so one bad message does not kill the connection.
-//
-// Legacy (non-context-aware) handlers receive only the payload. The
-// correlation id is read from the row and surfaced in broker-side logs, but
-// not threaded into the handler. New code that needs to propagate the id
-// should use ConsumerCtx instead.
+// handler. Rows are claimed competitively (SELECT FOR UPDATE SKIP LOCKED) so
+// each message is handled by exactly one replica; the loop runs forever and
+// reconnects with exponential backoff. A panic in pgx or a handler is
+// recovered so one bad message never takes the topic's stream down. Legacy
+// handlers get the payload alone; ConsumerCtx carries the correlation id.
 func (m MessageBroker) Consumer(topic string, handler fn) {
 	m.runConsumer(topic, func(_ context.Context, msg []byte) { handler(msg) })
 }
 
-// ConsumerCtx is the context-aware variant of Consumer. Identical claim /
-// retry / panic-recovery behavior, but the handler receives a context.Context
-// pre-populated with the message's correlation id.
+// ConsumerCtx is Consumer with the correlation id on the handler's context.
 func (m MessageBroker) ConsumerCtx(topic string, handler ContextHandler) {
 	m.runConsumer(topic, handler)
 }

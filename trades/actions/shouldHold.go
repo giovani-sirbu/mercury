@@ -2,67 +2,25 @@ package actions
 
 import (
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/strategies/gates"
+	"github.com/giovani-sirbu/mercury/strategies/gates/ai"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown/depthpriority"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown/depthspacing"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown/firstfill"
+	"github.com/giovani-sirbu/mercury/strategies/gates/patterns"
+	"github.com/giovani-sirbu/mercury/strategies/gates/smarttakeloss"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/gates"
-	"github.com/giovani-sirbu/mercury/trades/gates/ai"
-	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
-	"github.com/giovani-sirbu/mercury/trades/gates/patterns"
-	"github.com/giovani-sirbu/mercury/trades/gates/smarttakeloss"
+	"github.com/giovani-sirbu/mercury/trades/tradelog"
 )
 
 // ShouldHold blocks the action chain when a strategy flag advises against
-// acting. Holds are recorded by gates.SaveHoldLog as INFO trade-log entries;
-// a hold of a gate that owns a strategy param (Cooldown, SmartTakeLoss) also
-// writes its strategy event beside the row, so the trade's record of the flag
-// is whole. Some events are read back on a later tick — the first-fill gate's
-// state, the depth priority hold that pauses the smart take loss — and the
-// rest (depth spacing, the smart take loss's entry hold) only record the
-// execution. The market families (UsePatterns, UseAI) write the row alone.
-//
-// OWNERSHIP. Every gate answers to exactly one strategy flag, flag first and
-// payload second: `params.X && <payload present>`. Payload presence is only a
-// degrade-open check, never a switch-on — a verdict fetched for one flag's
-// sake gains no gate for another (see StrategyParams.NeedsSophos).
-//
-//	first fill (OldPosition "new")   Cooldown      → the wallet reserve
-//	                                 SmartTakeLoss → quiet decline hold (long parents, while the verdict stands)
-//	                                 Cooldown      → the first-fill gate (higher-highs hold, released by price)
-//	                                 UseAI         → legacy bullish/bearish veto
-//	open position                    UsePatterns   → chart-pattern and fibonacci holds
-//	                                 UseAI         → legacy AI hold
-//	                                 Cooldown      → the wallet reserve, then depth spacing (stopLoss only)
-//
-// SmartTakeLoss holds nothing on an open position: it forces exits after the
-// ladder decides (gates/smarttakeloss.Apply, called by the engines). Its one
-// hold is the quiet decline's, on the first fill, so no new ladder opens into
-// the decline the slow decline gate sells a long ladder out of.
-//
-// Each family lives in its own package under trades/gates; this function
-// only orders them. Cooldown owns THREE gates. They share a flag because they
-// are the same idea — do not spend capital faster than the move deserves —
-// but nothing else, and each reads something different:
-//
-//   - the first-fill gate decides whether the trade opens here at all. It
-//     takes one higher-highs verdict from sophos /cooldown to activate and
-//     from then on reads only the tick price and its own strategy events;
-//   - depth spacing keeps one ladder from cascading through every depth in
-//     one drop. It reads only that trade's own fill stamps;
-//   - depth priority keeps the ladders of one wallet from all stopping
-//     half-finished when the pairs fall together. It reserves the wallet for
-//     the deepest ladder — what that ladder's remaining depths cost is kept
-//     out of the others' reach — and holds an entry only when placing it
-//     would leave the wallet under that amount. It reads the wallet's other
-//     ladders and its free balance, and nothing about the market at all.
-//
-// Depth priority runs on both sides of the first fill, and first on each:
-// its subject is the wallet, so a trade it holds spends nothing and needs no
-// verdict from the gate that would have spoken next.
-//
-// With every flag off nothing holds: the ladder runs exactly as the legacy
-// engine ran it, stopped only by funds.
-//
-// Whether the first-buy chain runs this function at all is the engines' call
-// through StrategyParams.InjectsEntryHold.
+// acting; a hold is recorded by tradelog.SaveHoldLog, with the gate's strategy
+// event beside the row where the gate owns one. Every gate answers to exactly
+// one flag, flag first and payload second: a payload fetched for another
+// flag's sake switches no gate on (StrategyParams.NeedsSophos). The smart
+// take loss holds only the first fill here; on an open ladder it acts through
+// smarttakeloss.Apply, after the ladder decides. With every flag off nothing
+// holds and the ladder is stopped by funds alone.
 func ShouldHold(event events.Events) (events.Events, error) {
 	if event.Params.OldPosition == "new" {
 		return shouldHoldEntry(event)
@@ -70,65 +28,57 @@ func ShouldHold(event events.Events) (events.Events, error) {
 	return shouldHoldPosition(event)
 }
 
-// shouldHoldEntry is the first fill: cooldown owns most of it, and the smart
-// take loss holds a long parent while its quiet decline verdict stands.
-//
-// The gates judge the direction the entry would take, resolved once by
-// aggragates.EntrySide. They used to take event.Trade.Inverse, which is the
-// direction on spot and never the direction on futures — where Inverse is
-// always false and the ML verdict decides the side.
+// shouldHoldEntry is the first fill, judged on the side aggragates.EntrySide
+// resolves (Inverse on spot, the ML verdict on futures). In order: the wallet
+// reserve (depth priority), the smart take loss entry holds (quiet decline,
+// flat market, then free fall prevention), the first-fill gate, then the
+// legacy AI veto. The wallet
+// reserve and the smart take loss run before the first-fill gate so a held
+// entry neither consumes nor records a first-fill verdict.
 func shouldHoldEntry(event events.Events) (events.Events, error) {
 	params := event.Trade.Strategy.Params
 	side := aggragates.EntrySide(event.Trade, event.Params.AIIndicators)
 
 	if params.Cooldown {
-		// The wallet before the entry: the funds a sibling ladder still needs
-		// for its remaining depths are reserved for it, and a first fill is
-		// new capital like any other. It runs before the first-fill gate so a
-		// held entry neither consumes nor records a first-fill verdict — that
-		// judgement belongs to the tick the wallet can actually afford it on.
-		if hold := cooldown.DepthPriorityHold(event, event.Trade.PositionType); hold.Held() {
-			return gates.SaveHoldLog(event, "entry", hold)
+		// Before the first-fill gate so a held entry records no verdict.
+		if hold := depthpriority.DepthPriorityHold(event, event.Trade.PositionType); hold.Held() {
+			return tradelog.SaveHoldLog(event, "entry", hold)
 		}
 	}
 	if params.SmartTakeLoss {
-		// No new ladder while sophos reads a quiet decline on the pair.
-		// Before the first-fill gate for the reason the wallet reserve is: a
-		// held entry must neither consume nor record a first-fill verdict.
+		// No new ladder while a quiet decline, a flat market or a free fall reading stands.
 		if hold := smarttakeloss.EntryHold(event.Trade, side, event.Params.AIIndicators); hold.Held() {
-			return gates.SaveHoldLog(event, "entry", hold)
+			return tradelog.SaveHoldLog(event, "entry", hold)
 		}
 	}
 	if params.Cooldown {
-		// The gate hands the event back: on the tick it releases an entry
-		// above its reference it has written the entered row and event
-		// NextDepthDoubled reads, and only the event that continues down the
-		// chain reaches updateTrade.
+		// The gate hands the event back with the entered row firstfill.NextDepthDoubled reads.
 		var hold gates.Hold
-		event, hold = cooldown.FirstFillHold(event, side)
+		event, hold = firstfill.FirstFillHold(event, side)
 		if hold.Held() {
-			return gates.SaveHoldLog(event, "entry", hold)
+			return tradelog.SaveHoldLog(event, "entry", hold)
 		}
 	}
 	if params.UseAI {
 		if reason := ai.EntryHold(side, event.Params.AIIndicators); reason != "" {
-			return gates.SaveHoldLog(event, "entry", gates.Hold{Reason: reason})
+			return tradelog.SaveHoldLog(event, "entry", gates.Hold{Reason: reason})
 		}
 	}
 	return event, nil
 }
 
-// shouldHoldPosition is every transition after the first fill: arming a
-// depth (stopLoss), arming the exit (takeProfit) and the force-trailing
-// re-anchors of either.
+// shouldHoldPosition is every transition after the first fill: arming a depth
+// (stopLoss), arming the exit (takeProfit) and the force-trailing re-anchors
+// of either. The first hold that speaks wins, in this order: the chart
+// patterns (UsePatterns), the legacy AI hold (UseAI), then under Cooldown the
+// wallet reserve (depth priority) and depth spacing, last because it has no
+// view of the market.
 func shouldHoldPosition(event events.Events) (events.Events, error) {
 	params := event.Trade.Strategy.Params
 	indicators := event.Params.AIIndicators
 	position := gates.PositionType(event.Trade.PositionType)
 
-	// The market families first: a pattern hold names the reason before the
-	// legacy AI hold does. Both write the row alone, so they set only the
-	// reason of the hold.
+	// The market families first; both write the row alone.
 	var hold gates.Hold
 	if params.UsePatterns {
 		hold.Reason = patterns.HoldReason(event, position, indicators)
@@ -138,23 +88,16 @@ func shouldHoldPosition(event events.Events) (events.Events, error) {
 	}
 
 	if !hold.Held() && params.Cooldown {
-		// The wallet before the ladder. Neither cooldown gate has a view of
-		// the market, so nothing above is being displaced; between the two of
-		// them, "a deeper ladder of this wallet is keeping the funds" names
-		// the situation an operator is looking at, and "the last depths were
-		// close together" does not.
-		hold = cooldown.DepthPriorityHold(event, position)
+		hold = depthpriority.DepthPriorityHold(event, position)
 	}
 
 	if !hold.Held() && params.Cooldown {
-		// Last, and only when nothing else spoke: depth spacing has no view of
-		// the market at all, so every gate above names the reason for a hold
-		// better than "the last depths were close together" ever could.
-		hold = cooldown.DepthSpacingHold(event, position)
+		// Last: depth spacing has no view of the market.
+		hold = depthspacing.DepthSpacingHold(event, position)
 	}
 
 	if hold.Held() {
-		return gates.SaveHoldLog(event, event.Trade.PositionType, hold)
+		return tradelog.SaveHoldLog(event, event.Trade.PositionType, hold)
 	}
 	return event, nil
 }

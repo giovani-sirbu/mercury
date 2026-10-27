@@ -1,16 +1,16 @@
 package actions
 
 import (
-	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
+	"github.com/giovani-sirbu/mercury/internal/testutil"
 	"github.com/giovani-sirbu/mercury/trades/quantities"
 	"math"
 	"strings"
 	"testing"
 
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/strategies/gates/patterns"
+	"github.com/giovani-sirbu/mercury/strategies/gates/smarttakeloss"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/gates/patterns"
-	"github.com/giovani-sirbu/mercury/trades/gates/smarttakeloss"
 )
 
 // strategy3Params is strategy 3's configuration: the cooldown gates and the
@@ -66,7 +66,7 @@ func lastHold(t *testing.T, event events.Events) (string, bool) {
 // no sibling ladder keeping the wallet, and an AI verdict that does not refuse
 // the long — a payload carrying every other family's signal still lets the
 // first fill through: a long pattern verdict scored over HoldMinScore with its
-// target ahead, a quiet decline verdict with its sell band, and a bearish
+// target ahead, a quiet decline verdict with its fill window, and a bearish
 // dynamic params block. The same payload holds the fill once the smart take
 // loss flag is on, so its slow-decline reading is one that flag's gate acts
 // on; and a cooldown verdict that refuses the long holds the fill at the tick
@@ -82,9 +82,9 @@ func TestShouldHoldStrategy3FirstFillReadsOnlyCooldownAndTheAIVeto(t *testing.T)
 		PatternLevelKind:   "resistance",
 		PatternTakeProfit:  110,
 		SmartTakeLoss: aggragates.SmartTakeLossIndicators{
-			SlowDeclineExit:     true,
-			SlowDeclineLegQuiet: true,
-			SlowDeclineSellBand: 104,
+			QuietDeclineVerdict:     true,
+			QuietDeclineLegQuiet: true,
+			QuietDeclineFillFrom: slowDeclineWindowFrom.UnixMilli(),
 		},
 		DynamicParams: aggragates.DynamicParamsIndicators{Timeframe: "1D", Guppy: -1, BMSB: -1, Valid: true},
 	}

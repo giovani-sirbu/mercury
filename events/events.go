@@ -14,14 +14,10 @@ import (
 
 type (
 	Events struct {
-		// Storage is the shared cache client. Pointer semantics are required because
-		// *memory.Memory owns singleton state (sync.Once + reused Redis client).
+		// Storage is the shared cache client; a pointer, since Memory owns singleton state.
 		Storage *memory.Memory
 
-		// WsPrices is an in-process snapshot of symbol prices, typically populated
-		// by hermes before running an event pipeline. Lookups here avoid a Redis
-		// round-trip on the trade decision hot path. Nil is valid — callers fall
-		// back to Storage and then to the exchange API.
+		// WsPrices is the engine's in-process price snapshot; nil falls back to the exchange API.
 		WsPrices map[string]float64
 
 		Broker         messagebroker.BrokerMethods
@@ -32,29 +28,19 @@ type (
 		Params         aggragates.Params
 		Events         map[string]func(Events) (Events, error)
 
-		// CorrelationID is the per-action-chain correlation id. Hermes's
-		// ManageTrade / ManageFuturesTrade populate it before calling Run()
-		// so every action in the chain — including the update-trade and
-		// create-children-trades producers — tags the resulting message and
-		// log lines with the same id.
+		// CorrelationID is the per-chain correlation id every message and log line of the chain carries.
 		CorrelationID string
 
-		// Timestamp is the tick time as a Unix value (seconds, millis, micros
-		// or nanos), read through TickTime. Zero is inert: TickTime then falls
-		// back to Trade.UpdatedAt, so engines that already stamp it (sisyphus
-		// backtests) do not need to set this field.
+		// Timestamp is the tick time as a Unix value, read through TickTime;
+		// zero falls back to Trade.UpdatedAt.
 		Timestamp int64
 	}
 )
 
-// Next Function to run the next event if we have multiple events
+// Next runs the next action of the chain, or clears the trade's backoff when the chain is done.
 func (e Events) Next() error {
 	if len(e.EventsNames) <= 1 {
-		// Safely clean up backoffTries. The existence check, len() and delete
-		// must all run under rwLocker: a periodic sweeper (lockTradeBackoff.go)
-		// and LockTradeWithBackOff write this package-global map from sibling
-		// trade goroutines, so an unlocked read here races a concurrent write
-		// and triggers a fatal "concurrent map read and map write".
+		// Under rwLocker: the sweeper and LockTradeWithBackOff write this map from other goroutines.
 		rwLocker.Lock()
 		if _, exists := backoffTries[e.Trade.ID]; exists {
 			log.Debug("backoffTries[before]: ", len(backoffTries), e.Trade.ID)
@@ -70,7 +56,9 @@ func (e Events) Next() error {
 	return e.Run()
 }
 
-// Run Function to run events
+// Run runs the action chain in order: each action hands the event on, a hold
+// (ErrTradeHeld) stops it quietly, and any other error backs the trade off
+// and is logged once per backoff episode.
 func (e Events) Run() error {
 	if len(e.EventsNames) == 0 {
 		return nil
@@ -85,23 +73,12 @@ func (e Events) Run() error {
 	newEvent, err := eventFunc(e)
 
 	if err != nil {
-		// A hold is a decision, not a failure. It already wrote its own INFO
-		// entry on the trade, so logging it here only duplicates it once per
-		// tick — and, more importantly, the backoff below must not run for it.
-		// LockTradeWithBackOff exists to stop a trade whose chain keeps
-		// erroring from being retried every tick; extending the lock for a
-		// hold instead throttled a held trade to one evaluation per minute
-		// (lockTradeBackoff.go: 1s doubling to a 60s ceiling), so the gate
-		// that held it could not re-examine it until the lock expired.
+		// A hold is a decision: no log, no backoff, so the gate re-examines the trade next tick.
 		if errors.Is(err, ErrTradeHeld) {
 			return err
 		}
 		e.LockTradeWithBackOff()
-		// A failure the trade already carries (SaveError wrote it, this is a
-		// repeat) or the same failure this backoff episode already logged is
-		// not logged again: the tick that runs into it only has to keep the
-		// backoff. At tick rate the same refusal otherwise repeats word for
-		// word, thousands of lines a minute, in the backtest and live alike.
+		// A failure already on the trade, or already logged this episode, keeps the backoff only.
 		if errors.Is(err, ErrRepeatedFailure) || e.repeatsLastFailure(err) {
 			return err
 		}
@@ -111,7 +88,7 @@ func (e Events) Run() error {
 	return newEvent.Next()
 }
 
-// Add Function to register a new event or replace a default one
+// Add registers an action, or replaces a default one, on a copy of the map.
 func (e Events) Add(event string, action func(Events) (Events, error)) Events {
 	var newEvent = make(map[string]func(Events) (Events, error))
 	for key, value := range e.Events {
@@ -122,18 +99,15 @@ func (e Events) Add(event string, action func(Events) (Events, error)) Events {
 	return e
 }
 
-// logEventError formats and logs event execution errors
+// logEventError logs an action error with the trade's context and returns it.
 func (e Events) logEventError(err error) error {
-	// helpers.SplitSymbol, not strings.Split(...)[1]: a symbol without exactly
-	// one slash indexed out of range and panicked the whole trade goroutine —
-	// on the ERROR path, so a malformed pair turned any action error into a
-	// process-level panic instead of a logged failure.
+	// SplitSymbol never panics on a malformed pair.
 	_, assetSymbol := helpers.SplitSymbol(e.Trade.Symbol)
 
 	var errorMessage string
 
 	if err != nil {
-		// Handle nil pointer of *APIError safely
+		// A nil *APIError is a non-nil error.
 		if apiErr, ok := err.(*common.APIError); ok && apiErr == nil {
 			errorMessage = "<nil APIError>"
 		} else {

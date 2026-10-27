@@ -6,14 +6,8 @@ import (
 	"fmt"
 )
 
-// Decrypt extracts the plaintext, auto-detecting the format:
-//
-//   - AES-256-GCM (new): the payload starts with versionGCM. The key is derived
-//     from secret via SHA-256 and the GCM tag is verified, so a wrong key or
-//     tampered ciphertext returns an error rather than silent garbage. No
-//     fallback to the legacy path is attempted for a versioned payload.
-//   - AES-CFB (legacy): no version marker. Decrypted with the raw secret bytes
-//     and the fixed legacy IV, for data written before the GCM migration.
+// Decrypt extracts the plaintext: AES-256-GCM when the payload starts with
+// versionGCM, else the legacy AES-CFB path.
 func Decrypt(text, secret string) (string, error) {
 	raw, err := Decode(text)
 	if err != nil {
@@ -42,9 +36,6 @@ func Decrypt(text, secret string) (string, error) {
 }
 
 // DecryptLegacy forces the legacy AES-CFB path regardless of any version byte.
-// The re-encryption migration uses this to read pre-migration secrets with the
-// old key, so a legacy ciphertext whose first byte happens to equal versionGCM
-// can never be misrouted to the GCM path.
 func DecryptLegacy(text, secret string) (string, error) {
 	raw, err := Decode(text)
 	if err != nil {

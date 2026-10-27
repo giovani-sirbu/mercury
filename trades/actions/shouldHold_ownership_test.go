@@ -1,8 +1,8 @@
 package actions
 
 import (
-	"github.com/giovani-sirbu/mercury/trades/gates/dynamicparams"
-	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
+	"github.com/giovani-sirbu/mercury/internal/testutil"
+	"github.com/giovani-sirbu/mercury/strategies/gates/dynamicparams"
 	"strings"
 	"testing"
 
@@ -45,7 +45,7 @@ func ownershipEvent(trade aggragates.Trades, ai aggragates.AIIndicators, cool ag
 // both dynamic params reads bearish, which hold nothing at all.
 func fullHoldPayload() aggragates.AIIndicators {
 	return aggragates.AIIndicators{
-		SmartTakeLoss:      aggragates.SmartTakeLossIndicators{SlowDeclineExit: true},
+		SmartTakeLoss:      aggragates.SmartTakeLossIndicators{QuietDeclineVerdict: true},
 		DynamicParams:      aggragates.DynamicParamsIndicators{Timeframe: "1D", Guppy: -1, BMSB: -1, Valid: true},
 		AIAction:           aggragates.ActionHold,
 		AIMarketBearish:    true,

@@ -62,6 +62,63 @@ func TestEntryNotionalSkipsAccountingRowsAndEmptyLadders(t *testing.T) {
 	}
 }
 
+// The base a trade's entries moved is the quantity of every entry fill, summed:
+// a partial fill of one order adds up with the rest, and the exits a ladder has
+// already booked are not part of it.
+func TestEntryQuantityIsTheBaseEveryEntryFillMoved(t *testing.T) {
+	trade := aggragates.Trades{History: []aggragates.TradesHistory{
+		{Type: "BUY", Quantity: 1, Price: 100, OrderId: 10},
+		{Type: "BUY", Quantity: 0.5, Price: 96, OrderId: 11},
+		{Type: "BUY", Quantity: 0.5, Price: 96, OrderId: 11},
+		{Type: "SELL", Quantity: 1, Price: 130, OrderId: 12},
+	}}
+
+	if got, want := EntryQuantity(trade), 1.0+0.5+0.5; got != want {
+		t.Fatalf("entry quantity = %f, want %f", got, want)
+	}
+}
+
+// An inverse ladder enters with SELLs, so the base those rows sold is what its
+// entries moved and its BUYs are the exits: the denomination its profit is
+// counted in.
+func TestEntryQuantityUsesSellsForInverseTrades(t *testing.T) {
+	trade := aggragates.Trades{Inverse: true, History: []aggragates.TradesHistory{
+		{Type: "SELL", Quantity: 1, Price: 100, OrderId: 20},
+		{Type: "SELL", Quantity: 3, Price: 104, OrderId: 21},
+		{Type: "BUY", Quantity: 1, Price: 90, OrderId: 22},
+	}}
+
+	if got, want := EntryQuantity(trade), 1.0+3; got != want {
+		t.Fatalf("inverse entry quantity = %f, want %f", got, want)
+	}
+}
+
+// The child-profit rows an impasse parent carries are bookkeeping at the
+// sentinel price, and a row with no quantity filled nothing: neither moves any
+// base, and a ladder with no fills has moved none.
+func TestEntryQuantitySkipsAccountingRowsAndEmptyLadders(t *testing.T) {
+	ledgerOnly := aggragates.Trades{History: []aggragates.TradesHistory{
+		{Type: "BUY", Quantity: 12.5, Price: AccountingPriceCeiling, OrderId: 30},
+		{Type: "BUY", Quantity: 12.5, Price: 0.0000000000001, OrderId: 31},
+	}}
+	if got := EntryQuantity(ledgerOnly); got != 0 {
+		t.Fatalf("a child-profit ledger row is not an entry, got %f", got)
+	}
+
+	beside := aggragates.Trades{History: []aggragates.TradesHistory{
+		{Type: "BUY", Quantity: 12.5, Price: AccountingPriceCeiling, OrderId: 30},
+		{Type: "BUY", Quantity: 2, Price: 50, OrderId: 32},
+		{Type: "BUY", Quantity: 0, Price: 80, OrderId: 33},
+	}}
+	if got := EntryQuantity(beside); got != 2 {
+		t.Fatalf("only the real fill is an entry, got %f", got)
+	}
+
+	if got := EntryQuantity(aggragates.Trades{}); got != 0 {
+		t.Fatalf("no fills must have moved nothing, got %f", got)
+	}
+}
+
 // AverageEntryPrice is built on the same fold: the notional over the quantity
 // of the very rows EntryNotional counts, in every shape above, so a trade's used
 // amount and its break even can never disagree on which rows are entries.
@@ -97,6 +154,9 @@ func TestAverageEntryPriceIsTheEntryNotionalOverTheEntryQuantity(t *testing.T) {
 	}
 
 	for name, c := range cases {
+		if got := EntryQuantity(c.trade); got != c.quantity {
+			t.Errorf("%s: entry quantity = %f, want %v units", name, got, c.quantity)
+		}
 		if got, want := AverageEntryPrice(c.trade), EntryNotional(c.trade)/c.quantity; got != want {
 			t.Errorf("%s: average entry price = %f, want the entry notional over %v units, %f", name, got, c.quantity, want)
 		}

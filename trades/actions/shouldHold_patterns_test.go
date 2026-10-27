@@ -1,7 +1,7 @@
 package actions
 
 import (
-	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
+	"github.com/giovani-sirbu/mercury/internal/testutil"
 	"strings"
 	"testing"
 

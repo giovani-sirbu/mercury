@@ -32,102 +32,92 @@ type SophosFib struct {
 	Levels    []float64 `json:"levels"`
 }
 
-// SophosSmartTakeLoss is the nested `smartTakeLoss` object on
-// GET /:symbol/patterns: flat keys, always present, all zero when sophos
-// read nothing. The slowDecline* keys are sophos' quiet slow-decline exit — the
-// slowDeclineRecent* keys its reading on the last closed bars sophos looks
-// back over, slowDeclineFillFrom the oldest bar a ladder's newest fill must
-// sit in for the ladder to go pending, and slowDeclineIndecision the
-// indecision, read from the vote one short of the need or from the whole SMC
-// trend table bearish, which the indecision direction reads — and the
-// capitalProtection* keys the capital protection exit, all read on the
-// closed window of sophos' smart take loss. slowDeclineBreakReasons may be
-// non-null on a leg on and quiet, carrying the whole-table reading's reason
-// alone. A sophos without the object —
-// or one still serving the retired pattern-window keys of the trend-reversal
-// rule, or the retired `slowDeclineMiddleBB` key — decodes to no verdict, no
-// quiet leg, no smooth bar, no bar a fill has to precede, no sell band, no
-// break reasons, no indecision, no recent bar, no fill window, no capital
-// protection band and no bearish SMC trend, which is inert. A sophos without
-// the slowDeclineRecent* keys alone decodes to no recent bar, and the recent
-// path reads for no ladder; one without slowDeclineFillFrom alone decodes to
-// no fill window, and while the recent-fill rule is on no ladder goes
-// pending; one without slowDeclineIndecision alone decodes to no indecision,
-// and the indecision direction latches no ladder.
-//
-// The swingDecline* keys are the closed 1h series of the swing decline:
-// swingDeclineOpens the open time in ms of each bar and swingDeclineCloses its
-// close, parallel and oldest first, the last bars of the window sophos read
-// (sophos' swingdecline.SwingDeclineBars). Sophos never learns a ladder's
-// fills, so it serves the series for every ladder and mercury cuts the window
-// between two fills out of it. A sophos without them, or one that could not
-// read the window, decodes to no series, and the swing decline reads nothing —
-// it is inert; arrays of different lengths are read as no series too
-// (swingdecline.Series).
-//
-// The swingDeclineSmcTrend* keys are the Trend Direction row of the SMC trend
-// dashboard sophos reads at that series' interval as of its last bar:
-// swingDeclineSmcTrendDown the rows whose trend reads down, swingDeclineSmcTrendValid
-// the rows read. A sophos without them, or one whose dashboard could not be
-// read, decodes to zero valid rows — the trend not read — which never passes
-// while the swing decline's trend condition is on
-// (swingdecline.SwingDeclineMinSmcTrendDown): such a sophos triggers no swing
-// decline.
+// SophosSmartTakeLoss is the nested `smartTakeLoss` object on GET /:symbol/patterns: flat keys, always
+// present, zero when sophos read nothing, decoded field for field into SmartTakeLossIndicators.
 type SophosSmartTakeLoss struct {
-	SlowDeclineExit             bool      `json:"slowDeclineExit"`
-	SlowDeclineLegQuiet         bool      `json:"slowDeclineLegQuiet"`
-	SlowDeclineSmoothFrom       int64     `json:"slowDeclineSmoothFrom"`
-	SlowDeclineFillBefore       int64     `json:"slowDeclineFillBefore"`
-	SlowDeclineSellBand         float64   `json:"slowDeclineSellBand"`
-	SlowDeclineExitReasons      []string  `json:"slowDeclineExitReasons"`
-	SlowDeclineBreakReasons     []string  `json:"slowDeclineBreakReasons"`
-	SlowDeclineIndecision       bool      `json:"slowDeclineIndecision"`
-	SlowDeclineRecentAt         int64     `json:"slowDeclineRecentAt"`
-	SlowDeclineRecentFrom       int64     `json:"slowDeclineRecentFrom"`
-	SlowDeclineRecentReasons    []string  `json:"slowDeclineRecentReasons"`
-	SlowDeclineFillFrom         int64     `json:"slowDeclineFillFrom"`
-	CapitalProtectionUpperBB    float64   `json:"capitalProtectionUpperBB"`
+	QuietDeclineVerdict         bool      `json:"quietDeclineVerdict"`
+	QuietDeclineLegQuiet        bool      `json:"quietDeclineLegQuiet"`
+	QuietDeclineSmoothFrom      int64     `json:"quietDeclineSmoothFrom"`
+	QuietDeclineFillBefore      int64     `json:"quietDeclineFillBefore"`
+	QuietDeclineExitReasons     []string  `json:"quietDeclineExitReasons"`
+	QuietDeclineBreakReasons    []string  `json:"quietDeclineBreakReasons"`
+	Indecision                  bool      `json:"indecision"`
+	QuietDeclineRecentAt        int64     `json:"quietDeclineRecentAt"`
+	QuietDeclineRecentFrom      int64     `json:"quietDeclineRecentFrom"`
+	QuietDeclineRecentReasons   []string  `json:"quietDeclineRecentReasons"`
+	IndecisionRecentAt          int64     `json:"indecisionRecentAt"`
+	IndecisionRecentReasons     []string  `json:"indecisionRecentReasons"`
+	QuietDeclineFillFrom        int64     `json:"quietDeclineFillFrom"`
 	CapitalProtectionSmcBearish bool      `json:"capitalProtectionSmcBearish"`
-	SwingDeclineOpens           []int64   `json:"swingDeclineOpens"`
-	SwingDeclineCloses          []float64 `json:"swingDeclineCloses"`
-	SwingDeclineSmcTrendDown    int       `json:"swingDeclineSmcTrendDown"`
-	SwingDeclineSmcTrendValid   int       `json:"swingDeclineSmcTrendValid"`
+	CapitalProtectionSmcBullish bool      `json:"capitalProtectionSmcBullish"`
+	SeriesOpens                 []int64   `json:"seriesOpens"`
+	SeriesCloses                []float64 `json:"seriesCloses"`
+	SeriesHighs                 []float64 `json:"seriesHighs"`
+	SeriesLows                  []float64 `json:"seriesLows"`
+	SmcTrendDown                int       `json:"smcTrendDown"`
+	SmcTrendUp                  int       `json:"smcTrendUp"`
+	SmcTrendValid               int       `json:"smcTrendValid"`
+	SmcTrendTimeframes          []string  `json:"smcTrendTimeframes"`
+	SmcTrendRowDown             []int64   `json:"smcTrendRowDown"`
+	SmcTrendRowUp               []int64   `json:"smcTrendRowUp"`
+	SmcTrendRowReads            []int64   `json:"smcTrendRowReads"`
+	SmcTrendRowFreeFall         []bool    `json:"smcTrendRowFreeFall"`
+	SmcTrendRowFreeRise         []bool    `json:"smcTrendRowFreeRise"`
+	FlatMarketBarOpens          []int64   `json:"flatMarketBarOpens"`
+	FlatMarketOpenPrices        []float64 `json:"flatMarketOpenPrices"`
+	FlatMarketHighs             []float64 `json:"flatMarketHighs"`
+	FlatMarketLows              []float64 `json:"flatMarketLows"`
+	FlatMarketCloses            []float64 `json:"flatMarketCloses"`
+	FreeFallOpens               []int64   `json:"freeFallOpens"`
+	FreeFallMasks               []int64   `json:"freeFallMasks"`
+	FreeRiseMasks               []int64   `json:"freeRiseMasks"`
 }
 
-// Indicators folds the flat wire keys into the block the gate reads. The two
-// swing decline series map as they decode: a nil one stays nil, so a sophos
-// without them hands the gate no series at all, and the two Trend Direction
-// counts map as they decode too: zero valid rows is a trend not read.
+// Indicators folds the flat wire keys into the block the gate reads, each as it decoded.
 func (s SophosSmartTakeLoss) Indicators() SmartTakeLossIndicators {
 	return SmartTakeLossIndicators{
-		SlowDeclineExit:             s.SlowDeclineExit,
-		SlowDeclineLegQuiet:         s.SlowDeclineLegQuiet,
-		SlowDeclineSmoothFrom:       s.SlowDeclineSmoothFrom,
-		SlowDeclineFillBefore:       s.SlowDeclineFillBefore,
-		SlowDeclineSellBand:         s.SlowDeclineSellBand,
-		SlowDeclineExitReasons:      s.SlowDeclineExitReasons,
-		SlowDeclineBreakReasons:     s.SlowDeclineBreakReasons,
-		SlowDeclineIndecision:       s.SlowDeclineIndecision,
-		SlowDeclineRecentAt:         s.SlowDeclineRecentAt,
-		SlowDeclineRecentFrom:       s.SlowDeclineRecentFrom,
-		SlowDeclineRecentReasons:    s.SlowDeclineRecentReasons,
-		SlowDeclineFillFrom:         s.SlowDeclineFillFrom,
-		CapitalProtectionUpperBB:    s.CapitalProtectionUpperBB,
+		QuietDeclineVerdict:         s.QuietDeclineVerdict,
+		QuietDeclineLegQuiet:        s.QuietDeclineLegQuiet,
+		QuietDeclineSmoothFrom:      s.QuietDeclineSmoothFrom,
+		QuietDeclineFillBefore:      s.QuietDeclineFillBefore,
+		QuietDeclineExitReasons:     s.QuietDeclineExitReasons,
+		QuietDeclineBreakReasons:    s.QuietDeclineBreakReasons,
+		Indecision:                  s.Indecision,
+		QuietDeclineRecentAt:        s.QuietDeclineRecentAt,
+		QuietDeclineRecentFrom:      s.QuietDeclineRecentFrom,
+		QuietDeclineRecentReasons:   s.QuietDeclineRecentReasons,
+		IndecisionRecentAt:          s.IndecisionRecentAt,
+		IndecisionRecentReasons:     s.IndecisionRecentReasons,
+		QuietDeclineFillFrom:        s.QuietDeclineFillFrom,
 		CapitalProtectionSmcBearish: s.CapitalProtectionSmcBearish,
-		SwingDeclineOpens:           s.SwingDeclineOpens,
-		SwingDeclineCloses:          s.SwingDeclineCloses,
-		SwingDeclineSmcTrendDown:    s.SwingDeclineSmcTrendDown,
-		SwingDeclineSmcTrendValid:   s.SwingDeclineSmcTrendValid,
+		CapitalProtectionSmcBullish: s.CapitalProtectionSmcBullish,
+		SeriesOpens:                 s.SeriesOpens,
+		SeriesCloses:                s.SeriesCloses,
+		SeriesHighs:                 s.SeriesHighs,
+		SeriesLows:                  s.SeriesLows,
+		SmcTrendDown:                s.SmcTrendDown,
+		SmcTrendUp:                  s.SmcTrendUp,
+		SmcTrendValid:               s.SmcTrendValid,
+		SmcTrendTimeframes:          s.SmcTrendTimeframes,
+		SmcTrendRowDown:             s.SmcTrendRowDown,
+		SmcTrendRowUp:               s.SmcTrendRowUp,
+		SmcTrendRowReads:            s.SmcTrendRowReads,
+		SmcTrendRowFreeFall:         s.SmcTrendRowFreeFall,
+		SmcTrendRowFreeRise:         s.SmcTrendRowFreeRise,
+		FlatMarketBarOpens:          s.FlatMarketBarOpens,
+		FlatMarketOpenPrices:        s.FlatMarketOpenPrices,
+		FlatMarketHighs:             s.FlatMarketHighs,
+		FlatMarketLows:              s.FlatMarketLows,
+		FlatMarketCloses:            s.FlatMarketCloses,
+		FreeFallOpens:               s.FreeFallOpens,
+		FreeFallMasks:               s.FreeFallMasks,
+		FreeRiseMasks:               s.FreeRiseMasks,
 	}
 }
 
-// SophosPrediction is the wire contract shared by hermes and sisyphus for
-// GET /:symbol and GET /:symbol/patterns. Extra fields sophos may send are
-// ignored; missing ones stay at the zero value and stay inert.
-//
-// Served but deliberately NOT decoded: `usePrediction` (ML route,
-// informational; no reader in any engine). Neither route carries the
-// DynamicParams reads: those are GET /:symbol/smc-trend's (SophosSmcTrend).
+// SophosPrediction is the wire contract hermes and sisyphus share for GET /:symbol and
+// GET /:symbol/patterns: extra fields are ignored, missing ones stay zero and inert. usePrediction
+// is not decoded (no reader), and the DynamicParams reads are GET /:symbol/smc-trend's (SophosSmcTrend).
 type SophosPrediction struct {
 	Action         string               `json:"action"`
 	MarketBearish  bool                 `json:"marketBearish"`

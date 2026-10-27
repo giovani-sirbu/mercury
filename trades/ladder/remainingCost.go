@@ -7,52 +7,15 @@ import (
 )
 
 // RemainingCost is the ladder's remaining PLANNED budget: what the entries
-// from its next depth through its own ceiling (ConfiguredDepths) were sized to
-// cost, together with the asset it spends them in.
-//
-// The rows it walks are the ones the ladder trades (tradedSettings): a ladder
-// that opened raised walks the raised rows, so the depths its opened event added
-// are reserved for at the raised percentage and multiplier — the depths its
-// first entry was sized for. Read on the stored rows it would report nothing
-// left to pay for at the stored ceiling, and the wallet would be spent from
-// under the largest entries the grid places.
-//
-// It is the amount the cooldown depth-priority gate reserves the wallet for.
-// A depth alone says nothing about money — a ladder can be one entry from its
-// ceiling and need more than the wallet holds, or five entries from it and
-// need almost nothing — so the view carries the sum and the gate compares
-// against it.
-//
-// PLANNED is the whole point, and it is the arithmetic the grid was laid out
-// with: CalculateInitialBid sizes the initial bid so that the entries after
-// it, each one the previous quantity times the row's multiplier at a price a
-// further percentage step down, add up to the budget. So the walk here moves
-// the price down the grid exactly as it moves the quantity up, and an inverse
-// ladder is counted in bare base quantities because its grid is planned that
-// way too — the percentage shapes only the quote proceeds there.
-//
-// Pricing the tail at TODAY's price instead would reserve far more than the
-// grid can ever spend: every remaining entry would be charged at the level
-// the ladder has already fallen to, and on a doubling ladder the compounded
-// difference is enough for one ladder's remainder to exceed the whole wallet
-// from its first depth — which turns a reserve into a queue, holding every
-// sibling out of its first fill.
-//
-// The walk starts from the PLANNED quantity of the last filled depth, never
-// from what that depth has executed so far. An entry settles in parts and the
-// history row's quantity grows with them, so between an entry's first part
-// and its completion the deepest row carries less than the row above it —
-// read as a base, the ladder looks one depth shallower than it is and the
-// reserve comes out roughly one depth short. Every sibling arming inside that
-// window would pass a gate that should have held it, and the entries they
-// place are exactly what the ladder then lacks for its own last depth. The
-// plan has no such window: the first entry's quantity taken through the
-// multipliers is what the depth WILL be worth, part-filled or not.
-//
-// Zero, meaning "this ladder reserves nothing", on every ladder that cannot
-// name an amount: one that has filled no entry (there is no quantity to
-// multiply), one whose pair carries no settings row, one with no configured
-// ceiling or already at it, and a long one without a position price.
+// from its next depth through its ceiling were sized to cost, with the asset
+// they spend. It is the amount the cooldown depth-priority gate reserves the
+// wallet for. The walk follows the grid's own arithmetic on the rows the
+// ladder trades (tradedSettings): quantity up by the row's multiplier, price
+// down by the row's percentage per depth, from the planned quantity of the
+// last filled depth, never the executed one, so a part-filled entry does not
+// read the ladder one depth shallower. Zero on a ladder that cannot name an
+// amount: no fill, no settings row, no ceiling or already at it, a long one
+// without a position price.
 func RemainingCost(trade aggragates.Trades) (string, float64) {
 	settings := tradedSettings(trade)
 	filled := CountFilledEntries(trade)
@@ -60,21 +23,16 @@ func RemainingCost(trade aggragates.Trades) (string, float64) {
 	return remainingCostAt(trade, settings, filled, ceilingOf(settings, filled))
 }
 
-// remainingCostAt is RemainingCost for a caller that already holds the rows the
-// ladder trades, has counted its filled entries and has read its ceiling.
-// DepthOf holds all three, and every surface builds its whole wallet view
-// through DepthOf — folding the same history, or the same events, again per
-// ladder is work the tick path pays for nothing.
+// remainingCostAt is RemainingCost for a caller that already holds the traded
+// rows, the filled count and the ceiling.
 func remainingCostAt(trade aggragates.Trades, settings []aggragates.StrategySettings, filled, ceiling int) (string, float64) {
 	return SpendingAsset(trade), remainingCostFrom(trade, settings, filled, ceiling, trade.PositionPrice)
 }
 
-// remainingCostFrom is the walk itself, down the grid from price. Both
-// readings of the remaining depths take it — RemainingCost from the position
-// price, the planned one from the ladder's last fill — so they can differ in
-// where the walk starts and nowhere else. settings are the rows the ladder
-// trades (tradedSettings), read once by the caller. A long walk with no price
-// to start from names no amount.
+// remainingCostFrom is the walk itself, down the grid from price: RemainingCost
+// starts it at the position price, the planned reading at the ladder's last
+// fill. An inverse ladder is counted in bare base quantities, as its grid is
+// planned; a long walk with no price names no amount.
 func remainingCostFrom(trade aggragates.Trades, settings []aggragates.StrategySettings, filled, ceiling int, price float64) float64 {
 	if len(settings) == 0 {
 		return 0
@@ -92,8 +50,7 @@ func remainingCostFrom(trade aggragates.Trades, settings []aggragates.StrategySe
 	cost := 0.0
 
 	for depth := filled; depth < ceiling; depth++ {
-		// Entry number depth+1 reads row depth, the same row-selection
-		// contract Buy and the funds gate use for the entry they place.
+		// Entry depth+1 reads row depth.
 		row := settings[SettingsIndexOrBase(settings, depth)]
 		quantity *= row.Multiplier
 
@@ -102,8 +59,7 @@ func remainingCostFrom(trade aggragates.Trades, settings []aggragates.StrategySe
 			continue
 		}
 
-		// One percentage step further down the grid per depth, the step the
-		// ladder was planned to buy that entry at.
+		// One percentage step down per depth.
 		price *= 1 - row.Percentage/100
 		cost += quantity * price
 	}
@@ -111,15 +67,10 @@ func remainingCostFrom(trade aggragates.Trades, settings []aggragates.StrategySe
 	return cost
 }
 
-// SpendingAsset is the side of the pair a ladder's entries spend: the quote
-// asset for a long ladder, the base asset for an inverse one, which is the
-// asset the funds gate compares the wallet against. An unparsable symbol
-// names no asset, and a view entry with no asset matches no other.
-//
-// Exported because the engines have to tag the balance they read with the
-// same asset the wallet view names for that ladder, and they must not each
-// split the symbol their own way: a balance tagged one way and ladders
-// scoped another simply never meet, and the gate silently stops holding.
+// SpendingAsset is the asset a ladder's entries spend: quote for a long
+// ladder, base for an inverse one, the asset the funds gate compares the
+// wallet against. An unparsable symbol names none, and a view entry with no
+// asset matches no balance.
 func SpendingAsset(trade aggragates.Trades) string {
 	pair := strings.Split(trade.Symbol, "/")
 	if len(pair) != 2 {
@@ -132,17 +83,12 @@ func SpendingAsset(trade aggragates.Trades) string {
 	return pair[1]
 }
 
-// plannedQuantityAtDepth is what the ladder's entry at the given depth was
-// laid out to be: the first entry's quantity — the initial bid the whole grid
-// is built from — taken through the multiplier of every row the entries after
-// it read, out of settings — the rows the ladder trades (tradedSettings). It is
-// the quantity the grid commits to, so it does not move while an entry is
-// settling.
+// plannedQuantityAtDepth is the first entry's quantity taken through the
+// multipliers of the rows the entries after it read.
 func plannedQuantityAtDepth(trade aggragates.Trades, settings []aggragates.StrategySettings, depth int) float64 {
 	quantity := firstEntryQuantity(trade)
 
-	// Entry k+1 reads row k, the row-selection contract every ladder read
-	// shares; the first entry is the initial bid and reads no row at all.
+	// Entry k+1 reads row k; the first entry reads none.
 	for entry := 1; entry < depth; entry++ {
 		quantity *= settings[SettingsIndexOrBase(settings, entry)].Multiplier
 	}
@@ -150,14 +96,8 @@ func plannedQuantityAtDepth(trade aggragates.Trades, settings []aggragates.Strat
 	return quantity
 }
 
-// firstEntryQuantity is the quantity of the ladder's first entry, read in
-// history order: the earliest row CountFilledEntries would count, on the side
-// this ladder enters from, skipping the bookkeeping rows an impasse child's
-// profit transfer leaves on its parent.
-//
-// Order status is deliberately not consulted — the surfaces that build the
-// wallet view do not agree on that field, and a reserve that read it would
-// mean one thing in a replay and another in production.
+// firstEntryQuantity is the earliest entry-side history row's quantity,
+// skipping the accounting rows; order status is not consulted.
 func firstEntryQuantity(trade aggragates.Trades) float64 {
 	entrySide := "BUY"
 	if trade.Inverse {
@@ -178,14 +118,8 @@ func firstEntryQuantity(trade aggragates.Trades) float64 {
 	return 0
 }
 
-// lastEntryQuantity is the quantity of the ladder's latest entry, the one the
-// next entry is sized from — GetLatestQuantityByHistory's answer, taken on a
-// copy of the history.
-//
-// The copy is the point: that helper sorts the slice it is handed, and the
-// wallet view is built over trades the engines hold by reference and read
-// under a shared lock. Reordering their history rows from here would mutate
-// the engine's own memory on every gated tick.
+// lastEntryQuantity is the latest entry's quantity, read on a copy because
+// GetLatestQuantityByHistory sorts the slice.
 func lastEntryQuantity(trade aggragates.Trades) float64 {
 	entrySide := "BUY"
 	if trade.Inverse {

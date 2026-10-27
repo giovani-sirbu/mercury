@@ -12,16 +12,15 @@ import (
 )
 
 // AllowRoundedQuantityPercentage is how far under the quantity an entry needs
-// the wallet may sit and still place that entry, as a percentage of the needed
-// quantity. Inside it the shortfall is treated as the wallet having drifted a
-// fraction below the ladder's own arithmetic — fees charged in the quote
-// asset, a balance reconciled after a partial fill — and the entry is placed
-// for what the wallet holds instead of blocking the trade. A shortfall wider
-// than this is a real one and blocks as before.
-//
-// Zero turns the waiver off: every shortfall blocks, whatever its size.
+// the wallet may sit and still place that entry for what it holds, as a share
+// of the needed quantity; a wider shortfall blocks. Zero turns the waiver off.
 const AllowRoundedQuantityPercentage = 10.0
 
+// HasFunds checks the wallet covers the next order. A small entry shortfall
+// is waived (AllowsRoundedQuantity) and Buy trims the entry to the wallet; a
+// ladder with fills under the Impasse flag flips to impasse when a fresh
+// ladder could be sized from what it used; anything else blocks the trade
+// with an insufficient-funds error.
 func HasFunds(event events.Events) (events.Events, error) {
 	remainedQuantity, neededQuantity, assetSymbol, err := funds.GetFundsQuantities(event)
 
@@ -30,25 +29,15 @@ func HasFunds(event events.Events) (events.Events, error) {
 	}
 
 	if remainedQuantity < neededQuantity {
-		// A wallet only marginally short of the entry buys what it can afford
-		// rather than blocking the trade. Buy reads the amount off Params;
-		// the chains that place no order ignore it.
+		// A marginal shortfall buys what the wallet affords; Buy reads the amount off Params.
 		if AllowsRoundedQuantity(event, remainedQuantity, neededQuantity) {
 			event.Params.AvailableQuantity = remainedQuantity
 			return event, nil
 		}
 
-		// A trade with no fills holds nothing: there is no position to
-		// average down, so impasse does not apply to a first entry (same
-		// predicate as the sisyphus HasFunds). Without it a first entry that
-		// lost the wallet to InverseUsedAmount flipped to impasse and the
-		// next tick ran createChildrenTrades → sellAll against no position.
+		// A first entry has no position to average down, so impasse never applies to it.
 		firstEntry := len(event.Trade.History) == 0
-		// set trade to impasse if this feature is activated for this strategy.
-		// The check sizes a ladder from the trade's own rows, never from
-		// Params.EntrySettings: those size a first entry (Buy), and a ladder
-		// that reaches this check has fills. A first entry reaches no sizing
-		// here at all — it needs nothing from the funds gate.
+		// The impasse check sizes a ladder from the trade's own rows, never Params.EntrySettings.
 		if !firstEntry && event.Trade.Strategy.Params.Impasse && event.Trade.ParentID == 0 {
 			usedAmount := quantities.GetUsedQuantities(event) * event.Trade.PositionPrice
 			_, hasFundsError := ladder.CalculateInitialBid(usedAmount, event.Trade, 0)
@@ -65,25 +54,16 @@ func HasFunds(event events.Events) (events.Events, error) {
 
 // AllowsRoundedQuantity reports whether the wallet sits close enough under the
 // quantity the next entry needs for that entry to be placed for the wallet's
-// amount instead of blocking the trade.
-//
-// Entries only. A shortfall on the closing side is a missing position, not a
-// missing budget: trimming the close to the wallet leaves behind a remainder
-// that no later tick can sell once it falls under the exchange minimum, so
-// those keep blocking.
-//
-// Exported because the sisyphus backtest owns its own copy of HasFunds and has
-// to answer this the same way the live engine does; a run that blocks entries
-// production would place is not calibrating the same strategy. That copy adds
-// one rule of its own — it prices a first entry, where this gate reads zero —
-// so it asks about first entries before it asks this.
+// amount instead of blocking. Entries only: a short close is a missing
+// position, not a missing budget, and a trimmed close would leave a remainder
+// under the exchange minimum. Exported because the sisyphus backtest's own
+// HasFunds must answer it the same way.
 func AllowsRoundedQuantity(event events.Events, remainedQuantity, neededQuantity float64) bool {
 	if AllowRoundedQuantityPercentage <= 0 {
 		return false
 	}
 
-	// A needed quantity of zero is not a shortfall to round off: the entry
-	// asks for nothing and only an overdrawn wallet puts it here.
+	// A needed quantity of zero is no shortfall to round off.
 	if neededQuantity <= 0 || remainedQuantity <= 0 || event.Trade.PositionPrice <= 0 {
 		return false
 	}
@@ -96,11 +76,7 @@ func AllowsRoundedQuantity(event events.Events, remainedQuantity, neededQuantity
 		return false
 	}
 
-	// The entry the wallet can afford still has to be one the exchange
-	// accepts. Below the minimum order quantity Buy raises it back to that
-	// minimum, which puts the order over the wallet again and turns this
-	// waiver into an exchange rejection — a worse outcome than the block it
-	// replaced.
+	// The affordable entry must still clear the exchange minimum, or Buy raises it back over the wallet.
 	affordableQuantity := remainedQuantity
 	if !event.Trade.Inverse {
 		affordableQuantity = remainedQuantity / event.Trade.PositionPrice

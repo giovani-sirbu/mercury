@@ -30,19 +30,12 @@ func Sell(event events.Events) (events.Events, error) {
 		return tradelog.SaveError(event, clientError)
 	}
 	buyQty, sellQty := quantities.GetGrossQuantities(event)
-	// Literal asset fees: only base-paid fees reduce the base wallet balance,
-	// only quote-paid fees reduce the quote wallet balance. BNB/third-asset
-	// fees come from a separate wallet and must NOT be subtracted from the
-	// trade's base or quote totals here. For profit accounting that needs the
-	// full cost-in-denomination, use GetFeesBaseQuote / GetFees instead.
+	// Literal asset fees only: a third-asset fee comes from a separate wallet.
 	feeInBase, feeInQuote := fees.CalculateFees(event)
 	quantity := buyQty - sellQty - feeInBase
 
 	if event.Trade.Inverse {
-		// Inverse trades need quote-denominated totals: each fill's quantity is
-		// re-aggregated multiplied by its own price. Then we subtract literal
-		// quote fees, convert to base by dividing by PositionPrice, and
-		// subtract any literal base-side fees (covers partial-fill dust).
+		// Quote totals per fill, less quote fees, converted at the position price, less base fees.
 		sellInQuote := ladder.GetQuantityInQuote(event.Trade.History, "BUY")
 		buyInQuote := ladder.GetQuantityInQuote(event.Trade.History, "SELL")
 		quantity = sellInQuote - buyInQuote - feeInQuote

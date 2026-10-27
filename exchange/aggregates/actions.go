@@ -6,14 +6,7 @@ import (
 	"github.com/adshao/go-binance/v2/common"
 )
 
-// Actions is the function-bag every spot exchange adaptor must populate.
-// Mercury callers hold this struct instead of a typed interface so custom
-// exchanges (e.g. the virtual exchange for backtesting) can override only
-// the functions they need and leave the rest nil.
-//
-// IMPORTANT: a zero-value Actions has nil function fields. Calling a
-// function field that was not assigned panics — always check the adaptor
-// fully initialises the fields you rely on, or nil-check at the call site.
+// Actions is the function bag a spot exchange adaptor populates; an unassigned field is nil.
 type Actions struct {
 	Buy              func(symbol string, quantity float64, price string) (CreateOrderResponse, *common.APIError)
 	Sell             func(symbol string, quantity float64, price string) (CreateOrderResponse, *common.APIError)

@@ -3,9 +3,9 @@ package ladder
 import (
 	"testing"
 
+	"github.com/giovani-sirbu/mercury/internal/testutil"
+	"github.com/giovani-sirbu/mercury/strategies/gates/dynamicparams"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/gates/dynamicparams"
-	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 )
 
 // What a ladder still has to spend, on a grid that changes BOTH its

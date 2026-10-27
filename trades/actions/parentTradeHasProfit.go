@@ -10,19 +10,15 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/quantities"
 )
 
+// ParentTradeHasProfit refuses an impasse parent's exit when the parent's
+// simulated close plus every child's own net profit, converted to quote,
+// totals under zero.
 func ParentTradeHasProfit(event events.Events) (events.Events, error) {
-	// the quantity the close would actually submit (net of embodied fees), and
-	// the lot-size remainder it would leave behind
 	quantity, dust, historyType := quantities.SimulatedClose(event)
 
-	// simulate sell event to calculate profit & get trade profit
 	trade := event.Trade
 
-	// Sell keeps this remainder as Dust and GetProfit credits it at the
-	// position price. This path refuses the parent's exit on a negative total,
-	// so dropping it holds an impasse open against a close that books above
-	// zero. Each child carries its own through the hasProfit it re-enters
-	// below.
+	// Sell keeps the remainder as Dust and GetProfit credits it at the position price.
 	trade.Dust = dust
 
 	trade.History = append(trade.History, aggragates.TradesHistory{
@@ -31,19 +27,14 @@ func ParentTradeHasProfit(event events.Events) (events.Events, error) {
 		Price:    trade.PositionPrice,
 	})
 
-	// get gross profit
 	netProfit := profit.GetProfit(trade)
 
-	// One leg's worth estimates the closing fee the simulated fill lacks, plus
-	// whatever opening commission the fill quantities do not embody (see
-	// HasProfit and fees.UnembodiedOpeningFees).
+	// One closing leg plus the opening commissions the quantities do not embody.
 	closingFees := fees.GetFees(event)
 	openingFees := fees.UnembodiedOpeningFees(event)
 
-	// subtract fees and return net profit
 	netProfit -= closingFees + openingFees
 
-	// gen children profits
 	var childrenProfit float64
 	client, _ := event.Exchange.Client()
 	for index, childrenTrade := range event.ChildrenTrades {
@@ -60,9 +51,7 @@ func ParentTradeHasProfit(event events.Events) (events.Events, error) {
 		newEvent := events.Events{Trade: childrenTrade, Events: event.Events, EventsNames: []string{"hasProfit"}}
 		newEvent, _ = event.Events["hasProfit"](newEvent)
 
-		// Each child answers in its OWN denomination: HasProfit gives a spot
-		// child its quote and an inverse child its base, so an inverse child
-		// is converted with its own price, never the parent's.
+		// Each child answers in its own denomination; an inverse child converts at its own price.
 		childProfit := newEvent.Trade.Profit
 		if childrenTrade.Inverse {
 			childProfit *= childrenPrice
@@ -70,19 +59,7 @@ func ParentTradeHasProfit(event events.Events) (events.Events, error) {
 		childrenProfit += childProfit
 	}
 
-	// Sum children profit into the parent's. Both sides are quote amounts now,
-	// so this is an addition.
-	//
-	// It used to be `childrenProfit * event.Trade.PositionPrice`, which read
-	// the children's quote profit as if it were denominated in the parent's
-	// BASE asset and inflated it by the parent's whole price — on a BTC parent
-	// a child's 3 USDC showed up as 300000. The children are trades on the
-	// strategy's ImpassePairs, arbitrary symbols with their own inverse flag,
-	// so the parent's price never converted anything for them.
-	//
-	// This assumes the children quote in the parent's quote asset, which is
-	// how ImpassePairs are configured; a child on a different quote would need
-	// its own cross rate, which nothing on the event carries.
+	// Both sides are quote amounts: ImpassePairs quote in the parent's quote asset.
 	netProfit += childrenProfit
 
 	if netProfit < 0 {

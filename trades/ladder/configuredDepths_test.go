@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/giovani-sirbu/mercury/strategies/gates/dynamicparams"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/gates/dynamicparams"
 )
 
 // depthTrade is a long whose ladder has filled the given number of entries,

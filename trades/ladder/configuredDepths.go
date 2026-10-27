@@ -6,27 +6,15 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
-// ConfiguredDepths is how many entries the trade's grid is allowed to fill:
-// the Depths of the settings row the NEXT fill would use, floored — Depths is
-// configured as a float and a fraction of an entry cannot be placed.
-//
-// The rows are the ones the ladder trades (tradedSettings), so a ladder that
-// opened raised has the ceiling its own grid was sized for, not the one its
-// stored rows carry.
-//
-// It reads the row of the next fill, not of the last one, because that is the
-// row that governs the entry being decided; SettingsIndexOrBase falls back to
-// the base row for a depth no row was configured for. A trade whose pair
-// carries no settings at all answers 0: no ceiling is known, and every caller
-// reads 0 as unknown rather than as a full ladder.
+// ConfiguredDepths is how many entries the ladder may fill: the floored Depths
+// of the row the NEXT fill reads, on the rows the ladder trades
+// (tradedSettings), so a ladder that opened raised keeps its raised ceiling.
+// A trade whose pair carries no settings answers 0, read as unknown, never as full.
 func ConfiguredDepths(trade aggragates.Trades) int {
 	return ceilingOf(tradedSettings(trade), CountFilledEntries(trade))
 }
 
-// ceilingOf is ConfiguredDepths for a caller that already holds the rows the
-// ladder trades and has counted its filled entries. DepthOf holds both, and
-// the raise is read off the trade's strategy events, so handing the rows down
-// is one pass over them per ladder instead of one per reading.
+// ceilingOf is ConfiguredDepths for a caller that already holds the traded rows and the filled count.
 func ceilingOf(settings []aggragates.StrategySettings, filled int) int {
 	if len(settings) == 0 {
 		return 0

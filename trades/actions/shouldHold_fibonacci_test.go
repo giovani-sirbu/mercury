@@ -3,8 +3,8 @@ package actions
 import (
 	"testing"
 
+	"github.com/giovani-sirbu/mercury/internal/testutil"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 )
 
 // A structural pattern outranks the fibonacci wait, and fibonacci only

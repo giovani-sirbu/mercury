@@ -3,8 +3,8 @@ package ladder
 import (
 	"testing"
 
+	"github.com/giovani-sirbu/mercury/internal/testutil"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/internal/testutil"
 )
 
 // costEpsilon is float noise on sums of a few entries priced in the hundreds.

@@ -55,11 +55,7 @@ func CreateFuturesOrders(event events.Events) (events.Events, error) {
 
 	qty = helpers.ToFixed(qty, lotSize)
 
-	// Format with the futures precision just fetched, not the pair's spot lot
-	// size: the rounding on the line above already uses it, and the two
-	// disagree whenever the same symbol trades at different precision on the
-	// two venues — printing more decimals than the futures filter allows is
-	// rejected, printing fewer silently changes the size.
+	// Formatted with the futures precision, not the pair's spot lot size.
 	quantityStr := fmt.Sprintf("%.*f", lotSize, qty)
 
 	adjustment := event.Trade.StrategyPair.StrategySettings[0].PriceAdjustment * 0.01
@@ -83,10 +79,8 @@ func CreateFuturesOrders(event events.Events) (events.Events, error) {
 
 	}
 
-	// Anything else — HOLD, an empty verdict, a sophos outage — leaves both
-	// sides empty and the stop price at zero, and the two calls below then
-	// submit an order with no side. There is no direction to trade here, so
-	// the chain stops instead.
+	// No direction (HOLD, an empty verdict, a sophos outage): stop the chain
+	// instead of submitting a sideless order.
 	if orderSide == "" {
 		return events.Events{}, fmt.Errorf("no futures direction for %s: AI action is %q", event.Trade.Symbol, event.Params.AIIndicators.AIAction)
 	}

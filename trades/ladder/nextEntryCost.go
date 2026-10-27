@@ -7,30 +7,13 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
-// NextEntryCost is what the trade's next entry spends, and the asset it
-// spends it in: the ladder's next depth for a trade that has already filled
-// one, the ladder's initial bid for a trade that has not.
-//
-// It mirrors funds.GetFundsQuantities — the entry-side branch of it — and has
-// to move with it. The duplication is deliberate: the funds gate reaches the
-// exchange for a balance and a permission check on a path that may place an
-// order, while this one is a pure read the wallet gate makes about a trade
-// that is only being weighed. Sizing them apart is what would leave the gate
-// holding an entry for an amount the engine never spends.
-//
-// It prices the entry at the position the chain is about to run, which is
-// already the level that entry arms at — so unlike the remaining-depths walk
-// it takes no further step down the grid.
-//
-// budget is the wallet the first entry would be sized against, exactly as the
-// buy action sizes it; it takes no part once the ladder has a fill to
-// multiply.
-//
-// A first entry is priced from the rows of the trade it is handed. Handed
-// aggragates.Params.SizingTrade's copy, it prices a first entry on the rows
-// the engine named for it (Params.EntrySettings), exactly as the buy action
-// sizes it, while an add keeps the trade's own rows — SizingTrade hands a
-// ladder with fills back as it is.
+// NextEntryCost is what the trade's next entry spends and the asset it spends
+// it in: the next depth of a ladder with a fill, priced at the position the
+// chain is about to run, else the initial bid sized against budget. It
+// mirrors the funds gate's entry-side sizing (funds.GetFundsQuantities) and
+// must move with it, so the depth-priority gate never holds an entry for an
+// amount the engine does not spend. A first entry is priced on the rows of
+// the trade it is handed (Params.EntrySettings through SizingTrade).
 func NextEntryCost(trade aggragates.Trades, budget float64) (string, float64) {
 	asset := SpendingAsset(trade)
 
@@ -48,17 +31,11 @@ func NextEntryCost(trade aggragates.Trades, budget float64) (string, float64) {
 		return asset, 0
 	}
 
-	// Entry number filled+1 reads row filled, the row-selection contract the
-	// funds gate and Buy share.
+	// Entry filled+1 reads row filled.
 	cost := lastEntryQuantity(trade) * settings[SettingsIndexOrBase(settings, filled)].Multiplier
 	if !trade.Inverse {
 		cost *= trade.PositionPrice
-		// The funds gate fits a long's needed amount to the pair's lot size
-		// before it compares, and it fits DOWNWARD — so leaving it out here
-		// would weigh the entry a hair above what the engine ever spends.
-		// Mirrored rather than waived: the two readings have to move
-		// together, and an unmirrored fit is exactly the kind of difference
-		// that survives until the day someone changes it.
+		// Mirrors the funds gate's downward lot-size fit.
 		cost = helpers.ToFixed(cost, int(trade.StrategyPair.TradeFilters.LotSize))
 	}
 
@@ -66,22 +43,10 @@ func NextEntryCost(trade aggragates.Trades, budget float64) (string, float64) {
 }
 
 // initialEntryCost is the first entry: the ladder's initial bid, never below
-// the pair's minimum, in the asset the entry spends. An inverse ladder is bid
-// in base units, so its minimum is the notional converted at the position
-// price; without a price there is no conversion and no floor to raise it to.
-//
-// It sizes the bid directly rather than through CalculateInitialBid, which
-// searches downward through the depths for the first bid that clears the
-// pair's minimum. That search only ever departs from the full-depth bid on a
-// wallet too small to reach the minimum from it — and on such a wallet the
-// funds gate refuses the entry outright, so no order is placed and there is
-// nothing for the reserve to have mis-sized. Everywhere the gate can actually
-// hold something, the two agree exactly; what the search costs, by contrast,
-// is paid on every entry tick of every ladder of the wallet.
-//
-// An inverse ladder is planned without the percentage discount, and an
-// impasse child on its own depth, both for the reasons CalculateInitialBid
-// gives.
+// the pair's minimum notional, in the asset it spends (an inverse ladder's
+// minimum is converted at the position price). It sizes the bid directly at
+// the planned depth rather than through CalculateInitialBid's downward
+// search, which departs from that bid only on a wallet the funds gate refuses.
 func initialEntryCost(trade aggragates.Trades, budget float64) float64 {
 	settings := trade.StrategyPair.StrategySettings
 	row := settings[SettingsIndexOrBase(settings, 0)]
@@ -110,10 +75,7 @@ func initialEntryCost(trade aggragates.Trades, budget float64) float64 {
 	return math.Max(bid, floor)
 }
 
-// plannedLadderDepth is the depth the initial bid is planned against: the
-// row's configured depths brought onto the half-depth grid CalculateInitialBid
-// steps down, so a pair configured off that grid is sized here at the same
-// depth the search would have started from.
+// plannedLadderDepth brings the configured depths onto the half-depth grid CalculateInitialBid steps down.
 func plannedLadderDepth(depths float64) float64 {
 	return math.Floor(depths*2) / 2
 }

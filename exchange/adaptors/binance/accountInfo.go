@@ -9,8 +9,7 @@ import (
 	"github.com/jinzhu/copier"
 )
 
-// GetProfile returns the /account endpoint payload (commissions, permissions,
-// balances).
+// GetProfile returns the /account payload.
 func (e Binance) GetProfile() (aggregates.Account, *common.APIError) {
 	client, initErr := InitExchange(e)
 	if initErr != nil {
@@ -26,10 +25,7 @@ func (e Binance) GetProfile() (aggregates.Account, *common.APIError) {
 	return clientInfoResult, nil
 }
 
-// GetUserAssets returns the per-asset balance list. Falls back to GetProfile
-// if /getUserAsset errors (older API keys lack permission for it, and the spot
-// testnet does not serve the endpoint at all, but the account endpoint carries
-// the same balances).
+// GetUserAssets returns the per-asset balances, falling back to GetProfile when /getUserAsset errors.
 func (e Binance) GetUserAssets() ([]aggregates.UserAssetRecord, *common.APIError) {
 	client, initErr := InitExchange(e)
 	if initErr != nil {
@@ -48,11 +44,7 @@ func (e Binance) GetUserAssets() ([]aggregates.UserAssetRecord, *common.APIError
 	return clientInfoResult, nil
 }
 
-// heldBalances drops the empty rows. /api/v3/account lists every asset the
-// exchange knows about, nearly all of them at zero, while the endpoint it
-// stands in for here reports only what the account actually holds. Callers
-// count and value these rows, so the two sources have to agree on what a row
-// means — otherwise a wallet reads as hundreds of empty assets.
+// heldBalances drops the zero rows the account endpoint lists.
 func heldBalances(balances []aggregates.UserAssetRecord) []aggregates.UserAssetRecord {
 	held := make([]aggregates.UserAssetRecord, 0, len(balances))
 	for _, balance := range balances {
@@ -63,8 +55,7 @@ func heldBalances(balances []aggregates.UserAssetRecord) []aggregates.UserAssetR
 	return held
 }
 
-// assetQuantity totals the buckets a balance row can hold funds in. The account
-// endpoint fills only Free and Locked; /sapi rows add Freeze.
+// assetQuantity totals Free, Locked and Freeze.
 func assetQuantity(balance aggregates.UserAssetRecord) float64 {
 	var total float64
 	for _, amount := range []string{balance.Free, balance.Locked, balance.Freeze} {
@@ -77,14 +68,8 @@ func assetQuantity(balance aggregates.UserAssetRecord) float64 {
 	return total
 }
 
-// APIKeyPermission returns the scopes attached to the configured API key.
-// Callers should check EnableSpotAndMarginTrading before placing orders.
-//
-// The spot testnet serves only the /api/v3 family, so the /sapi/v1 restrictions
-// endpoint answers 404 there with an empty body — no code, no message. Every
-// caller then failed on an error that could say nothing beyond "<APIError>
-// rsp=", which is why testnet could neither list assets nor create a trade.
-// Read the scopes off the account endpoint instead, which the testnet serves.
+// APIKeyPermission returns the API key's scopes; the testnet serves no /sapi
+// restrictions endpoint, so they are read off the account there.
 func (e Binance) APIKeyPermission() (aggregates.APIKeyPermission, *common.APIError) {
 	if e.TestNet {
 		return e.testNetPermission()
@@ -104,10 +89,7 @@ func (e Binance) APIKeyPermission() (aggregates.APIKeyPermission, *common.APIErr
 	return permissions, nil
 }
 
-// testNetPermission derives the scopes from the account endpoint. A testnet key
-// carries no withdrawal or transfer rights, so only the two fields the account
-// payload can answer are filled and the rest stay false — callers gate on
-// EnableSpotAndMarginTrading, which CanTrade answers directly.
+// testNetPermission derives the scopes from the account endpoint: reading, and trading from CanTrade.
 func (e Binance) testNetPermission() (aggregates.APIKeyPermission, *common.APIError) {
 	profile, profileErr := e.GetProfile()
 	if profileErr != nil {

@@ -15,13 +15,10 @@ func ApplyPatternSide(ai AIIndicators, action string) AIIndicators {
 	return ai
 }
 
-// MergeSophosVerdicts folds optional /patterns and ML legs. hasPattern / hasML
-// say a fetch succeeded; a failed leg is omitted so the other still applies.
-// The ML leg carries only the AI verdict: the smart take loss block is served
-// by the pattern route alone, so an ML-only merge leaves it zero, which is
-// inert. Neither leg carries the DynamicParams reads, so the merge leaves
-// them zero too: they are the /smc-trend leg's (NeedsSmcTrendRoute), and the
-// engines set AIIndicators.DynamicParams from that leg after the merge.
+// MergeSophosVerdicts folds the optional /patterns and ML legs; a failed leg
+// is omitted so the other still applies. The ML leg carries only the AI
+// verdict, the smart take loss block comes with the pattern leg alone, and
+// the DynamicParams reads come with neither: the engines set them after the merge.
 func MergeSophosVerdicts(
 	params StrategyParams,
 	patternVerdict AIIndicators,
@@ -50,8 +47,6 @@ func MergeSophosVerdicts(
 		out.AISignalStrength = mlVerdict.AISignalStrength
 		out.StayOutReasons = mlVerdict.StayOutReasons
 	}
-	// The strategy flags are NOT stamped on the verdict: every gate reads
-	// event.Trade.Strategy.Params, and the mirror fields the merge used to
-	// write were read by nothing.
+	// The strategy flags are not stamped on the verdict: every gate reads Strategy.Params.
 	return out
 }

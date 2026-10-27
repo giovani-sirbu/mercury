@@ -17,11 +17,11 @@ import (
 	"github.com/go-redis/cache/v9"
 	"gorm.io/gorm/schema"
 
+	"github.com/giovani-sirbu/mercury/strategies/gates"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown"
+	"github.com/giovani-sirbu/mercury/strategies/gates/dynamicparams"
+	"github.com/giovani-sirbu/mercury/strategies/gates/smarttakeloss"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"github.com/giovani-sirbu/mercury/trades/gates"
-	"github.com/giovani-sirbu/mercury/trades/gates/cooldown"
-	"github.com/giovani-sirbu/mercury/trades/gates/dynamicparams"
-	"github.com/giovani-sirbu/mercury/trades/gates/smarttakeloss"
 )
 
 // The storage contract of the strategy events: what a trade's events look

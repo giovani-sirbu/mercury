@@ -5,17 +5,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// ExchangeRequestDuration is observed around every outbound REST call to a
-// crypto exchange. Tracks both latency and call volume.
-//
-// Labels:
-//   - service:      which HERMATIC service made the call
-//   - exchange:     "binance" / "binance-futures" / future additions
-//   - endpoint:     a stable identifier for the endpoint family ("get-order",
-//                   "place-order", "balance") — NEVER the raw URL (that would
-//                   bake symbol names into label cardinality).
-//   - status_class: "2xx" / "4xx" / "5xx" / "err" (transport error) — keeps
-//                   the success/failure split clear without storing every code.
+// ExchangeRequestDuration times outbound exchange REST calls; endpoint is a
+// stable family name, never the raw URL.
 var ExchangeRequestDuration = promauto.With(Registry).NewHistogramVec(
 	prometheus.HistogramOpts{
 		Name:    "exchange_request_duration_seconds",
@@ -25,8 +16,7 @@ var ExchangeRequestDuration = promauto.With(Registry).NewHistogramVec(
 	[]string{"service", "exchange", "endpoint", "status_class"},
 )
 
-// ExchangeRateLimitHits counts 429 responses from the exchange API. A
-// non-zero rate is your "back off cron or increase delay" signal.
+// ExchangeRateLimitHits counts 429 responses from the exchange API.
 var ExchangeRateLimitHits = promauto.With(Registry).NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "exchange_rate_limit_hits_total",
