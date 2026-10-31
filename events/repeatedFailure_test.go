@@ -11,7 +11,7 @@ import (
 // the ERROR rows and the statistics key on it — and is recognisable as a
 // repeat, but never as a hold: a hold skips the backoff, a repeat must not.
 func TestRepeatedKeepsTheMessageAndIsNotAHold(t *testing.T) {
-	cause := errors.New("Insufficient funds (16648.360232 USDT) for the requested action (stopLoss). You need at least 30014.646680 USDT to resume this trade.")
+	cause := errors.New("Insufficient funds (16648.360232 USDT) for the requested action (trailingBuy). You need at least 30014.646680 USDT to resume this trade.")
 	err := Repeated(cause)
 
 	if err.Error() != cause.Error() {
@@ -34,7 +34,7 @@ func TestRepeatedKeepsTheMessageAndIsNotAHold(t *testing.T) {
 func TestARepeatedFailureStillBacksOff(t *testing.T) {
 	const tradeID = uint(910003)
 
-	runChain(tradeID, Repeated(errors.New("Insufficient funds (1 USDT) for the requested action (stopLoss). You need at least 2 USDT to resume this trade.")))
+	runChain(tradeID, Repeated(errors.New("Insufficient funds (1 USDT) for the requested action (trailingBuy). You need at least 2 USDT to resume this trade.")))
 
 	if backoffDuration(tradeID) == 0 {
 		t.Fatal("a repeated failure must record a backoff")
@@ -52,7 +52,7 @@ func TestTheSameFailureIsLoggedOncePerEpisode(t *testing.T) {
 
 	first := errors.New("Current price 0.361510 is bigger than last position price 0.362476")
 	again := errors.New("Current price 0.361530 is bigger than last position price 0.362476")
-	other := errors.New("Insufficient funds (1 USDT) for the requested action (stopLoss). You need at least 2 USDT to resume this trade.")
+	other := errors.New("Insufficient funds (1 USDT) for the requested action (trailingBuy). You need at least 2 USDT to resume this trade.")
 
 	if event.repeatsLastFailure(first) {
 		t.Fatal("the first failure of an episode is new")

@@ -14,12 +14,12 @@ func TestSaveHoldLogCollapsesAlternatingReasonsWithinWindow(t *testing.T) {
 	at := time.Date(2025, 10, 10, 21, 0, 0, 0, time.UTC)
 	const reasonA = patternHold
 	const reasonB = spacingHold
-	event := holdLogEvent(testutil.NewHoldTrade("stopLoss", false), at)
+	event := holdLogEvent(testutil.NewHoldTrade("trailingBuy", false), at)
 
 	step := func(reason string, offset time.Duration) {
-		event.Trade.PositionType = "stopLoss"
+		event.Trade.PositionType = "trailingBuy"
 		event.Timestamp = at.Add(offset).UnixMilli()
-		event, _ = SaveHoldLog(event, "stopLoss", gates.Hold{Reason: reason})
+		event, _ = SaveHoldLog(event, "trailingBuy", gates.Hold{Reason: reason})
 	}
 
 	step(reasonA, 0)

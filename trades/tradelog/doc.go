@@ -1,6 +1,8 @@
-// Package tradelog writes the non-action rows of Trade.Logs, the entries a
-// chain leaves on a trade when it stops instead of acting. It writes two:
+// Package tradelog writes the rows of Trade.Logs a chain leaves on a trade,
+// each with its readable message and its messageKey:
 //
+//   - the INFO transition row (TransitionLog) of a chain that acted, keyed by
+//     aggragates.TransitionKey;
 //   - the ERROR entry (SaveError) an exchange or funds failure leaves on the
 //     trade, with the exchange error text normalized so repeats collapse;
 //   - the INFO hold row (SaveHoldLog) a gate's refusal leaves, with its

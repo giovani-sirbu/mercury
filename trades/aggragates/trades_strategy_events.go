@@ -8,7 +8,7 @@ import (
 // The strategy params that write strategy events: the flag whose gate ran.
 const (
 	StrategyParamCooldown      = "cooldown"
-	StrategyParamSmartTakeLoss = "smartTakeLoss"
+	StrategyParamSmartSell     = "smartSell"
 	StrategyParamDynamicParams = "dynamicParams"
 )
 

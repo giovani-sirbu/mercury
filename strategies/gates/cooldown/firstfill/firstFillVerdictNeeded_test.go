@@ -39,7 +39,7 @@ func TestFirstFillVerdictNeededOnlyBeforeTheHoldStands(t *testing.T) {
 	if !FirstFillVerdictNeeded(trade, "new") {
 		t.Fatal("a new trade with no events needs the verdict")
 	}
-	for _, position := range []string{"buy", "stopLoss", "takeProfit", ""} {
+	for _, position := range []string{"buy", "trailingBuy", "takeProfit", ""} {
 		if FirstFillVerdictNeeded(trade, position) {
 			t.Fatalf("position %q has no first fill to judge", position)
 		}
@@ -86,7 +86,7 @@ func TestFirstFillVerdictNeededOnFuturesFollowsThePositionAlone(t *testing.T) {
 	if !FirstFillVerdictNeeded(trade, "new") {
 		t.Fatal("a new futures trade fetches the verdict on every tick")
 	}
-	if FirstFillVerdictNeeded(trade, "stopLoss") {
+	if FirstFillVerdictNeeded(trade, "trailingBuy") {
 		t.Fatal("an open futures position has no first fill to judge")
 	}
 }

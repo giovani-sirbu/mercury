@@ -155,7 +155,7 @@ func filledTo(trade aggragates.Trades, depth int) aggragates.Trades {
 // wallet is kept for, and where this one stands.
 func waitingRow(priority string, priorityDepth, ownDepth int) string {
 	return fmt.Sprintf(
-		"Hold stopLoss: cooldown: depth priority, %s at depth %d of %d keeps the wallet for its remaining depths, this ladder waits at depth %d of %d",
+		"Hold trailingBuy: cooldown: depth priority, %s at depth %d of %d keeps the wallet for its remaining depths, this ladder waits at depth %d of %d",
 		priority, priorityDepth, scenarioDepths, ownDepth, scenarioDepths,
 	)
 }
@@ -388,7 +388,7 @@ func TestFallenWalletIsReleasedWhenTheDeepLadderCloses(t *testing.T) {
 // no further entry of that ladder will free the wallet, only its close.
 func holdsUntilCloseRow(priority string, priorityDepth, ownDepth int) string {
 	return fmt.Sprintf(
-		"Hold stopLoss: cooldown: depth priority, %s at depth %d of %d holds the wallet until it closes, this ladder waits at depth %d of %d",
+		"Hold trailingBuy: cooldown: depth priority, %s at depth %d of %d holds the wallet until it closes, this ladder waits at depth %d of %d",
 		priority, priorityDepth, scenarioDepths, ownDepth, scenarioDepths,
 	)
 }
@@ -448,7 +448,7 @@ func TestFallenWalletWritesOneRowWhileTheHoldStands(t *testing.T) {
 
 	// The next tick arms the same depth again, on the same ladders and a
 	// balance that has drifted the way a live one does.
-	held.Trade.PositionType = "stopLoss"
+	held.Trade.PositionType = "trailingBuy"
 	again, err := ShouldHold(priorityEvent(held.Trade, "buy", wallet, free-1))
 	if err == nil {
 		t.Fatal("expected the ladder to still be held on the next tick")

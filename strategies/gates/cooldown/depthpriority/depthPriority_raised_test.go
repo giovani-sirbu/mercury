@@ -40,7 +40,7 @@ func raisedAtTheStoredCeiling(id uint, symbol string) aggragates.Trades {
 // raisedHold is the gate's answer for the trade on a buy tick that carries the
 // wallet view and the balance.
 func raisedHold(trade aggragates.Trades, view []aggragates.LadderDepth, free float64) gates.Hold {
-	return DepthPriorityHold(priorityEvent(trade, "buy", view, free), "stopLoss")
+	return DepthPriorityHold(priorityEvent(trade, "buy", view, free), "trailingBuy")
 }
 
 // assertWaits fails unless the hold names the depth priority event of the wallet

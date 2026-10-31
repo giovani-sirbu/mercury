@@ -5,8 +5,7 @@ import (
 	"strings"
 )
 
-// RowPrefix opens the opened row; agora keeps rows carrying it off the notifications, so it is
-// byte-stable text, never a schema.
+// RowPrefix is the byte-stable text the opened row starts with; readers match the DYNAMIC_PARAMS_OPENED key, never it.
 const RowPrefix = "dynamicParams:"
 
 // OpenedMarker follows RowPrefix on the opened row; byte-stable text no reader matches.

@@ -10,13 +10,13 @@ import (
 )
 
 // DepthPriorityApplies is whether the tick consumes the wallet view: Enabled and Cooldown on, and a
-// transition that spends new capital (a first fill, or an add resolving to stopLoss), never a close.
+// transition that spends new capital (a first fill, or an add resolving to trailingBuy), never a close.
 func DepthPriorityApplies(params aggragates.StrategyParams, oldPosition, position string) bool {
 	if !Enabled || !params.Cooldown {
 		return false
 	}
 
-	return oldPosition == "new" || gates.PositionType(position) == "stopLoss"
+	return oldPosition == aggragates.PositionNew || gates.PositionType(position) == aggragates.PositionTrailingBuy
 }
 
 // DepthPriorityHold is the gate: the zero Hold lets the chain proceed; a refusal carries the row's
@@ -60,6 +60,7 @@ func DepthPriorityHold(event events.Events, position string) gates.Hold {
 
 	return gates.Hold{
 		Reason: depthPriorityHoldMessage(data),
+		Key:    aggragates.LogKeyHoldDepthPriority,
 		Param:  aggragates.StrategyParamCooldown,
 		Gate:   cooldown.GateDepthPriority,
 		Data:   data,

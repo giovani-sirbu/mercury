@@ -40,12 +40,12 @@ func ownershipEvent(trade aggragates.Trades, ai aggragates.AIIndicators, cool ag
 	}
 }
 
-// fullHoldPayload carries every signal that could hold a long stopLoss, the
+// fullHoldPayload carries every signal that could hold a long trailingBuy, the
 // smart take loss's slow-decline verdict, which holds a first fill only, and
 // both dynamic params reads bearish, which hold nothing at all.
 func fullHoldPayload() aggragates.AIIndicators {
 	return aggragates.AIIndicators{
-		SmartTakeLoss:      aggragates.SmartTakeLossIndicators{QuietDeclineVerdict: true},
+		SmartSell:          aggragates.SmartSellIndicators{QuietDeclineVerdict: true},
 		DynamicParams:      aggragates.DynamicParamsIndicators{Timeframe: "1D", Guppy: -1, BMSB: -1, Valid: true},
 		AIAction:           aggragates.ActionHold,
 		AIMarketBearish:    true,
@@ -64,7 +64,7 @@ func expensiveCooldown() aggragates.CoolDownIndicators {
 	return aggragates.CoolDownIndicators{HasFirstFillVerdict: true, AllowLongEntry: false, AllowShortEntry: false}
 }
 
-var holdFamilyPrefixes = []string{"cooldown:", "pattern:", "fibonacci:", "smartTakeLoss:", "AI ", dynamicparams.RowPrefix}
+var holdFamilyPrefixes = []string{"cooldown:", "pattern:", "fibonacci:", "smartSell:", "AI ", dynamicparams.RowPrefix}
 
 // assertOnlyFamily checks the rows a tick wrote against the one family that
 // may speak: exactly its row, and no other family's text in it. The family
@@ -111,14 +111,14 @@ func TestShouldHoldOwnershipMatrixStopLoss(t *testing.T) {
 	}{
 		{"nothing on", aggragates.StrategyParams{}, ""},
 		{"cooldown is inert after the first fill", aggragates.StrategyParams{Cooldown: true}, ""},
-		{"smartTakeLoss holds no open position, verdict or not: it forces exits outside ShouldHold", aggragates.StrategyParams{SmartTakeLoss: true}, ""},
+		{"smartSell holds no open position, verdict or not: it forces exits outside ShouldHold", aggragates.StrategyParams{SmartSell: true}, ""},
 		{"useAI", aggragates.StrategyParams{UseAI: true}, "AI market is bearish"},
-		{"usePatterns", aggragates.StrategyParams{UsePatterns: true}, "pattern: ascending triangle found (resistance 96000.0000), preventing stopLoss"},
+		{"usePatterns", aggragates.StrategyParams{UsePatterns: true}, "pattern: ascending triangle found (resistance 96000.0000), preventing the trailing buy"},
 		{"useForceTrailing", aggragates.StrategyParams{UseForceTrailing: true}, ""},
 		{"dynamicParams shapes the rows and holds no add, both reads bearish", aggragates.StrategyParams{DynamicParams: true}, ""},
 	}
 	for _, c := range cases {
-		trade := ownershipTrade("stopLoss", 4)
+		trade := ownershipTrade("trailingBuy", 4)
 		trade.Strategy.Params = c.params
 		held, err := ShouldHold(ownershipEvent(trade, fullHoldPayload(), expensiveCooldown()))
 		if (c.want != "") != (err != nil) {
@@ -140,7 +140,7 @@ func TestShouldHoldOwnershipMatrixTakeProfit(t *testing.T) {
 	}{
 		{"nothing on", aggragates.StrategyParams{}, ""},
 		{"cooldown", aggragates.StrategyParams{Cooldown: true}, ""},
-		{"smartTakeLoss never holds an exit, verdict or not", aggragates.StrategyParams{SmartTakeLoss: true}, ""},
+		{"smartSell never holds an exit, verdict or not", aggragates.StrategyParams{SmartSell: true}, ""},
 		{"useAI", aggragates.StrategyParams{UseAI: true}, "AI market is bullish"},
 		{"usePatterns", aggragates.StrategyParams{UsePatterns: true}, "pattern: ascending triangle in play, riding to target 104500.0000"},
 		{"dynamicParams never holds an exit, both reads bearish", aggragates.StrategyParams{DynamicParams: true}, ""},
@@ -160,7 +160,7 @@ func TestShouldHoldOwnershipMatrixTakeProfit(t *testing.T) {
 // chain runs as the legacy engine ran it and only funds stop it.
 func TestShouldHoldAllFlagsOffHoldsNothing(t *testing.T) {
 	for _, fills := range []int{4, 7} {
-		trade := ownershipTrade("stopLoss", fills)
+		trade := ownershipTrade("trailingBuy", fills)
 		if held, err := ShouldHold(ownershipEvent(trade, fullHoldPayload(), expensiveCooldown())); err != nil {
 			t.Fatalf("all flags off must hold nothing at depth %d, got %v", fills, messages(held.Trade.Logs))
 		}
@@ -208,11 +208,11 @@ func TestShouldHoldDynamicParamsHoldsNoFirstFill(t *testing.T) {
 // A force-trailing re-anchor reads as the position it re-arms: the gates
 // have power on it and the row keeps the raw position name.
 func TestShouldHoldForceTrailingStatesRunTheGates(t *testing.T) {
-	sl := ownershipTrade("forceTrailingStopLoss", 4)
+	sl := ownershipTrade("forceTrailingBuy", 4)
 	sl.Strategy.Params = aggragates.StrategyParams{UseAI: true}
 	held, err := ShouldHold(ownershipEvent(sl, fullHoldPayload(), expensiveCooldown()))
-	if err == nil || held.Trade.Logs[0].Message != "Hold forceTrailingStopLoss: AI market is bearish" {
-		t.Fatalf("useAI must gate a force-trailing stopLoss, got %v %v", err, messages(held.Trade.Logs))
+	if err == nil || held.Trade.Logs[0].Message != "Hold forceTrailingBuy: AI market is bearish" {
+		t.Fatalf("useAI must gate a force-trailing trailingBuy, got %v %v", err, messages(held.Trade.Logs))
 	}
 
 	ai := fullHoldPayload()

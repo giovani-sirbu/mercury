@@ -64,7 +64,7 @@ func TestTheDepthPriorityHoldRowCarriesTheMarkerAndTheTick(t *testing.T) {
 	trade := testutil.LadderDepthTrade(12, "ETH/USDT", 4, walletDepths)
 	reserve := viewReserve(t, wallet, walletAsset)
 	event := priorityEvent(trade, "buy", wallet, walletShortFor(t, trade, reserve))
-	hold := DepthPriorityHold(event, "stopLoss")
+	hold := DepthPriorityHold(event, "trailingBuy")
 	if want := "cooldown: depth priority, LINK/USDT at depth 7 of 8 keeps the wallet for its remaining depths, this ladder waits at depth 4 of 8"; hold.Reason != want {
 		t.Fatalf("reason = %q, want %q", hold.Reason, want)
 	}
@@ -72,12 +72,12 @@ func TestTheDepthPriorityHoldRowCarriesTheMarkerAndTheTick(t *testing.T) {
 	tick := time.Date(2022, time.May, 9, 14, 5, 0, 0, time.UTC)
 	event.Timestamp = tick.UnixMilli()
 	event.Events = map[string]func(events.Events) (events.Events, error){"updateTrade": testutil.NopUpdateTrade}
-	held, err := tradelog.SaveHoldLog(event, "stopLoss", hold)
+	held, err := tradelog.SaveHoldLog(event, "trailingBuy", hold)
 	if err == nil || len(held.Trade.Logs) != 1 {
 		t.Fatalf("the hold must stop the chain and write one row, got %v and %+v", err, held.Trade.Logs)
 	}
 	row := held.Trade.Logs[0]
-	if row.Message != "Hold stopLoss: "+hold.Reason || !strings.Contains(row.Message, cooldown.DepthPriorityHoldMarker) || !row.CreatedAt.Equal(tick) {
+	if row.Message != "Hold trailingBuy: "+hold.Reason || !strings.Contains(row.Message, cooldown.DepthPriorityHoldMarker) || !row.CreatedAt.Equal(tick) {
 		t.Fatalf("the row must frame the reason, carry the marker and the tick %v, got %+v", tick, row)
 	}
 
@@ -103,7 +103,7 @@ func TestNoOtherCooldownRowNamesTheDepthPriorityMarker(t *testing.T) {
 	first := testutil.At("09:00:00")
 	spaced := testutil.DepthTrade(first, first.Add(5*time.Minute))
 	spaced.PositionPrice = spaced.History[1].Price
-	spacing := depthspacing.DepthSpacingHold(events.Events{Trade: spaced, Timestamp: first.Add(10 * time.Minute).UnixMilli()}, "stopLoss").Reason
+	spacing := depthspacing.DepthSpacingHold(events.Events{Trade: spaced, Timestamp: first.Add(10 * time.Minute).UnixMilli()}, "trailingBuy").Reason
 	if !strings.HasPrefix(spacing, "cooldown: depth") {
 		t.Fatalf("fixture drifted: two depths five minutes apart must be held by depth spacing, got %q", spacing)
 	}

@@ -20,7 +20,7 @@ func withCooldown(trade aggragates.Trades) aggragates.Trades {
 
 func TestShouldHoldReturnsEventUnchangedWhenNoSignals(t *testing.T) {
 	event := events.Events{
-		Trade:  testutil.NewHoldTrade("stopLoss", false),
+		Trade:  testutil.NewHoldTrade("trailingBuy", false),
 		Params: aggragates.Params{OldPosition: "active"},
 	}
 
@@ -35,7 +35,7 @@ func TestShouldHoldReturnsEventUnchangedWhenNoSignals(t *testing.T) {
 
 func TestShouldHoldIgnoresCooldownAfterFirstFill(t *testing.T) {
 	event := events.Events{
-		Trade: withCooldown(testutil.NewHoldTrade("stopLoss", false)),
+		Trade: withCooldown(testutil.NewHoldTrade("trailingBuy", false)),
 		Params: aggragates.Params{
 			OldPosition: "active",
 			CoolDownIndicators: aggragates.CoolDownIndicators{
@@ -129,7 +129,7 @@ func TestShouldHoldFirstFillWithoutVerdictFailsOpen(t *testing.T) {
 
 func TestShouldHoldHoldsOnExplicitAIHoldAction(t *testing.T) {
 	event := events.Events{
-		Trade: withAI(testutil.NewHoldTrade("stopLoss", false)),
+		Trade: withAI(testutil.NewHoldTrade("trailingBuy", false)),
 		Events: map[string]func(events.Events) (events.Events, error){
 			"updateTrade": testutil.NopUpdateTrade,
 		},
@@ -163,7 +163,7 @@ func TestShouldHoldAllowsTakeProfitOnExplicitAIHold(t *testing.T) {
 
 func TestShouldHoldWritesInfoLogAndCollapsesRepeats(t *testing.T) {
 	event := events.Events{
-		Trade: withAI(testutil.NewHoldTrade("stopLoss", false)),
+		Trade: withAI(testutil.NewHoldTrade("trailingBuy", false)),
 		Events: map[string]func(events.Events) (events.Events, error){
 			"updateTrade": testutil.NopUpdateTrade,
 		},
@@ -184,7 +184,7 @@ func TestShouldHoldWritesInfoLogAndCollapsesRepeats(t *testing.T) {
 	if logEntry.Type != aggragates.LOG_INFO {
 		t.Errorf("hold log type = %q, want %q", logEntry.Type, aggragates.LOG_INFO)
 	}
-	if logEntry.Message != "Hold stopLoss: AI market is bearish" {
+	if logEntry.Message != "Hold trailingBuy: AI market is bearish" {
 		t.Errorf("unexpected hold message %q", logEntry.Message)
 	}
 	if held.Trade.PositionType != "active" {
@@ -200,7 +200,7 @@ func TestShouldHoldWritesInfoLogAndCollapsesRepeats(t *testing.T) {
 	// row. The old prefix dedup collapsed it and hid every reason change
 	// behind the first hold — an AI HOLD invisible behind a bearish-market
 	// hold, an entry veto invisible behind cooldown.
-	held.Trade.PositionType = "stopLoss"
+	held.Trade.PositionType = "trailingBuy"
 	held.Params.AIIndicators = aggragates.AIIndicators{AIAction: aggragates.ActionHold}
 	again, err := ShouldHold(held)
 	if err == nil {
@@ -209,7 +209,7 @@ func TestShouldHoldWritesInfoLogAndCollapsesRepeats(t *testing.T) {
 	if len(again.Trade.Logs) != 2 {
 		t.Fatalf("expected a reason change to add a row, got %d logs", len(again.Trade.Logs))
 	}
-	if again.Trade.Logs[1].Message != "Hold stopLoss: AI recommends HOLD" {
+	if again.Trade.Logs[1].Message != "Hold trailingBuy: AI recommends HOLD" {
 		t.Errorf("unexpected second hold message %q", again.Trade.Logs[1].Message)
 	}
 	if len(again.Trade.StrategyEvents) != 0 {
@@ -217,7 +217,7 @@ func TestShouldHoldWritesInfoLogAndCollapsesRepeats(t *testing.T) {
 	}
 
 	// The same reason again on the next tick still collapses.
-	again.Trade.PositionType = "stopLoss"
+	again.Trade.PositionType = "trailingBuy"
 	third, err := ShouldHold(again)
 	if err == nil {
 		t.Fatal("expected hold error on third tick")

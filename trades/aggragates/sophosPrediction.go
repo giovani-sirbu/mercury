@@ -32,9 +32,9 @@ type SophosFib struct {
 	Levels    []float64 `json:"levels"`
 }
 
-// SophosSmartTakeLoss is the nested `smartTakeLoss` object on GET /:symbol/patterns: flat keys, always
-// present, zero when sophos read nothing, decoded field for field into SmartTakeLossIndicators.
-type SophosSmartTakeLoss struct {
+// SophosSmartSell is the nested `smartSell` object on GET /:symbol/patterns: flat keys, always
+// present, zero when sophos read nothing, decoded field for field into SmartSellIndicators.
+type SophosSmartSell struct {
 	QuietDeclineVerdict         bool      `json:"quietDeclineVerdict"`
 	QuietDeclineLegQuiet        bool      `json:"quietDeclineLegQuiet"`
 	QuietDeclineSmoothFrom      int64     `json:"quietDeclineSmoothFrom"`
@@ -74,8 +74,8 @@ type SophosSmartTakeLoss struct {
 }
 
 // Indicators folds the flat wire keys into the block the gate reads, each as it decoded.
-func (s SophosSmartTakeLoss) Indicators() SmartTakeLossIndicators {
-	return SmartTakeLossIndicators{
+func (s SophosSmartSell) Indicators() SmartSellIndicators {
+	return SmartSellIndicators{
 		QuietDeclineVerdict:         s.QuietDeclineVerdict,
 		QuietDeclineLegQuiet:        s.QuietDeclineLegQuiet,
 		QuietDeclineSmoothFrom:      s.QuietDeclineSmoothFrom,
@@ -124,7 +124,7 @@ type SophosPrediction struct {
 	MarketBullish  bool                 `json:"marketBullish"`
 	SignalStrength SophosSignalStrength `json:"signalStrength"`
 	StayOutReasons []string             `json:"stayOutReasons"`
-	SmartTakeLoss  SophosSmartTakeLoss  `json:"smartTakeLoss"`
+	SmartSell      SophosSmartSell      `json:"smartSell"`
 	PatternVerdict SophosPatternVerdict `json:"patternVerdict"`
 	Fib            SophosFib            `json:"fib"`
 }
@@ -139,7 +139,7 @@ func (p SophosPrediction) Indicators() AIIndicators {
 		AIAction:           p.Action,
 		AISignalStrength:   p.SignalStrength.Overall,
 		StayOutReasons:     p.StayOutReasons,
-		SmartTakeLoss:      p.SmartTakeLoss.Indicators(),
+		SmartSell:          p.SmartSell.Indicators(),
 		PatternName:        p.PatternVerdict.Name,
 		PatternDisplayName: p.PatternVerdict.DisplayName,
 		PatternDirection:   p.PatternVerdict.Direction,

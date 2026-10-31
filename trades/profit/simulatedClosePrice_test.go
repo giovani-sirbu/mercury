@@ -55,7 +55,7 @@ func TestSimulatedClosePrice_HaircutOnlyWhileArming(t *testing.T) {
 		}
 	}
 
-	closing := []string{"sell", "sellParent", "sellLoss"}
+	closing := []string{"sell", "sellParent", "takeLoss"}
 	for _, positionType := range closing {
 		trade := newTrade(positionType)
 		if got := SimulatedClosePrice(trade); got != trade.PositionPrice {

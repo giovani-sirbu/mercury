@@ -15,7 +15,7 @@ func firstFillWaitingHold(trade aggragates.Trades, levels firstFillLevels, tick,
 		Inverse:   levels.inverse,
 	}
 
-	return firstFillRefusal(data, firstFillWaitingMessage(trade, levels, data))
+	return firstFillRefusal(data, firstFillWaitingMessage(trade, levels, data), aggragates.LogKeyHoldFirstFill)
 }
 
 // firstFillArmedHold is the hold of an armed entry: an armed event with the tick, the reference and the anchor.
@@ -28,13 +28,14 @@ func firstFillArmedHold(trade aggragates.Trades, levels firstFillLevels, tick, r
 		Inverse:   levels.inverse,
 	}
 
-	return firstFillRefusal(data, firstFillArmedMessage(trade, levels, data))
+	return firstFillRefusal(data, firstFillArmedMessage(trade, levels, data), aggragates.LogKeyHoldFirstFill)
 }
 
-// firstFillRefusal is the gate's refusal: the row's text and the event beside it.
-func firstFillRefusal(data cooldown.FirstFillEvent, message string) gates.Hold {
+// firstFillRefusal is the gate's refusal: the row's text, its key and the event beside it.
+func firstFillRefusal(data cooldown.FirstFillEvent, message, key string) gates.Hold {
 	return gates.Hold{
 		Reason: message,
+		Key:    key,
 		Param:  aggragates.StrategyParamCooldown,
 		Gate:   cooldown.GateFirstFill,
 		Data:   data,

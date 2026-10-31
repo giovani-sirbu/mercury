@@ -10,7 +10,7 @@ import (
 // doubledTrade held at a reference of 100, was released above it, and then
 // filled the given entries — one distinct exchange order each.
 func doubledTrade(inverse bool, fills ...float64) aggragates.Trades {
-	trade := testutil.NewHoldTrade("stopLoss", inverse)
+	trade := testutil.NewHoldTrade("trailingBuy", inverse)
 	trade = withEvents(trade, activatedEventAt(100), enteredEventAt(102.6))
 	side := "BUY"
 	if inverse {

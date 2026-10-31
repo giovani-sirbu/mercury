@@ -295,7 +295,7 @@ func TestReserveLetsTheSiblingThroughUntilItsEntryWouldBreakIn(t *testing.T) {
 		t.Fatalf("expected one row, got %v", messages(held.Trade.Logs))
 	}
 
-	want := reserveGridRow("stopLoss", keeper.Symbol, keeper.Depth, reserveGridShape[1].depth)
+	want := reserveGridRow("trailingBuy", keeper.Symbol, keeper.Depth, reserveGridShape[1].depth)
 	if got := held.Trade.Logs[0].Message; got != want {
 		t.Fatalf("row = %q, want %q", got, want)
 	}
@@ -404,7 +404,7 @@ func TestReserveHandsOnToTheNextDeepestLadderWhenTheKeeperLeaves(t *testing.T) {
 	if err == nil {
 		t.Fatalf("%s must wait while %s is in the view", waiting.Symbol, keeper.Symbol)
 	}
-	want := reserveGridRow("stopLoss", keeper.Symbol, keeper.Depth, reserveGridShape[2].depth)
+	want := reserveGridRow("trailingBuy", keeper.Symbol, keeper.Depth, reserveGridShape[2].depth)
 	if got := held.Trade.Logs[0].Message; got != want {
 		t.Fatalf("row = %q, want %q", got, want)
 	}
@@ -424,7 +424,7 @@ func TestReserveHandsOnToTheNextDeepestLadderWhenTheKeeperLeaves(t *testing.T) {
 	// The tick after the hold: the ladder arms the same depth again, and the
 	// row it is already carrying is the only one it has.
 	standing := held.Trade
-	standing.PositionType = "stopLoss"
+	standing.PositionType = "trailingBuy"
 
 	armed, err := ShouldHold(priorityEvent(standing, "buy", released, next.RemainingCost+ownCost))
 	if err != nil {
@@ -440,7 +440,7 @@ func TestReserveHandsOnToTheNextDeepestLadderWhenTheKeeperLeaves(t *testing.T) {
 	if err == nil {
 		t.Fatalf("%s must wait for %s once it keeps the wallet", waiting.Symbol, next.Symbol)
 	}
-	want = reserveGridRow("stopLoss", next.Symbol, next.Depth, reserveGridShape[2].depth)
+	want = reserveGridRow("trailingBuy", next.Symbol, next.Depth, reserveGridShape[2].depth)
 	if got := stillShort.Trade.Logs[0].Message; got != want {
 		t.Fatalf("row = %q, want %q", got, want)
 	}
@@ -466,7 +466,7 @@ func TestReserveWritesOneRowWhileTheHoldStands(t *testing.T) {
 	// Three ticks of the same standing hold, the balance drifting either way
 	// underneath it the way a live one does.
 	for tick, free := range []float64{short, short - 1, short - 0.5} {
-		standing.PositionType = "stopLoss"
+		standing.PositionType = "trailingBuy"
 
 		held, err := ShouldHold(priorityEvent(standing, "buy", view, free))
 		if err == nil {
@@ -555,7 +555,7 @@ func TestReserveKeepsItsSizeWhileTheDeepestEntryIsStillSettling(t *testing.T) {
 		if err == nil {
 			t.Fatalf("%s: %s must wait while the reserved ladder settles its deepest entry", name, sibling.Symbol)
 		}
-		want := reserveGridRow("stopLoss", keeper.symbol, keeper.depth, reserveGridShape[1].depth)
+		want := reserveGridRow("trailingBuy", keeper.symbol, keeper.depth, reserveGridShape[1].depth)
 		if got := held.Trade.Logs[0].Message; got != want {
 			t.Fatalf("%s: row = %q, want %q", name, got, want)
 		}
@@ -645,9 +645,9 @@ func TestReserveHoldsSiblingsBehindAFullLadderUntilItCloses(t *testing.T) {
 			t.Fatalf("%s: expected one row, got %v", sibling.Symbol, messages(held.Trade.Logs))
 		}
 
-		want := reserveGridRow("stopLoss", nextInLine.Symbol, nextInLine.Depth, depthOf[sibling.Symbol])
+		want := reserveGridRow("trailingBuy", nextInLine.Symbol, nextInLine.Depth, depthOf[sibling.Symbol])
 		if sibling.Symbol == nextInLine.Symbol {
-			want = reserveGridClosingRow("stopLoss", fullSymbol, reserveGridDepths, depthOf[sibling.Symbol])
+			want = reserveGridClosingRow("trailingBuy", fullSymbol, reserveGridDepths, depthOf[sibling.Symbol])
 		}
 		if got := held.Trade.Logs[0].Message; got != want {
 			t.Fatalf("%s row = %q, want %q", sibling.Symbol, got, want)
@@ -694,7 +694,7 @@ func TestReserveHoldsSiblingsBehindAFullLadderUntilItCloses(t *testing.T) {
 			t.Fatalf("%s must wait behind %s once the full ladder closes", sibling.Symbol, next.Symbol)
 		}
 
-		want := reserveGridRow("stopLoss", next.Symbol, next.Depth, depthOf[sibling.Symbol])
+		want := reserveGridRow("trailingBuy", next.Symbol, next.Depth, depthOf[sibling.Symbol])
 		if got := held.Trade.Logs[0].Message; got != want {
 			t.Fatalf("%s row = %q, want %q", sibling.Symbol, got, want)
 		}
@@ -731,7 +731,7 @@ func TestReserveRanksTheManagedTradeAgainstTheViewItIsMissingFrom(t *testing.T) 
 		t.Fatalf("a level ladder with the higher id must wait for %s", shallower.Symbol)
 	}
 
-	want := reserveGridRow("stopLoss", shallower.Symbol, keeper.Depth, 4)
+	want := reserveGridRow("trailingBuy", shallower.Symbol, keeper.Depth, 4)
 	if got := held.Trade.Logs[0].Message; got != want {
 		t.Fatalf("row = %q, want %q", got, want)
 	}

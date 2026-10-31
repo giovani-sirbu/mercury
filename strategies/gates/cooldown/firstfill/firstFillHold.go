@@ -18,7 +18,7 @@ func FirstFillHold(event events.Events, side string) (events.Events, gates.Hold)
 	if trade.Strategy.TradeType == aggragates.Futures {
 		if firstFillVerdictRefuses(side, verdict) {
 			verdictHeld := cooldown.FirstFillEvent{Event: cooldown.FirstFillVerdictHeld}
-			return event, firstFillRefusal(verdictHeld, firstFillVerdictMessage(side))
+			return event, firstFillRefusal(verdictHeld, firstFillVerdictMessage(side), aggragates.LogKeyHoldFirstFillVerdict)
 		}
 		return event, gates.Hold{}
 	}
@@ -88,12 +88,13 @@ func appendFirstFillEnteredRow(event events.Events, levels firstFillLevels, refe
 		Reference: reference,
 	}
 	event.Trade.Logs = append(event.Trade.Logs, aggragates.TradesLogs{
-		Message:   firstFillEnteredMessage(event.Trade, levels, data),
-		Type:      aggragates.LOG_INFO,
-		Price:     data.Price,
-		TradeID:   event.Trade.ID,
-		CreatedAt: now,
-		UpdatedAt: now,
+		Message:    firstFillEnteredMessage(event.Trade, levels, data),
+		MessageKey: aggragates.LogKeyCooldownFirstFillEntered,
+		Type:       aggragates.LOG_INFO,
+		Price:      data.Price,
+		TradeID:    event.Trade.ID,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	})
 	event.Trade.StrategyEvents = append(event.Trade.StrategyEvents, cooldown.NewFirstFillEvent(event.Trade.ID, data, now))
 	return event

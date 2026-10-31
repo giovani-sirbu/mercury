@@ -139,7 +139,7 @@ func keepingRow(t *testing.T, priority string, ownDepth int) string {
 	t.Helper()
 
 	return fmt.Sprintf(
-		"Hold stopLoss: cooldown: depth priority, %s at depth %d of %d keeps the wallet for its remaining depths, this ladder waits at depth %d of %d",
+		"Hold trailingBuy: cooldown: depth priority, %s at depth %d of %d keeps the wallet for its remaining depths, this ladder waits at depth %d of %d",
 		priority, blockedRunDepthOf(t, priority), blockedRunDepths, ownDepth, blockedRunDepths,
 	)
 }
@@ -213,7 +213,7 @@ func TestDepthPriorityStopsKeepingTheWalletForABlockedLadder(t *testing.T) {
 		// is carrying is the one written above, and SaveHoldLog put the old
 		// position back when it wrote it.
 		waiting := held.Trade
-		waiting.PositionType = "stopLoss"
+		waiting.PositionType = "trailingBuy"
 
 		armed, err := ShouldHold(priorityEvent(waiting, "buy", released, free))
 		if err != nil {
@@ -250,7 +250,7 @@ func TestDepthPriorityReservesTheWalletAgainWhenTheLadderIsReAdmitted(t *testing
 		firstRow := held.Trade.Logs[0].Message
 
 		waiting := held.Trade
-		waiting.PositionType = "stopLoss"
+		waiting.PositionType = "trailingBuy"
 		rich := tightestWallet(t, blockedRunWithout(trades, reservedSymbol), handedOn)
 		if _, err := ShouldHold(priorityEvent(waiting, "buy", released, rich)); err != nil {
 			t.Fatalf("%s must be released while the blocked ladder is out of the wallet, got %v", trade.Symbol, err)
@@ -358,7 +358,7 @@ func TestDepthPriorityHoldsAnUnaffordableEntryBehindAFullLadder(t *testing.T) {
 		}
 
 		want := fmt.Sprintf(
-			"Hold stopLoss: cooldown: depth priority, %s at depth %d of %d holds the wallet until it closes, this ladder waits at depth %d of %d",
+			"Hold trailingBuy: cooldown: depth priority, %s at depth %d of %d holds the wallet until it closes, this ladder waits at depth %d of %d",
 			reservedSymbol, blockedRunDepths, blockedRunDepths, blockedRunDepthOf(t, trade.Symbol), blockedRunDepths,
 		)
 		if got := held.Trade.Logs[0].Message; got != want {

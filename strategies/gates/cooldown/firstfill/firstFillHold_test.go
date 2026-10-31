@@ -270,7 +270,7 @@ func TestFirstFillHoldTrailsTheLowByFullSteps(t *testing.T) {
 	wantKinds(t, back.Trade, cooldown.FirstFillActivated, cooldown.FirstFillArmed, cooldown.FirstFillArmed)
 }
 
-// A t bounce off the low fills the entry, exactly as STOPLOSS_TO_BUY does.
+// A t bounce off the low fills the entry, exactly as TRAILING_BUY_TO_BUY does.
 func TestFirstFillHoldFillsOnTheBounce(t *testing.T) {
 	lower := ticks(t, firstFillEvent(false, refused()), testutil.At("09:00:00"), 100, 97.40, 96.50)
 

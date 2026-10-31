@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-const UpdateStopLossStatus = "UPDATED_STOP_LOSS"
+const UpdateStopLossStatus = aggragates.HistoryStatusUpdatedStopLoss
 
 func UpdateStopLossOrder(event events.Events) (events.Events, error) {
 	// Init futures client

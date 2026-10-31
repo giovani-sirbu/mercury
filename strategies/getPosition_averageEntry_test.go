@@ -10,7 +10,7 @@ import (
 // The engines' `buy` row: the downside keeps the last fill as its anchor, the
 // upside reads profitPercentage, the move against the average entry price, and
 // a resting add the print ran away from is cancelled (getPosition_restingOrder_test.go).
-const buyLogic = "(restingOrder && percentage > tradePercentage+tolerance) ? 'update_buy' : (percentage <= -tradePercentage-tolerance ? 'stopLoss' : (profitPercentage >= tradePercentage+tolerance ? 'takeProfit' : ''))"
+const buyLogic = "(restingOrder && percentage > tradePercentage+tolerance) ? 'update_buy' : (percentage <= -tradePercentage-tolerance ? 'trailingBuy' : (profitPercentage >= tradePercentage+tolerance ? 'takeProfit' : ''))"
 
 // TestGetPositionBuyArmsTakeProfitFromTheAverageEntryPrice pins what each side
 // of the `buy` row is measured against on a deep ladder. Against the LAST fill
@@ -36,7 +36,7 @@ func TestGetPositionBuyArmsTakeProfitFromTheAverageEntryPrice(t *testing.T) {
 		{"back at break even, 27% over the last fill", 1935.50, ""},
 		{"just under break even + 2.75%", 1980.00, ""},
 		{"break even + percentage + tolerance", 1981.30, "takeProfit"},
-		{"2.75% under the last fill", 1361.00, "stopLoss"},
+		{"2.75% under the last fill", 1361.00, "trailingBuy"},
 	}
 
 	for _, tt := range tests {
@@ -66,7 +66,7 @@ func TestGetPositionFirstDepthIsUnchanged(t *testing.T) {
 	if got := decide(102.32); got != "takeProfit" {
 		t.Fatalf("100 / (1 - 0.0225) = 102.30 arms the take profit, got %q", got)
 	}
-	if got := decide(97.70); got != "stopLoss" {
+	if got := decide(97.70); got != "trailingBuy" {
 		t.Fatalf("-2.35%% arms the next depth, got %q", got)
 	}
 }

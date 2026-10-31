@@ -52,7 +52,7 @@ type (
 // GetPosition evaluates the position's logic row on the held depth's
 // settings: percentage is the move against Position.Price, profitPercentage
 // the move against Position.AverageEntryPrice, both negated by the engines on
-// an inverse trade and the latter raised by smarttakeloss.TakeProfitPercentage
+// an inverse trade and the latter raised by smartsell.TakeProfitPercentage
 // on a pending or latched ladder, and restingOrder is Position.RestingOrder.
 // An unknown position type answers nothing.
 func (S Strategy) GetPosition(percentage float64, profitPercentage float64) string {

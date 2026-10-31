@@ -18,7 +18,7 @@ const ladderDepthPrice = 100
 // ladder has a real cost, and the history rows carry no stamps so depth
 // spacing fails open and never answers for the wallet gate.
 func LadderDepthTrade(id uint, symbol string, depth int, maxDepths float64) aggragates.Trades {
-	trade := NewHoldTrade("stopLoss", false)
+	trade := NewHoldTrade(aggragates.PositionTrailingBuy, false)
 	trade.ID = id
 	trade.Symbol = symbol
 	trade.Status = aggragates.Active

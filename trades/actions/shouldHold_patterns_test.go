@@ -42,11 +42,11 @@ func patternEvent(position string, inverse bool, price float64, ai aggragates.AI
 }
 
 func TestPatternHoldPreventsStopLossOnBullishPattern(t *testing.T) {
-	held, err := ShouldHold(patternEvent("stopLoss", false, 100000, patternAI("long", 71)))
+	held, err := ShouldHold(patternEvent("trailingBuy", false, 100000, patternAI("long", 71)))
 	if err == nil {
 		t.Fatal("a bullish pattern must prevent the long add")
 	}
-	want := "Hold stopLoss: pattern: ascending triangle found (resistance 96000.0000), preventing stopLoss"
+	want := "Hold trailingBuy: pattern: ascending triangle found (resistance 96000.0000), preventing the trailing buy"
 	if held.Trade.Logs[0].Message != want {
 		t.Errorf("got %q, want %q", held.Trade.Logs[0].Message, want)
 	}
@@ -64,7 +64,7 @@ func TestPatternHoldStopLossPasses(t *testing.T) {
 		{"no pattern", false, aggragates.AIIndicators{}},
 	}
 	for _, c := range cases {
-		if held, err := ShouldHold(patternEvent("stopLoss", c.inverse, 100000, c.ai)); err != nil {
+		if held, err := ShouldHold(patternEvent("trailingBuy", c.inverse, 100000, c.ai)); err != nil {
 			t.Fatalf("%s: must pass, got %v %v", c.name, err, messages(held.Trade.Logs))
 		}
 	}
@@ -74,11 +74,11 @@ func TestPatternHoldInverseMirror(t *testing.T) {
 	ai := patternAI("short", 80)
 	ai.PatternName, ai.PatternDisplayName, ai.PatternLevelKind = "head_shoulders", "head and shoulders", "neckline"
 	ai.PatternTakeProfit = 90000
-	held, err := ShouldHold(patternEvent("stopLoss", true, 100000, ai))
+	held, err := ShouldHold(patternEvent("trailingBuy", true, 100000, ai))
 	if err == nil {
 		t.Fatal("a bearish pattern must prevent the inverse add")
 	}
-	if held.Trade.Logs[0].Message != "Hold stopLoss: pattern: head and shoulders found (neckline 96000.0000), preventing stopLoss" {
+	if held.Trade.Logs[0].Message != "Hold trailingBuy: pattern: head and shoulders found (neckline 96000.0000), preventing the trailing buy" {
 		t.Errorf("unexpected message %q", held.Trade.Logs[0].Message)
 	}
 
@@ -125,7 +125,7 @@ func TestPatternHoldTakeProfitRidesToTarget(t *testing.T) {
 }
 
 func TestPatternHoldIsOwnedByUsePatterns(t *testing.T) {
-	event := patternEvent("stopLoss", false, 100000, patternAI("long", 90))
+	event := patternEvent("trailingBuy", false, 100000, patternAI("long", 90))
 	event.Trade.Strategy.Params.UsePatterns = false
 	if held, err := ShouldHold(event); err != nil || len(held.Trade.Logs) != 0 {
 		t.Fatalf("with UsePatterns off the pattern must not hold, got %v %v", err, messages(held.Trade.Logs))
@@ -137,13 +137,13 @@ func TestPatternHoldIsOwnedByUsePatterns(t *testing.T) {
 func TestPatternHoldSpeaksBeforeTheLegacyAIHold(t *testing.T) {
 	ai := patternAI("long", 90)
 	ai.AIMarketBearish = true
-	event := patternEvent("stopLoss", false, 100000, ai)
+	event := patternEvent("trailingBuy", false, 100000, ai)
 	event.Trade.Strategy.Params.UseAI = true
 	held, err := ShouldHold(event)
 	if err == nil {
 		t.Fatal("expected a hold")
 	}
-	if !strings.HasPrefix(held.Trade.Logs[0].Message, "Hold stopLoss: pattern: ") {
+	if !strings.HasPrefix(held.Trade.Logs[0].Message, "Hold trailingBuy: pattern: ") {
 		t.Errorf("the pattern must keep its wording over the legacy AI hold, got %q", held.Trade.Logs[0].Message)
 	}
 }
@@ -152,15 +152,15 @@ func TestPatternHoldMessageFallbacks(t *testing.T) {
 	ai := patternAI("long", 71)
 	ai.PatternDisplayName = ""
 	ai.PatternLevel = 0
-	held, err := ShouldHold(patternEvent("stopLoss", false, 100000, ai))
+	held, err := ShouldHold(patternEvent("trailingBuy", false, 100000, ai))
 	if err == nil {
 		t.Fatal("expected a hold")
 	}
-	if held.Trade.Logs[0].Message != "Hold stopLoss: pattern: asc_triangle found, preventing stopLoss" {
+	if held.Trade.Logs[0].Message != "Hold trailingBuy: pattern: asc_triangle found, preventing the trailing buy" {
 		t.Errorf("unexpected message %q", held.Trade.Logs[0].Message)
 	}
 
-	withFilter := patternEvent("stopLoss", false, 100000, patternAI("long", 71))
+	withFilter := patternEvent("trailingBuy", false, 100000, patternAI("long", 71))
 	withFilter.Trade.StrategyPair.TradeFilters = aggragates.TradeFilters{PriceFilter: 2}
 	held, err = ShouldHold(withFilter)
 	if err == nil {

@@ -20,12 +20,12 @@ func SimulatedClosePrice(trade aggragates.Trades) float64 {
 }
 
 // closesOnThisPass reports whether the chain places the closing order on this
-// pass (sell, sellParent and sellLoss run Sell beside their gate) rather than
+// pass (sell, sellParent and takeLoss run Sell beside their gate) rather than
 // arming an exit a later tick closes (takeProfit). The engines set
 // PositionType to the position being taken, without the update_ prefix.
 func closesOnThisPass(trade aggragates.Trades) bool {
 	switch trade.PositionType {
-	case "sell", "sellParent", "sellLoss":
+	case aggragates.PositionSell, aggragates.PositionSellParent, aggragates.PositionTakeLoss:
 		return true
 	}
 

@@ -9,7 +9,7 @@ import (
 // DepthTrade is a long under the Cooldown flag whose ladder was placed at the
 // given stamps, one distinct exchange order each.
 func DepthTrade(placements ...time.Time) aggragates.Trades {
-	trade := NewHoldTrade("stopLoss", false)
+	trade := NewHoldTrade(aggragates.PositionTrailingBuy, false)
 	trade.Strategy.Params.Cooldown = true
 	for index, placement := range placements {
 		trade.History = append(trade.History, aggragates.TradesHistory{

@@ -74,14 +74,14 @@ func TestAcceptLossReportsWhatTheCloseWillBook(t *testing.T) {
 	// Underwater, so the path logs an accepted loss rather than a gain.
 	const lossPrice = 93000.0
 
-	event := minimumNotionalEvent("sellLoss", lossPrice)
+	event := minimumNotionalEvent("takeLoss", lossPrice)
 
 	_, dust, _ := quantities.SimulatedClose(event)
 	if dust <= 0 {
 		t.Fatalf("expected the lot-size floor to cut a remainder, got %v", dust)
 	}
 
-	got, err := actions.AcceptLoss(minimumNotionalEvent("sellLoss", lossPrice))
+	got, err := actions.AcceptLoss(minimumNotionalEvent("takeLoss", lossPrice))
 	if err != nil {
 		t.Fatalf("AcceptLoss returned error: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestAcceptLossReportsWhatTheCloseWillBook(t *testing.T) {
 
 	// Both actions simulate the same close; the only difference is that one
 	// accepts a negative. They must not disagree on the number.
-	gated, _ := actions.HasProfit(minimumNotionalEvent("sellLoss", lossPrice))
+	gated, _ := actions.HasProfit(minimumNotionalEvent("takeLoss", lossPrice))
 	if math.Abs(got.Trade.Profit-gated.Trade.Profit) > 1e-9 {
 		t.Errorf("AcceptLoss reported %v where HasProfit reported %v", got.Trade.Profit, gated.Trade.Profit)
 	}

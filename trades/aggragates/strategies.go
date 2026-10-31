@@ -14,7 +14,7 @@ type (
 		UseAI            bool  `form:"useAI" bson:"useAI" json:"useAI"`
 		UsePatterns      bool  `form:"usePatterns" bson:"usePatterns" json:"usePatterns"`
 		UseForceTrailing bool  `form:"useForceTrailing" bson:"useForceTrailing" json:"useForceTrailing"`
-		SmartTakeLoss    bool  `form:"smartTakeLoss" bson:"smartTakeLoss" json:"smartTakeLoss"`
+		SmartSell        bool  `form:"smartSell" bson:"smartSell" json:"smartSell"`
 		// DynamicParams decides a long spot parent ladder's rows once, as it
 		// opens, on sophos' SMC trend reads (dynamicparams.Opening); every
 		// later tick trades the raised rows its opened event carries. The flag holds nothing.
@@ -24,15 +24,15 @@ type (
 
 // NeedsSophos is true when any flag consumes a sophos verdict. Fetch is not
 // gate: these predicates decide only what is fetched, and a payload fetched
-// for one flag's sake arms no gate of another (SmartTakeLoss fetches
+// for one flag's sake arms no gate of another (SmartSell fetches
 // /patterns, yet only UsePatterns may run a pattern hold).
 func (p StrategyParams) NeedsSophos() bool {
-	return p.UseAI || p.UsePatterns || p.SmartTakeLoss || p.DynamicParams
+	return p.UseAI || p.UsePatterns || p.SmartSell || p.DynamicParams
 }
 
-// NeedsPatternRoute is the /patterns fetch: the pattern verdict and the smart take loss block.
+// NeedsPatternRoute is the /patterns fetch: the pattern verdict and the smart sell block.
 func (p StrategyParams) NeedsPatternRoute() bool {
-	return p.UsePatterns || p.SmartTakeLoss
+	return p.UsePatterns || p.SmartSell
 }
 
 // NeedsSmcTrendRoute is the /smc-trend fetch for the DynamicParams reads; it arms no hold.
@@ -46,8 +46,8 @@ func (p StrategyParams) NeedsAIRoute() bool {
 }
 
 // InjectsEntryHold is true when the first-buy chain should include shouldHold:
-// Cooldown, UseAI, UsePatterns and SmartTakeLoss own first-fill holds;
+// Cooldown, UseAI, UsePatterns and SmartSell own first-fill holds;
 // DynamicParams holds nothing.
 func (p StrategyParams) InjectsEntryHold() bool {
-	return p.Cooldown || p.UseAI || p.UsePatterns || p.SmartTakeLoss
+	return p.Cooldown || p.UseAI || p.UsePatterns || p.SmartSell
 }

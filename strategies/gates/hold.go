@@ -9,6 +9,8 @@ const EventHeld = "held"
 type Hold struct {
 	// Reason is the row's message after its "Hold <position>: " frame, and the error that stops the chain.
 	Reason string
+	// Key is the row's messageKey (an aggragates.LogKeyHold constant).
+	Key string
 	// Param is the aggragates.StrategyParam that owns the gate; empty writes no event.
 	Param string
 	// Gate is the gate of that param the event is filed under.

@@ -18,7 +18,7 @@ func TestSettingsForTradeTypeSpotDropsFuturesKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(raw)
-	for _, key := range []string{`"leverage"`, `"stopLoss"`, `"klineInterval"`, `"timeframes"`, `"takeLossPercentage"`} {
+	for _, key := range []string{`"leverage"`, `"trailingBuy"`, `"klineInterval"`, `"timeframes"`, `"takeLossPercentage"`} {
 		if strings.Contains(text, key) {
 			t.Fatalf("spot JSON must omit %s, got %s", key, text)
 		}

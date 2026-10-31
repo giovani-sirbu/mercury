@@ -112,7 +112,7 @@ func TestDepthPriorityHoldsAnAddThroughShouldHold(t *testing.T) {
 	}
 
 	row := held.Trade.Logs[0]
-	want := fmt.Sprintf("Hold stopLoss: cooldown: depth priority, LINK/USDT at depth 7 of %d keeps the wallet for its remaining depths, this ladder waits at depth 4 of %d", walletDepths, walletDepths)
+	want := fmt.Sprintf("Hold trailingBuy: cooldown: depth priority, LINK/USDT at depth 7 of %d keeps the wallet for its remaining depths, this ladder waits at depth 4 of %d", walletDepths, walletDepths)
 	if row.Message != want {
 		t.Fatalf("row = %q, want %q", row.Message, want)
 	}

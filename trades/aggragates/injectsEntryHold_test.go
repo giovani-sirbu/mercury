@@ -20,7 +20,7 @@ func fetchAndHoldOf(params StrategyParams) fetchAndHold {
 }
 
 // The first-buy gate injection is a product rule: cooldown, UseAI,
-// UsePatterns and SmartTakeLoss own it — the last for its quiet decline
+// UsePatterns and SmartSell own it — the last for its quiet decline
 // hold; DynamicParams fetches /smc-trend for its reads, decides the rows a
 // ladder opens with and holds nothing. Pinned beside what each set of flags
 // fetches, so the difference between "fetches the verdict" and "gates the
@@ -35,9 +35,9 @@ func TestInjectsEntryHoldIsOwnedByEntryFlags(t *testing.T) {
 		{"cooldown only", StrategyParams{Cooldown: true}, fetchAndHold{entryHold: true}},
 		{"useAI only", StrategyParams{UseAI: true}, fetchAndHold{sophos: true, ai: true, entryHold: true}},
 		{"usePatterns only", StrategyParams{UsePatterns: true}, fetchAndHold{sophos: true, patterns: true, entryHold: true}},
-		{"smartTakeLoss only", StrategyParams{SmartTakeLoss: true}, fetchAndHold{sophos: true, patterns: true, entryHold: true}},
+		{"smartSell only", StrategyParams{SmartSell: true}, fetchAndHold{sophos: true, patterns: true, entryHold: true}},
 		{"dynamicParams only", StrategyParams{DynamicParams: true}, fetchAndHold{sophos: true, smcTrend: true}},
-		{"smartTakeLoss with dynamicParams", StrategyParams{SmartTakeLoss: true, DynamicParams: true}, fetchAndHold{sophos: true, patterns: true, smcTrend: true, entryHold: true}},
+		{"smartSell with dynamicParams", StrategyParams{SmartSell: true, DynamicParams: true}, fetchAndHold{sophos: true, patterns: true, smcTrend: true, entryHold: true}},
 		{"dynamicParams with cooldown", StrategyParams{DynamicParams: true, Cooldown: true}, fetchAndHold{sophos: true, smcTrend: true, entryHold: true}},
 	}
 	for _, tc := range cases {

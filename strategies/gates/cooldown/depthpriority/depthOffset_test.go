@@ -79,14 +79,14 @@ func TestDepthOffsetHoldsOnTheShortenedReserve(t *testing.T) {
 		t.Fatalf("reserve = %f, want under the whole ladder's %f", short, whole)
 	}
 
-	if hold := DepthPriorityHold(priorityEvent(own, "buy", view, walletShortFor(t, own, whole)), "stopLoss"); hold.Held() {
+	if hold := DepthPriorityHold(priorityEvent(own, "buy", view, walletShortFor(t, own, whole)), "trailingBuy"); hold.Held() {
 		t.Errorf("a wallet short of the whole reserve alone must buy, got %q", hold.Reason)
 	}
-	if hold := DepthPriorityHold(priorityEvent(own, "buy", view, walletShortFor(t, own, short)+1), "stopLoss"); hold.Held() {
+	if hold := DepthPriorityHold(priorityEvent(own, "buy", view, walletShortFor(t, own, short)+1), "trailingBuy"); hold.Held() {
 		t.Errorf("a wallet level with the shortened reserve must buy, got %q", hold.Reason)
 	}
 
-	hold := DepthPriorityHold(priorityEvent(own, "buy", view, walletShortFor(t, own, short)), "stopLoss")
+	hold := DepthPriorityHold(priorityEvent(own, "buy", view, walletShortFor(t, own, short)), "trailingBuy")
 	assertWaits(t, hold, LadderOf(keeper), LadderOf(own))
 	if !strings.Contains(hold.Reason, "keeps the wallet for its remaining depths") {
 		t.Errorf("reason = %q, want the keeper with costed depths left", hold.Reason)
@@ -108,10 +108,10 @@ func TestDepthOffsetMakesALadderFullShortOfItsCeiling(t *testing.T) {
 	cost := nextEntryCostOf(t, own, 0)
 
 	alone := []aggragates.LadderDepth{full, LadderOf(own)}
-	if hold := DepthPriorityHold(priorityEvent(own, "buy", alone, cost), "stopLoss"); hold.Held() {
+	if hold := DepthPriorityHold(priorityEvent(own, "buy", alone, cost), "trailingBuy"); hold.Held() {
 		t.Errorf("a wallet that pays the entry must buy behind a full ladder, got %q", hold.Reason)
 	}
-	hold := DepthPriorityHold(priorityEvent(own, "buy", alone, cost-1), "stopLoss")
+	hold := DepthPriorityHold(priorityEvent(own, "buy", alone, cost-1), "trailingBuy")
 	assertWaits(t, hold, full, LadderOf(own))
 	if !strings.Contains(hold.Reason, "holds the wallet until it closes") {
 		t.Errorf("reason = %q, want the full ladder holding until it closes", hold.Reason)
@@ -119,6 +119,6 @@ func TestDepthOffsetMakesALadderFullShortOfItsCeiling(t *testing.T) {
 
 	next := LadderOf(offsetLadder(13, "SOL/USDT", 5))
 	view := []aggragates.LadderDepth{full, next, LadderOf(own)}
-	hold = DepthPriorityHold(priorityEvent(own, "buy", view, walletShortFor(t, own, next.RemainingCost)), "stopLoss")
+	hold = DepthPriorityHold(priorityEvent(own, "buy", view, walletShortFor(t, own, next.RemainingCost)), "trailingBuy")
 	assertWaits(t, hold, next, LadderOf(own))
 }

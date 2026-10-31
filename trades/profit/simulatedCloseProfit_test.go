@@ -13,12 +13,12 @@ import (
 )
 
 // closingTrade is a BTC/USDC trade about to close at closePrice through the
-// sellLoss chain, on the history given: the close the figure is read for is
+// takeLoss chain, on the history given: the close the figure is read for is
 // priced at the position price itself, with no tolerance haircut.
 func closingTrade(closePrice float64, history ...aggragates.TradesHistory) aggragates.Trades {
 	return aggragates.Trades{
 		Symbol:        "BTC/USDC",
-		PositionType:  "sellLoss",
+		PositionType:  "takeLoss",
 		PositionPrice: closePrice,
 		ProfitAsset:   "USDC",
 		StrategyPair: aggragates.StrategiesPairs{

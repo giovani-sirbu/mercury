@@ -6,7 +6,7 @@ const Interval = "1h"
 
 // BearPercentagePoints is the points added to every row's percentage when the increase names it,
 // read once at open and written into the opened event (OpenedRaise); at or above zero.
-const BearPercentagePoints float64 = 0.1
+const BearPercentagePoints float64 = 0.0
 
 // BearDepths is the whole depths added to every row's depths when the increase names them, read
 // once at open like BearPercentagePoints; at or above zero.

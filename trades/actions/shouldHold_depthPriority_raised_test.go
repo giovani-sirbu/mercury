@@ -36,7 +36,7 @@ func raisedLadderOf(id uint, symbol string, depth int) aggragates.Trades {
 // that has depths left: the ladder the wallet is kept for, and this one's own.
 func raisedWaitingRow(priority aggragates.LadderDepth, ownDepth, ownCeiling int) string {
 	return fmt.Sprintf(
-		"Hold stopLoss: "+cooldown.DepthPriorityHoldMarker+", %s at depth %d of %d keeps the wallet for its remaining depths, this ladder waits at depth %d of %d",
+		"Hold trailingBuy: "+cooldown.DepthPriorityHoldMarker+", %s at depth %d of %d keeps the wallet for its remaining depths, this ladder waits at depth %d of %d",
 		priority.Symbol, priority.Depth, priority.MaxDepth, ownDepth, ownCeiling,
 	)
 }

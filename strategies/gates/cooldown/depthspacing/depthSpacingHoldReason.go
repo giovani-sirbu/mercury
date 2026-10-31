@@ -8,7 +8,7 @@ import (
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/strategies/gates"
 	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown"
-	"github.com/giovani-sirbu/mercury/strategies/gates/smarttakeloss"
+	"github.com/giovani-sirbu/mercury/strategies/gates/smartsell"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
@@ -20,12 +20,12 @@ type depthSpacingState struct {
 	hold         time.Duration
 }
 
-// DepthSpacingHold is the gate on an open position, stopLoss only: a refusal while the hold the last
-// fast depth earned stands, unless the price release, a triggered smart take loss gate
-// (disabledWhenActiveSTL) or a latched early take profit (disabledWhenEarlyTakeProfit) lifts
+// DepthSpacingHold is the gate on an open position, trailingBuy only: a refusal while the hold the last
+// fast depth earned stands, unless the price release, a triggered smart sell gate
+// (disabledWhenActiveSmartSell) or a latched early take profit (disabledWhenEarlyTakeProfit) lifts
 // it; inert on unstamped fills, open without a tick clock.
 func DepthSpacingHold(event events.Events, position string) gates.Hold {
-	if position != "stopLoss" {
+	if position != aggragates.PositionTrailingBuy {
 		return gates.Hold{}
 	}
 
@@ -45,10 +45,10 @@ func DepthSpacingHold(event events.Events, position string) gates.Hold {
 	if depthSpacingPriceReleased(event.Trade, event.Trade.PositionPrice, fills[len(fills)-1].Price, state.step) {
 		return gates.Hold{}
 	}
-	if disabledWhenActiveSTL && smarttakeloss.Triggered(event.Trade) {
+	if disabledWhenActiveSmartSell && smartsell.Triggered(event.Trade) {
 		return gates.Hold{}
 	}
-	if disabledWhenEarlyTakeProfit && smarttakeloss.EarlyTakeProfitLatched(event.Trade) {
+	if disabledWhenEarlyTakeProfit && smartsell.EarlyTakeProfitLatched(event.Trade) {
 		return gates.Hold{}
 	}
 
@@ -66,6 +66,7 @@ func DepthSpacingHold(event events.Events, position string) gates.Hold {
 
 	return gates.Hold{
 		Reason: depthSpacingHoldMessage(data),
+		Key:    aggragates.LogKeyHoldDepthSpacing,
 		Param:  aggragates.StrategyParamCooldown,
 		Gate:   cooldown.GateDepthSpacing,
 		Data:   data,

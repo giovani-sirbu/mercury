@@ -98,7 +98,7 @@ func TestOpenedRaiseReadsTheEventNotTheConstants(t *testing.T) {
 func TestOpenedRaiseFoldsTheEventsInOrder(t *testing.T) {
 	trade := withRows(flaggedTrade(),
 		"Updated position to buy from new",
-		"Hold entry: smartTakeLoss: quiet decline, first fill held",
+		"Hold entry: smartSell: quiet decline, first fill held",
 	)
 	for _, amounts := range []dynamicparams.Opened{{Points: 0.4, Depths: 1}, {Points: 0.75}} {
 		row, event := amounts.Rows(trade, 0, time.Time{})
@@ -153,8 +153,8 @@ func TestOpenedRaiseIsNotTheRowText(t *testing.T) {
 		"the prefix without the marker":              {"dynamicParams: percentage +0.4, depths +1"},
 		"the marker without the prefix":              {"volatility expected, strategy params adjusted: percentage +0.4, depths +1"},
 		"another gate's rows": {
-			"Hold stopLoss: pattern: bull_flag found, preventing stopLoss",
-			"Updated position to stopLoss from buy",
+			"Hold trailingBuy: pattern: bull_flag found, preventing trailingBuy",
+			"Updated position to trailingBuy from buy",
 		},
 	}
 	for _, row := range append(append([]string(nil), earlierReleaseRows...), earlierOpenedRows...) {
@@ -238,7 +238,7 @@ func TestOpenedRaiseReadsOnlyItsOwnGate(t *testing.T) {
 	document := json.RawMessage(`{"event":"opened","points":0.4,"depths":1}`)
 	foreign := []aggragates.TradesStrategyEvents{
 		aggragates.NewStrategyEvent(0, aggragates.StrategyParamDynamicParams, "other", document, time.Time{}),
-		aggragates.NewStrategyEvent(0, aggragates.StrategyParamSmartTakeLoss, dynamicparams.GateOpened, document, time.Time{}),
+		aggragates.NewStrategyEvent(0, aggragates.StrategyParamSmartSell, dynamicparams.GateOpened, document, time.Time{}),
 		aggragates.NewStrategyEvent(0, aggragates.StrategyParamCooldown, dynamicparams.GateOpened, document, time.Time{}),
 	}
 

@@ -9,27 +9,27 @@ const (
 	// factor is the escalation of the hold per step; it goes through float64, so it may be fractional.
 	factor = 2
 	// BaseHold is the hold of step 1, where the escalation starts.
-	BaseHold = 3 * time.Hour
+	BaseHold = 2 * time.Hour
 	// maxHold caps one hold; the price release bounds the damage beyond it.
-	maxHold = 5 * time.Hour
+	maxHold = 3 * time.Hour
 	// Window is the pause that resets the escalation: an activation this long or more past the
 	// previous hold's expiry starts the count over, whatever its fill.
-	Window = 8 * time.Hour
+	Window = 5 * time.Hour
 )
 
-// disabledWhenActiveSTL lifts the hold while a smart take loss gate stands triggered on the trade
-// (smarttakeloss.Triggered); a variable only so the tests can move it.
-var disabledWhenActiveSTL = false
+// disabledWhenActiveSmartSell lifts the hold while a smart sell gate stands triggered on the trade
+// (smartsell.Triggered); a variable only so the tests can move it.
+var disabledWhenActiveSmartSell = false
 
 // disabledWhenEarlyTakeProfit lifts the hold while the early take profit stands latched on the
-// trade (smarttakeloss.EarlyTakeProfitLatched), for the rest of the ladder's life; a variable only so
+// trade (smartsell.EarlyTakeProfitLatched), for the rest of the ladder's life; a variable only so
 // the tests can move it.
 var disabledWhenEarlyTakeProfit = false
 
 // startStepFromDepth starts a cascade at the activation's depth less startStepOffset instead of 1
 // (depthSpacingStartStep); a variable only so the tests can move it.
-var startStepFromDepth = true
+var startStepFromDepth = false
 
 // startStepOffset is how far under the depth the start sits, read only while startStepFromDepth is
 // on; a variable only so the tests can move it.
-var startStepOffset = 3
+var startStepOffset = 0

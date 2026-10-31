@@ -12,7 +12,7 @@ import (
 // acceptLossLadder is an underwater two-fill BTC/USDC ladder about to sell at
 // the loss, its fills paying commissions in feeAsset (none when empty).
 func acceptLossLadder(feeAsset string, fee float64) events.Events {
-	trade := scenarioBuildTrade("sellLoss", 93000, false)
+	trade := scenarioBuildTrade("takeLoss", 93000, false)
 	scenarioAppendHistory(&trade, "BUY", 0.00006, dustEntryPrice, feeAsset, fee)
 	scenarioAppendHistory(&trade, "BUY", 0.00012, 94500.25, feeAsset, fee*2)
 	return events.Events{Trade: trade}

@@ -50,7 +50,7 @@ func entrySettingsReason(trade aggragates.Trades, oldPosition string, reserve fl
 	event := priorityEvent(trade, oldPosition, []aggragates.LadderDepth{keeper}, entrySettingsWallet)
 	event.Params.EntrySettings = entry
 
-	return DepthPriorityHold(event, "stopLoss").Reason, keeper
+	return DepthPriorityHold(event, "trailingBuy").Reason, keeper
 }
 
 // A ladder that has not filled yet is weighed at the first entry Buy will

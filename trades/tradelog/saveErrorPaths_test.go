@@ -87,7 +87,7 @@ func TestSaveError_GenericErrorKeepsStatusAndLogsAsWarning(t *testing.T) {
 }
 
 // TestSaveError_DuplicateErrorShortCircuitsWithoutAppending pins the
-// dedupe path: if the last log message matches (modulo digits) the new
+// dedupe path: if the last row carries the same key and text (modulo digits) the new
 // error, the function returns without appending a second log.
 func TestSaveError_DuplicateErrorShortCircuitsWithoutAppending(t *testing.T) {
 	event := events.Events{
@@ -97,7 +97,7 @@ func TestSaveError_DuplicateErrorShortCircuitsWithoutAppending(t *testing.T) {
 		Trade: aggragates.Trades{
 			PositionType: "buy",
 			Logs: []aggragates.TradesLogs{
-				{Message: "price moved before order placement"},
+				{Message: "price moved before order placement", MessageKey: aggragates.LogKeyActionFailed},
 			},
 		},
 		Params: aggragates.Params{OldPosition: "active"},

@@ -55,11 +55,11 @@ func heldAt(t *testing.T, trade aggragates.Trades, at time.Time) (aggragates.Tra
 	t.Helper()
 
 	event := tickOf(trade, at)
-	hold := DepthSpacingHold(event, "stopLoss")
+	hold := DepthSpacingHold(event, "trailingBuy")
 	if !hold.Held() {
 		t.Fatalf("the gate let the depth through at %s, want it parked", at)
 	}
-	written, err := tradelog.SaveHoldLog(event, "stopLoss", hold)
+	written, err := tradelog.SaveHoldLog(event, "trailingBuy", hold)
 	if !errors.Is(err, events.ErrTradeHeld) {
 		t.Fatalf("SaveHoldLog = %v, want the chain stopped by the hold", err)
 	}
@@ -500,7 +500,7 @@ func TestDepthSpacingHoldsTheRecordedTicksOfTrade113805(t *testing.T) {
 	free := hbar113805Trade(t, 6)
 	free.StrategyEvents = hbar113805Events(t, 1, 2, 3, 5)
 	atDepth6 := tickOf(free, hbar113805Stamp(t, "12-04 00:51:12"))
-	if hold := DepthSpacingHold(atDepth6, "stopLoss"); hold.Held() {
+	if hold := DepthSpacingHold(atDepth6, "trailingBuy"); hold.Held() {
 		t.Errorf("depth 6 at its recorded tick: held as %q, want it free — its hold lifted at the base", hold.Reason)
 	}
 
@@ -521,7 +521,7 @@ func TestDepthSpacingHoldsTheRecordedTicksOfTrade113805(t *testing.T) {
 			lastFill := hbar113805Fills[c.depths-1].price
 			release := strconv.FormatFloat(releaseOf(lastFill, c.wantStep), 'f', -1, 64)
 
-			got := DepthSpacingHold(tickOf(trade, hbar113805Stamp(t, c.tick)), "stopLoss").Reason
+			got := DepthSpacingHold(tickOf(trade, hbar113805Stamp(t, c.tick)), "trailingBuy").Reason
 			want := fmt.Sprintf(
 				"cooldown: depths too close (depth %d, step %d), next add parked for %s or until %s",
 				c.depths, c.wantStep, depthSpacingHoldFor(c.wantStep), release,
@@ -574,7 +574,7 @@ func TestDepthSpacingSkipsUnreadableEventsAndFailsOpenOnUnknownClocks(t *testing
 		t.Errorf("an unstamped fill must leave the gate open, got %s", state.eligibleFrom)
 	}
 	event := events.Events{Trade: unknown}
-	if got := DepthSpacingHold(event, "stopLoss").Reason; got != "" {
+	if got := DepthSpacingHold(event, "trailingBuy").Reason; got != "" {
 		t.Errorf("no tick clock must never hold, got %q", got)
 	}
 }
@@ -592,7 +592,7 @@ func TestDepthSpacingReadsTheEventsNeverTheRowText(t *testing.T) {
 	trade.History = testutil.DepthTrade(start, start.Add(time.Hour)).History
 	previous := cooldown.DepthSpacingEvent{Event: gates.EventHeld, Depth: 1, Step: 1, Hold: BaseHold}
 	row := aggragates.TradesLogs{
-		Message:   "Hold stopLoss: " + depthSpacingHoldMessage(previous),
+		Message:   "Hold trailingBuy: " + depthSpacingHoldMessage(previous),
 		Type:      aggragates.LOG_INFO,
 		CreatedAt: activated,
 	}
@@ -602,7 +602,7 @@ func TestDepthSpacingReadsTheEventsNeverTheRowText(t *testing.T) {
 	paired := aggragates.AppendStrategyRow(trade, row, cooldown.NewDepthSpacingEvent(0, previous, activated))
 
 	stepOf := func(trade aggragates.Trades) int {
-		data, ok := DepthSpacingHold(events.Events{Trade: trade, Timestamp: tick.UnixMilli()}, "stopLoss").Data.(cooldown.DepthSpacingEvent)
+		data, ok := DepthSpacingHold(events.Events{Trade: trade, Timestamp: tick.UnixMilli()}, "trailingBuy").Data.(cooldown.DepthSpacingEvent)
 		if !ok {
 			t.Fatal("the gate must hold the second depth")
 		}
@@ -626,7 +626,7 @@ func TestDepthSpacingActivationsOnlyReadTheDepthSpacingEvents(t *testing.T) {
 	written := []aggragates.TradesStrategyEvents{
 		cooldown.NewDepthPriorityEvent(0, priority, at.Add(-time.Hour)),
 		cooldown.NewFirstFillEvent(0, cooldown.FirstFillEvent{Event: cooldown.FirstFillArmed, Price: 101}, at.Add(-time.Hour)),
-		aggragates.NewStrategyEvent(0, aggragates.StrategyParamSmartTakeLoss, cooldown.GateDepthSpacing, hold, at.Add(-time.Hour)),
+		aggragates.NewStrategyEvent(0, aggragates.StrategyParamSmartSell, cooldown.GateDepthSpacing, hold, at.Add(-time.Hour)),
 		aggragates.NewStrategyEvent(0, aggragates.StrategyParamCooldown, cooldown.GateDepthPriority, hold, at.Add(-time.Hour)),
 		spacingEvent(3, at),
 	}
@@ -683,11 +683,11 @@ func TestDepthSpacingMessageIsStableOnceTheHoldIsWritten(t *testing.T) {
 
 	for _, later := range []time.Duration{2 * time.Minute, 30 * time.Minute, 2 * time.Hour} {
 		event := tickOf(written, start.Add(time.Hour+later))
-		again := DepthSpacingHold(event, "stopLoss")
+		again := DepthSpacingHold(event, "trailingBuy")
 		if again.Reason != first.Reason {
 			t.Fatalf("after %s:\n got %q\nwant %q", later, again.Reason, first.Reason)
 		}
-		collapsed, err := tradelog.SaveHoldLog(event, "stopLoss", again)
+		collapsed, err := tradelog.SaveHoldLog(event, "trailingBuy", again)
 		if !errors.Is(err, events.ErrHoldNotPersisted) {
 			t.Fatalf("after %s: SaveHoldLog = %v, want the standing hold collapsed", later, err)
 		}
@@ -771,22 +771,22 @@ func TestDepthSpacingAFirstActivationParksForTheBaseHoldAndPriceReleases(t *test
 		"cooldown: depths too close (depth 1, step 1), next add parked for %s or until %s",
 		BaseHold, strconv.FormatFloat(release, 'f', -1, 64),
 	)
-	got := DepthSpacingHold(held, "stopLoss").Reason
+	got := DepthSpacingHold(held, "trailingBuy").Reason
 	if got != want {
 		t.Fatalf("row = %q, want %q", got, want)
 	}
-	if again := DepthSpacingHold(held, "stopLoss").Reason; again != got {
+	if again := DepthSpacingHold(held, "trailingBuy").Reason; again != got {
 		t.Fatalf("the row must be byte-stable while the hold stands: %q then %q", got, again)
 	}
 
 	paid := held
 	paid.Trade.PositionPrice = release
-	if got := DepthSpacingHold(paid, "stopLoss").Reason; got != "" {
+	if got := DepthSpacingHold(paid, "trailingBuy").Reason; got != "" {
 		t.Fatalf("at the release price the hold must lift, got %q", got)
 	}
 
 	expired := events.Events{Trade: trade, Timestamp: trade25858[0].Add(BaseHold).UnixMilli()}
-	if got := DepthSpacingHold(expired, "stopLoss").Reason; got != "" {
+	if got := DepthSpacingHold(expired, "trailingBuy").Reason; got != "" {
 		t.Fatalf("the hold must lift at the base expiry, got %q", got)
 	}
 }
@@ -951,7 +951,7 @@ func TestDepthSpacingRowNeverPrintsStepZero(t *testing.T) {
 				Timestamp: c.placements[len(c.placements)-1].Add(time.Minute).UnixMilli(),
 			}
 			want := fmt.Sprintf("(depth %d, step 1),", len(c.placements))
-			got := DepthSpacingHold(event, "stopLoss").Reason
+			got := DepthSpacingHold(event, "trailingBuy").Reason
 			if !strings.Contains(got, want) {
 				t.Fatalf("row = %q, want it to contain %q", got, want)
 			}
@@ -979,7 +979,7 @@ func TestDepthSpacingHoldCarriesItsEvent(t *testing.T) {
 	}
 	event := events.Events{Trade: trade, Timestamp: tick.UnixMilli()}
 
-	hold := DepthSpacingHold(event, "stopLoss")
+	hold := DepthSpacingHold(event, "trailingBuy")
 	data := cooldown.DepthSpacingEvent{Event: gates.EventHeld, Depth: 2, Step: state.step, Hold: state.hold, Release: release}
 	if hold.Param != aggragates.StrategyParamCooldown || hold.Gate != cooldown.GateDepthSpacing || hold.Data != data {
 		t.Fatalf("hold names %q/%q with %+v, want the cooldown depthSpacing event %+v", hold.Param, hold.Gate, hold.Data, data)
@@ -994,7 +994,7 @@ func TestDepthSpacingHoldCarriesItsEvent(t *testing.T) {
 	// omits it and the message stops at the wait.
 	unpriced := trade
 	unpriced.StrategyPair.StrategySettings = nil
-	hold = DepthSpacingHold(events.Events{Trade: unpriced, Timestamp: tick.UnixMilli()}, "stopLoss")
+	hold = DepthSpacingHold(events.Events{Trade: unpriced, Timestamp: tick.UnixMilli()}, "trailingBuy")
 	data.Release = 0
 	if hold.Data != data {
 		t.Fatalf("data = %+v, want the event without a release %+v", hold.Data, data)
@@ -1005,7 +1005,7 @@ func TestDepthSpacingHoldCarriesItsEvent(t *testing.T) {
 	}
 
 	event.Events = map[string]func(events.Events) (events.Events, error){"updateTrade": testutil.NopUpdateTrade}
-	written, err := tradelog.SaveHoldLog(event, "stopLoss", DepthSpacingHold(event, "stopLoss"))
+	written, err := tradelog.SaveHoldLog(event, "trailingBuy", DepthSpacingHold(event, "trailingBuy"))
 	if err == nil {
 		t.Fatal("a depth spacing hold must stop the chain")
 	}

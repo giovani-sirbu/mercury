@@ -26,7 +26,7 @@ func decodedLeg(t *testing.T, body string) AIIndicators {
 // (NeedsSmcTrendRoute), which the engines set after the merge.
 func TestMergeSophosVerdictsOfDecodedLegsCarriesNoDynamicParams(t *testing.T) {
 	stray := `"dynamicParams":{"timeframe":"1D","guppy":-1,"bmsb":-1,"valid":true}`
-	pattern := decodedLeg(t, `{"action":"LONG","smartTakeLoss":{"quietDeclineFillFrom":1640563200000},`+stray+`}`)
+	pattern := decodedLeg(t, `{"action":"LONG","smartSell":{"quietDeclineFillFrom":1640563200000},`+stray+`}`)
 	ml := decodedLeg(t, `{"action":"SHORT","marketBearish":true,`+stray+`}`)
 	if pattern.AIAction != ActionLong || ml.AIAction != ActionShort {
 		t.Fatalf("fixture drifted: the legs must decode their actions, got %q and %q", pattern.AIAction, ml.AIAction)
@@ -35,7 +35,7 @@ func TestMergeSophosVerdictsOfDecodedLegsCarriesNoDynamicParams(t *testing.T) {
 	for _, params := range []StrategyParams{
 		{DynamicParams: true},
 		{DynamicParams: true, UseAI: true},
-		{DynamicParams: true, UseAI: true, UsePatterns: true, SmartTakeLoss: true},
+		{DynamicParams: true, UseAI: true, UsePatterns: true, SmartSell: true},
 	} {
 		for _, legs := range []struct {
 			hasPattern bool
@@ -63,9 +63,9 @@ func TestMergeSophosVerdictsWithoutALegIsNoVerdict(t *testing.T) {
 		AIAction:        ActionHold,
 		AIMarketBearish: true,
 		PatternName:     "bull_flag",
-		SmartTakeLoss:   SmartTakeLossIndicators{QuietDeclineVerdict: true, QuietDeclineFillFrom: 1640563200000},
+		SmartSell:       SmartSellIndicators{QuietDeclineVerdict: true, QuietDeclineFillFrom: 1640563200000},
 	}
-	got := MergeSophosVerdicts(StrategyParams{SmartTakeLoss: true, UseAI: true}, armed, armed, false, false)
+	got := MergeSophosVerdicts(StrategyParams{SmartSell: true, UseAI: true}, armed, armed, false, false)
 	if !reflect.DeepEqual(got, AIIndicators{}) {
 		t.Fatalf("no leg must merge to no verdict, got %+v", got)
 	}

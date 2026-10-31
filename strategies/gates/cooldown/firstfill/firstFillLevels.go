@@ -9,8 +9,8 @@ import (
 // from the reference R and the armed anchor A on a long; an inverse ladder mirrors every level:
 //
 //	up(R)     = R / (1 − p/100)          the hold called the wrong direction
-//	arm(R)    = R / (1 + (p + t)/100)    the entry arms, as BUY_TO_STOPLOSS
-//	bounce(A) = A / (1 − t/100)          the entry fills, as STOPLOSS_TO_BUY
+//	arm(R)    = R / (1 + (p + t)/100)    the entry arms, as BUY_TO_TRAILING_BUY
+//	bounce(A) = A / (1 − t/100)          the entry fills, as TRAILING_BUY_TO_BUY
 //	trail(A)  = A / (1 + (tr + t)/100)   the anchor follows a full step lower
 type firstFillLevels struct {
 	percentage float64 // p, the ladder step

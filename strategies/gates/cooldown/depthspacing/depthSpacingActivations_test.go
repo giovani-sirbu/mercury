@@ -74,7 +74,7 @@ func TestDepthSpacingActivationsSkipWhatCarriesNothingToMeasure(t *testing.T) {
 		"a negative depth":  spacingEvent(-2, at),
 		"no kind":           cooldown.NewDepthSpacingEvent(0, cooldown.DepthSpacingEvent{Depth: 3}, at),
 		"an unknown kind":   cooldown.NewDepthSpacingEvent(0, cooldown.DepthSpacingEvent{Event: "released", Depth: 3}, at),
-		"another param":     aggragates.NewStrategyEvent(0, aggragates.StrategyParamSmartTakeLoss, cooldown.GateDepthSpacing, hold, at),
+		"another param":     aggragates.NewStrategyEvent(0, aggragates.StrategyParamSmartSell, cooldown.GateDepthSpacing, hold, at),
 		"another gate":      aggragates.NewStrategyEvent(0, aggragates.StrategyParamCooldown, cooldown.GateDepthPriority, hold, at),
 		"a priority event":  cooldown.NewDepthPriorityEvent(0, priority, at),
 		"a first fill":      cooldown.NewFirstFillEvent(0, cooldown.FirstFillEvent{Event: cooldown.FirstFillArmed, Price: 101}, at),
@@ -167,7 +167,7 @@ func TestDepthSpacingHoldRowsAloneAreNoActivation(t *testing.T) {
 	}
 
 	stepOf := func(trade aggragates.Trades) int {
-		data, ok := DepthSpacingHold(tickOf(trade, expiry.Add(time.Minute)), "stopLoss").Data.(cooldown.DepthSpacingEvent)
+		data, ok := DepthSpacingHold(tickOf(trade, expiry.Add(time.Minute)), "trailingBuy").Data.(cooldown.DepthSpacingEvent)
 		if !ok {
 			t.Fatal("the gate must hold the second depth")
 		}

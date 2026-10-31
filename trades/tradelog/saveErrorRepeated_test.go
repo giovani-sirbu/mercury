@@ -12,12 +12,12 @@ import (
 // the error goes back marked as a repeat, so events.Run keeps the backoff but
 // does not log the identical line again.
 func TestSaveErrorMarksAFailureTheTradeAlreadyCarriesAsRepeated(t *testing.T) {
-	first := errors.New("Insufficient funds (16648.360232 USDT) for the requested action (stopLoss). You need at least 30014.646680 USDT to resume this trade.")
-	again := errors.New("Insufficient funds (16648.360232 USDT) for the requested action (stopLoss). You need at least 30014.674170 USDT to resume this trade.")
+	first := errors.New("Insufficient funds (16648.360232 USDT) for the requested action (trailingBuy). You need at least 30014.646680 USDT to resume this trade.")
+	again := errors.New("Insufficient funds (16648.360232 USDT) for the requested action (trailingBuy). You need at least 30014.674170 USDT to resume this trade.")
 
 	updates := 0
 	event := events.Events{
-		Trade: aggragates.Trades{ID: 39380, PositionType: "stopLoss", Status: aggragates.Active},
+		Trade: aggragates.Trades{ID: 39380, PositionType: "trailingBuy", Status: aggragates.Active},
 		Events: map[string]func(events.Events) (events.Events, error){
 			"updateTrade": func(e events.Events) (events.Events, error) { updates++; return e, nil },
 		},

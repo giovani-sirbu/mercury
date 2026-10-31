@@ -4,6 +4,9 @@ import (
 	"time"
 )
 
+// HistoryStatusUpdatedStopLoss is the status of the history row a futures trailing stop-loss update appends.
+const HistoryStatusUpdatedStopLoss = "UPDATED_STOP_LOSS"
+
 type TradesHistory struct {
 	ID       uint         `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
 	TradeID  uint         `gorm:"uniqueIndex:idx_trade_id_order_id,priority:1" form:"tradeId" json:"tradeId" xml:"tradeId"`

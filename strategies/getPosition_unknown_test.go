@@ -11,17 +11,17 @@ import (
 // runs GetPosition in an unrecovered goroutine per trade.
 func TestGetPositionUnknownLogicKeyFailsClosed(t *testing.T) {
 	strategy := Strategy{
-		Position: Position{Type: "forceTrailingStopLoss", Price: 100},
+		Position: Position{Type: "forceTrailingBuy", Price: 100},
 		Settings: []aggragates.StrategySettings{{Percentage: 2, Tolerance: 0.25, TrailingTakeProfit: 0.5}},
 		Logic: map[string]string{
-			"buy": "percentage <= -tradePercentage-tolerance ? 'stopLoss' : ''",
+			"buy": "percentage <= -tradePercentage-tolerance ? 'trailingBuy' : ''",
 		},
 	}
 	if got := strategy.GetPosition(-5, -5); got != "" {
 		t.Fatalf("unknown logic key must yield no position, got %q", got)
 	}
 	strategy.Position.Type = "buy"
-	if got := strategy.GetPosition(-5, -5); got != "stopLoss" {
+	if got := strategy.GetPosition(-5, -5); got != "trailingBuy" {
 		t.Fatalf("known logic key must still evaluate, got %q", got)
 	}
 }

@@ -9,7 +9,7 @@ import (
 
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/strategies/gates/patterns"
-	"github.com/giovani-sirbu/mercury/strategies/gates/smarttakeloss"
+	"github.com/giovani-sirbu/mercury/strategies/gates/smartsell"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
@@ -17,10 +17,10 @@ import (
 // legacy ML gate, with patterns and the smart take loss off.
 func strategy3Params() aggragates.StrategyParams {
 	return aggragates.StrategyParams{
-		Cooldown:      true,
-		UseAI:         true,
-		UsePatterns:   false,
-		SmartTakeLoss: false,
+		Cooldown:    true,
+		UseAI:       true,
+		UsePatterns: false,
+		SmartSell:   false,
 	}
 }
 
@@ -81,8 +81,8 @@ func TestShouldHoldStrategy3FirstFillReadsOnlyCooldownAndTheAIVeto(t *testing.T)
 		PatternLevel:       96,
 		PatternLevelKind:   "resistance",
 		PatternTakeProfit:  110,
-		SmartTakeLoss: aggragates.SmartTakeLossIndicators{
-			QuietDeclineVerdict:     true,
+		SmartSell: aggragates.SmartSellIndicators{
+			QuietDeclineVerdict:  true,
 			QuietDeclineLegQuiet: true,
 			QuietDeclineFillFrom: slowDeclineWindowFrom.UnixMilli(),
 		},
@@ -97,9 +97,9 @@ func TestShouldHoldStrategy3FirstFillReadsOnlyCooldownAndTheAIVeto(t *testing.T)
 	}
 
 	withExit := strategy3Event("buy", 0, payload)
-	withExit.Trade.Strategy.Params.SmartTakeLoss = true
+	withExit.Trade.Strategy.Params.SmartSell = true
 	withExit.Params.CoolDownIndicators = allowed
-	if msg, held := lastHold(t, withExit); !held || !strings.Contains(msg, smarttakeloss.SlowDeclineEntryHoldReason) {
+	if msg, held := lastHold(t, withExit); !held || !strings.Contains(msg, smartsell.SlowDeclineEntryHoldReason) {
 		t.Fatalf("the smart take loss flag must hold the same payload on its slow-decline verdict, got held=%v msg=%q", held, msg)
 	}
 

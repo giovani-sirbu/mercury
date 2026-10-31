@@ -7,20 +7,20 @@ import (
 	_ "unsafe" // go:linkname
 
 	"github.com/giovani-sirbu/mercury/internal/testutil"
-	"github.com/giovani-sirbu/mercury/strategies/gates/smarttakeloss"
-	"github.com/giovani-sirbu/mercury/strategies/gates/smarttakeloss/flatmarket"
-	"github.com/giovani-sirbu/mercury/strategies/gates/smarttakeloss/quietdecline"
+	"github.com/giovani-sirbu/mercury/strategies/gates/smartsell"
+	"github.com/giovani-sirbu/mercury/strategies/gates/smartsell/flatmarket"
+	"github.com/giovani-sirbu/mercury/strategies/gates/smartsell/quietdecline"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
-// quietDecline and flatMarketHoldInitialDepth are the smarttakeloss package's own copies of
+// quietDecline and flatMarketHoldInitialDepth are the smartsell package's own copies of
 // quietdecline.Enabled and flatmarket.HoldInitialDepth, read once at its init, before any
 // TestMain runs; the entry holds read them, so a pin of the constants alone moves nothing.
 //
-//go:linkname quietDecline github.com/giovani-sirbu/mercury/strategies/gates/smarttakeloss.quietDecline
+//go:linkname quietDecline github.com/giovani-sirbu/mercury/strategies/gates/smartsell.quietDecline
 var quietDecline bool
 
-//go:linkname flatMarketHoldInitialDepth github.com/giovani-sirbu/mercury/strategies/gates/smarttakeloss.flatMarketHoldInitialDepth
+//go:linkname flatMarketHoldInitialDepth github.com/giovani-sirbu/mercury/strategies/gates/smartsell.flatMarketHoldInitialDepth
 var flatMarketHoldInitialDepth bool
 
 // startStepFromDepth is the depthspacing package's own switch, not a copy: the rows here assert
@@ -47,23 +47,23 @@ func TestMain(m *testing.M) {
 }
 
 // pinReachedTheHolds is the error of a pin that moved nothing: a verdict of the quiet decline and a
-// flat window must each hold a first fill (smarttakeloss.EntryHold). The linked variables are copies the
+// flat window must each hold a first fill (smartsell.EntryHold). The linked variables are copies the
 // composer reads; if one was renamed or is no longer what the hold reads, the hold is not there.
 func pinReachedTheHolds() error {
 	trade := testutil.NewHoldTrade("buy", false)
-	trade.Strategy.Params = aggragates.StrategyParams{SmartTakeLoss: true}
+	trade.Strategy.Params = aggragates.StrategyParams{SmartSell: true}
 	side := aggragates.SideLong
 
-	verdict := aggragates.AIIndicators{SmartTakeLoss: aggragates.SmartTakeLossIndicators{QuietDeclineVerdict: true}}
-	if hold := smarttakeloss.EntryHold(trade, side, verdict); !hold.Held() || hold.Gate != smarttakeloss.GateEntryHold {
-		return fmt.Errorf("the quiet decline's verdict holds no first fill after the pin: smarttakeloss.quietDecline (linked) is no longer the copy EntryHold reads")
+	verdict := aggragates.AIIndicators{SmartSell: aggragates.SmartSellIndicators{QuietDeclineVerdict: true}}
+	if hold := smartsell.EntryHold(trade, side, verdict); !hold.Held() || hold.Gate != smartsell.GateEntryHold {
+		return fmt.Errorf("the quiet decline's verdict holds no first fill after the pin: smartsell.quietDecline (linked) is no longer the copy EntryHold reads")
 	}
 	block := flatMarketBlock(side, flatMarketFirstBar)
 	if !flatMarketReading(trade, block).Holds {
 		return fmt.Errorf("the flat window fixture reads no hold under the pinned flatmarket knobs")
 	}
-	if hold := smarttakeloss.EntryHold(trade, side, aggragates.AIIndicators{SmartTakeLoss: block}); !hold.Held() || hold.Gate != smarttakeloss.GateFlatMarket {
-		return fmt.Errorf("the flat window holds no first fill after the pin: smarttakeloss.flatMarketHoldInitialDepth (linked) is no longer the copy EntryHold reads")
+	if hold := smartsell.EntryHold(trade, side, aggragates.AIIndicators{SmartSell: block}); !hold.Held() || hold.Gate != smartsell.GateFlatMarket {
+		return fmt.Errorf("the flat window holds no first fill after the pin: smartsell.flatMarketHoldInitialDepth (linked) is no longer the copy EntryHold reads")
 	}
 	return nil
 }

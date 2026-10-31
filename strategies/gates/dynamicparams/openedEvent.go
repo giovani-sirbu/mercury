@@ -36,12 +36,13 @@ func (o Opened) Message() string {
 // caller's, a new trade's PositionPrice being zero) and the opened event OpenedRaise reads back.
 func (o Opened) Rows(trade aggragates.Trades, price float64, at time.Time) (aggragates.TradesLogs, aggragates.TradesStrategyEvents) {
 	row := aggragates.TradesLogs{
-		TradeID:   trade.ID,
-		Message:   o.Message(),
-		Type:      aggragates.LOG_INFO,
-		Price:     price,
-		CreatedAt: at,
-		UpdatedAt: at,
+		TradeID:    trade.ID,
+		Message:    o.Message(),
+		MessageKey: aggragates.LogKeyDynamicParamsOpened,
+		Type:       aggragates.LOG_INFO,
+		Price:      price,
+		CreatedAt:  at,
+		UpdatedAt:  at,
 	}
 	data := OpenedEvent{Event: EventOpened, Points: o.Points, Depths: o.Depths}
 	event := aggragates.NewStrategyEvent(trade.ID, aggragates.StrategyParamDynamicParams, GateOpened, data, at)

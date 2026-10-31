@@ -65,7 +65,7 @@ func refillCost(t *testing.T, trade aggragates.Trades) float64 {
 func assertRefillHold(t *testing.T, own aggragates.Trades, view []aggragates.LadderDepth, free float64, want string) {
 	t.Helper()
 
-	if got := DepthPriorityHold(priorityEvent(own, "buy", view, free), "stopLoss").Reason; got != want {
+	if got := DepthPriorityHold(priorityEvent(own, "buy", view, free), "trailingBuy").Reason; got != want {
 		t.Fatalf("%s on a wallet of %v: reason = %q, want %q", own.Symbol, free, got, want)
 	}
 }
@@ -222,14 +222,14 @@ func TestDepthPriorityNeverHoldsATradeBehindItsOwnRow(t *testing.T) {
 		_, free := ladder.NextEntryCost(tc.own, 0)
 
 		stale := []aggragates.LadderDepth{refillFull(13, "SOL/USDT"), tc.copy}
-		if got := DepthPriorityHold(priorityEvent(tc.own, "buy", stale, free), "stopLoss").Reason; got != "" {
+		if got := DepthPriorityHold(priorityEvent(tc.own, "buy", stale, free), "trailingBuy").Reason; got != "" {
 			t.Errorf("%s: the trade's own row held it: %q", name, got)
 		}
 
 		renumbered := tc.copy
 		renumbered.TradeID = 12
 		other := []aggragates.LadderDepth{refillFull(13, "SOL/USDT"), renumbered}
-		if got := DepthPriorityHold(priorityEvent(tc.own, "buy", other, free), "stopLoss").Reason; got == "" {
+		if got := DepthPriorityHold(priorityEvent(tc.own, "buy", other, free), "trailingBuy").Reason; got == "" {
 			t.Errorf("%s: the same row under another trade id must hold the trade", name)
 		}
 	}

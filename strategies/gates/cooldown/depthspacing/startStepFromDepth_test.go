@@ -68,7 +68,7 @@ func startStepsAtActivations(placements []time.Time, written []aggragates.Trades
 func heldEvent(t *testing.T, trade aggragates.Trades, at time.Time) (gates.Hold, cooldown.DepthSpacingEvent) {
 	t.Helper()
 
-	hold := DepthSpacingHold(tickOf(trade, at), "stopLoss")
+	hold := DepthSpacingHold(tickOf(trade, at), "trailingBuy")
 	if !hold.Held() {
 		t.Fatalf("the gate let the depth through at %s, want it parked", at)
 	}
@@ -134,17 +134,17 @@ func TestDepthSpacingStartStepIsTheLadderDepthOnAFirstActivation(t *testing.T) {
 			// The release is a bound on the print: a hair over it holds, at it the hold lifts.
 			over, paid := trade, trade
 			over.PositionPrice, paid.PositionPrice = releaseAt(c.wantStep)+0.01, releaseAt(c.wantStep)-1e-6
-			if !DepthSpacingHold(tickOf(over, now), "stopLoss").Held() {
+			if !DepthSpacingHold(tickOf(over, now), "trailingBuy").Held() {
 				t.Error("a print over the release must stay held")
 			}
-			if hold := DepthSpacingHold(tickOf(paid, now), "stopLoss"); hold.Held() {
+			if hold := DepthSpacingHold(tickOf(paid, now), "trailingBuy"); hold.Held() {
 				t.Errorf("a print at the release must lift the hold, got %q", hold.Reason)
 			}
 
 			// A print the flag-off release pays: lifted when the step is 1, held when the step starts deeper.
 			shallow := trade
 			shallow.PositionPrice = releaseAt(1) - 0.05
-			if got := DepthSpacingHold(tickOf(shallow, now), "stopLoss").Held(); got != (c.wantStep > 1) {
+			if got := DepthSpacingHold(tickOf(shallow, now), "trailingBuy").Held(); got != (c.wantStep > 1) {
 				t.Errorf("a print under the step 1 release: held = %v, want %v", got, c.wantStep > 1)
 			}
 		})

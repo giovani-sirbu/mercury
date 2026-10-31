@@ -115,12 +115,13 @@ func TestOpenedRowsWriteThePairTheEnginesAppend(t *testing.T) {
 	row, event := opened.Rows(trade, 87.5, at)
 
 	wantRow := aggragates.TradesLogs{
-		TradeID:   31,
-		Message:   "dynamicParams: volatility expected, strategy params adjusted: percentage +0.4, depths +1",
-		Type:      aggragates.LOG_INFO,
-		Price:     87.5,
-		CreatedAt: at,
-		UpdatedAt: at,
+		TradeID:    31,
+		Message:    "dynamicParams: volatility expected, strategy params adjusted: percentage +0.4, depths +1",
+		MessageKey: aggragates.LogKeyDynamicParamsOpened,
+		Type:       aggragates.LOG_INFO,
+		Price:      87.5,
+		CreatedAt:  at,
+		UpdatedAt:  at,
 	}
 	if !reflect.DeepEqual(row, wantRow) {
 		t.Fatalf("row = %+v, want %+v", row, wantRow)

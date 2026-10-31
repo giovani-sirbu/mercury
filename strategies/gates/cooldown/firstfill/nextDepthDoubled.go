@@ -7,7 +7,7 @@ import (
 
 // NextDepthDoubled is whether the second depth arms at double the step: the hold was released up
 // through its reference (the entered event), the ladder is exactly one fill deep and that fill
-// landed at or above the reference (at or below inverse); applied only on a stopLoss position.
+// landed at or above the reference (at or below inverse); applied only on a trailingBuy position.
 func NextDepthDoubled(trade aggragates.Trades) bool {
 	state := firstFillState(trade)
 	if !state.activated || !state.enteredAbove {

@@ -1,30 +1,26 @@
 package tradelog
 
 import (
-	"github.com/giovani-sirbu/mercury/helpers"
 	"strings"
 
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/helpers"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
+// SaveError records a chain failure as a keyed row, restores the position and blocks the trade on a funds or exchange error; a repeat writes nothing.
 func SaveError(event events.Events, err error) (events.Events, error) {
 	message := err.Error()
 	errorType := aggragates.LOG_WARNING
+	key := errorKey(message)
 
-	// prevent duplicate logs: the same failure is already the trade's newest
-	// row, so nothing is written and the caller learns it is a repeat —
-	// events.Run keeps the backoff for it but does not log it again.
-	if len(event.Trade.Logs) > 0 {
-		lastError := event.Trade.Logs[len(event.Trade.Logs)-1].Message
-		if helpers.RemoveNumbersFromString(lastError) == helpers.RemoveNumbersFromString(message) {
-			if event.Trade.PositionType == "impasse" && event.Params.OldPosition != "impasse" {
-				newEvent, _ := event.Events["updateTrade"](event)
+	if len(event.Trade.Logs) > 0 && repeatsLastRow(event.Trade.Logs[len(event.Trade.Logs)-1], key, message) {
+		if event.Trade.PositionType == "impasse" && event.Params.OldPosition != "impasse" {
+			newEvent, _ := event.Events["updateTrade"](event)
 
-				return newEvent, events.Repeated(err)
-			}
-			return event, events.Repeated(err)
+			return newEvent, events.Repeated(err)
 		}
+		return event, events.Repeated(err)
 	}
 
 	// set error type based on message
@@ -48,6 +44,7 @@ func SaveError(event events.Events, err error) (events.Events, error) {
 	event.Trade.Logs = append(event.Trade.Logs, aggragates.TradesLogs{
 		Percentage: event.Params.Percentage,
 		Message:    message,
+		MessageKey: key,
 		Type:       errorType,
 		Price:      price,
 		Quantity:   event.Params.Quantity,
@@ -57,6 +54,22 @@ func SaveError(event events.Events, err error) (events.Events, error) {
 	newEvent, _ := event.Events["updateTrade"](event)
 
 	return newEvent, err
+}
+
+// errorKey is the key of a failure's row: a funds refusal, an exchange error, else any other failure.
+func errorKey(message string) string {
+	switch {
+	case HasInsufficientBalance(message):
+		return aggragates.LogKeyInsufficientFunds
+	case isAPIError(message):
+		return aggragates.LogKeyExchangeError
+	}
+	return aggragates.LogKeyActionFailed
+}
+
+// repeatsLastRow is whether a failure keyed key with message repeats the row: the same key and the same text without numbers.
+func repeatsLastRow(row aggragates.TradesLogs, key, message string) bool {
+	return row.MessageKey == key && helpers.RemoveNumbersFromString(row.Message) == helpers.RemoveNumbersFromString(message)
 }
 
 func isAPIError(input string) bool {

@@ -10,13 +10,13 @@ import (
 // down and the rows read — and the dashboard's rows as four parallel arrays, each with numbers of
 // its own so a key mapped into another's field shows, and map onto the block untouched, beside the series.
 func TestSophosPredictionMapsTheSwingDeclineSmcTrend(t *testing.T) {
-	raw := `{"smartTakeLoss":{"seriesOpens":[1633680000000],"seriesCloses":[168.2],"smcTrendDown":2,"smcTrendValid":3,` +
+	raw := `{"smartSell":{"seriesOpens":[1633680000000],"seriesCloses":[168.2],"smcTrendDown":2,"smcTrendValid":3,` +
 		`"smcTrendTimeframes":["1h","4h","1D"],"smcTrendRowDown":[7,8,3],"smcTrendRowUp":[1,0,5],"smcTrendRowReads":[9,9,9]}}`
 	var prediction SophosPrediction
 	if err := json.Unmarshal([]byte(raw), &prediction); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	want := SmartTakeLossIndicators{
+	want := SmartSellIndicators{
 		SeriesOpens:        []int64{1633680000000},
 		SeriesCloses:       []float64{168.2},
 		SmcTrendDown:       2,
@@ -26,7 +26,7 @@ func TestSophosPredictionMapsTheSwingDeclineSmcTrend(t *testing.T) {
 		SmcTrendRowUp:      []int64{1, 0, 5},
 		SmcTrendRowReads:   []int64{9, 9, 9},
 	}
-	if got := prediction.Indicators().SmartTakeLoss; !reflect.DeepEqual(got, want) {
+	if got := prediction.Indicators().SmartSell; !reflect.DeepEqual(got, want) {
 		t.Fatalf("the trend counts and rows must map as they decode, got %+v, want %+v", got, want)
 	}
 }
@@ -37,15 +37,15 @@ func TestSophosPredictionMapsTheSwingDeclineSmcTrend(t *testing.T) {
 // as it decoded.
 func TestSophosPredictionWithoutTheSwingDeclineSmcTrendIsNotRead(t *testing.T) {
 	for name, raw := range map[string]string{
-		"keys absent": `{"smartTakeLoss":{"seriesOpens":[1633680000000],"seriesCloses":[168.2]}}`,
-		"keys zero":   `{"smartTakeLoss":{"seriesOpens":[1633680000000],"seriesCloses":[168.2],"smcTrendDown":0,"smcTrendValid":0}}`,
-		"rows null":   `{"smartTakeLoss":{"seriesOpens":[1633680000000],"seriesCloses":[168.2],"smcTrendTimeframes":null,"smcTrendRowDown":null,"smcTrendRowUp":null,"smcTrendRowReads":null}}`,
+		"keys absent": `{"smartSell":{"seriesOpens":[1633680000000],"seriesCloses":[168.2]}}`,
+		"keys zero":   `{"smartSell":{"seriesOpens":[1633680000000],"seriesCloses":[168.2],"smcTrendDown":0,"smcTrendValid":0}}`,
+		"rows null":   `{"smartSell":{"seriesOpens":[1633680000000],"seriesCloses":[168.2],"smcTrendTimeframes":null,"smcTrendRowDown":null,"smcTrendRowUp":null,"smcTrendRowReads":null}}`,
 	} {
 		var prediction SophosPrediction
 		if err := json.Unmarshal([]byte(raw), &prediction); err != nil {
 			t.Fatalf("%s: unmarshal: %v", name, err)
 		}
-		block := prediction.Indicators().SmartTakeLoss
+		block := prediction.Indicators().SmartSell
 		if block.SmcTrendDown != 0 || block.SmcTrendValid != 0 || len(block.SeriesOpens) != 1 {
 			t.Fatalf("%s must decode to no trend read beside the series, got %+v", name, block)
 		}

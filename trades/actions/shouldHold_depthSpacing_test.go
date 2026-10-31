@@ -34,7 +34,7 @@ func depthRow(trade aggragates.Trades, depth int, at time.Time) aggragates.Trade
 	return aggragates.TradesLogs{
 		TradeID:   trade.ID,
 		Type:      aggragates.LOG_INFO,
-		Message:   fmt.Sprintf("Hold stopLoss: cooldown: depths too close (depth %d, step 99), next add parked for 1h0m0s", depth),
+		Message:   fmt.Sprintf("Hold trailingBuy: cooldown: depths too close (depth %d, step 99), next add parked for 1h0m0s", depth),
 		CreatedAt: at,
 	}
 }
@@ -189,7 +189,7 @@ func TestDepthSpacingIsInertWithoutTheCooldownFlag(t *testing.T) {
 	}
 }
 
-// stopLoss only: a gate on new capital must never defer an exit, and the
+// trailingBuy only: a gate on new capital must never defer an exit, and the
 // first fill has no previous depth to be close to.
 func TestDepthSpacingOnlyGatesStopLoss(t *testing.T) {
 	for _, position := range []string{"takeProfit", "forceTrailingTakeProfit", "buy", "sell"} {
@@ -200,11 +200,11 @@ func TestDepthSpacingOnlyGatesStopLoss(t *testing.T) {
 		}
 	}
 
-	// The force-trailing re-anchor of a stopLoss IS the depth it re-arms.
+	// The force-trailing re-anchor of a trailingBuy IS the depth it re-arms.
 	trade := testutil.DepthTrade(trade25858[0], trade25858[1])
-	trade.PositionType = "forceTrailingStopLoss"
+	trade.PositionType = "forceTrailingBuy"
 	if _, err := ShouldHold(depthEvent(trade, trade25858[1].Add(time.Minute))); err == nil {
-		t.Fatal("a force-trailing stopLoss re-anchor must be gated like the depth it re-arms")
+		t.Fatal("a force-trailing trailingBuy re-anchor must be gated like the depth it re-arms")
 	}
 }
 
@@ -235,7 +235,7 @@ func TestDepthSpacingWritesOneStableCooldownRow(t *testing.T) {
 	// schedule the depthspacing package already tests — and this test is about
 	// the row, not the calibration. That it stays byte-identical tick to tick
 	// is asserted below, which is the property SaveHoldLog depends on.
-	want := "Hold stopLoss: cooldown: depths too close (depth 2, step 1), next add parked for "
+	want := "Hold trailingBuy: cooldown: depths too close (depth 2, step 1), next add parked for "
 	if !strings.HasPrefix(row.Message, want) {
 		t.Fatalf("row = %q, want the prefix %q", row.Message, want)
 	}
@@ -249,7 +249,7 @@ func TestDepthSpacingWritesOneStableCooldownRow(t *testing.T) {
 		t.Fatalf("expected one event, got %d", len(held.Trade.StrategyEvents))
 	}
 
-	held.Trade.PositionType = "stopLoss"
+	held.Trade.PositionType = "trailingBuy"
 	again, err := ShouldHold(depthEvent(held.Trade, trade25858[1].Add(2*time.Minute)))
 	if err == nil {
 		t.Fatal("expected the depth to still be parked on the next tick")
@@ -258,7 +258,7 @@ func TestDepthSpacingWritesOneStableCooldownRow(t *testing.T) {
 		t.Fatalf("a standing hold must not write a row or an event per tick, got %v and %d events",
 			messages(again.Trade.Logs), len(again.Trade.StrategyEvents))
 	}
-	for _, prefix := range []string{"pattern:", "smartTakeLoss:"} {
+	for _, prefix := range []string{"pattern:", "smartSell:"} {
 		if strings.Contains(row.Message, prefix) {
 			t.Fatalf("row %q leaks the %q family", row.Message, prefix)
 		}

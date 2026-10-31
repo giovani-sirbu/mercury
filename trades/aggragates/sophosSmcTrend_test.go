@@ -89,7 +89,7 @@ func TestSophosSmcTrendDynamicParamsReadsTheChartRow(t *testing.T) {
 		},
 		{
 			name: "a /patterns body",
-			raw:  `{"action":"LONG","smartTakeLoss":{"quietDeclineVerdict":false},"dynamicParams":{"timeframe":"1D","guppy":-1,"bmsb":-1,"valid":true}}`,
+			raw:  `{"action":"LONG","smartSell":{"quietDeclineVerdict":false},"dynamicParams":{"timeframe":"1D","guppy":-1,"bmsb":-1,"valid":true}}`,
 		},
 	}
 	for _, tc := range cases {

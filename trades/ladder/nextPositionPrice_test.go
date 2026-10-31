@@ -51,7 +51,7 @@ func TestNextPositionPriceCapsAReanchorToBuyAtTheLastEntry(t *testing.T) {
 		{"an inverse re-anchor over the last entry takes the print", inverse, "update_buy", 104, 104},
 		{"a ladder with no entry takes the print", aggragates.Trades{}, "update_buy", 2286.96, 2286.96},
 		{"an entry takes the print", long, "buy", 2286.96, 2286.96},
-		{"an arming takes the print", long, "stopLoss", 2286.96, 2286.96},
+		{"an arming takes the print", long, "trailingBuy", 2286.96, 2286.96},
 		{"a take profit takes the print", long, "update_takeProfit", 2346.46, 2346.46},
 		{"a runaway resting add re-anchors at the last entry", resting, "update_buy", 0.08134, 0.21482},
 		{"a resting add with a print over the last entry re-anchors at it", resting, "update_buy", 0.25, 0.21482},

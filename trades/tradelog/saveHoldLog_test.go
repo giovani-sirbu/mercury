@@ -11,9 +11,9 @@ import (
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
-// patternHold and spacingHold are hold reasons two gates write on a stopLoss.
+// patternHold and spacingHold are hold reasons two gates write on a trailingBuy.
 const (
-	patternHold = "pattern: ascending triangle found (resistance 96000.0000), preventing stopLoss"
+	patternHold = "pattern: ascending triangle found (resistance 96000.0000), preventing the trailing buy"
 	spacingHold = "cooldown: depths too close (depth 3, step 1), next add parked for 1h0m0s"
 )
 
@@ -41,12 +41,12 @@ func holdMessages(trade aggragates.Trades) []string {
 // The same reason on consecutive ticks is one row.
 func TestSaveHoldLogCollapsesSameReason(t *testing.T) {
 	at := time.Date(2025, 10, 10, 21, 0, 0, 0, time.UTC)
-	event := holdLogEvent(testutil.NewHoldTrade("stopLoss", false), at)
+	event := holdLogEvent(testutil.NewHoldTrade("trailingBuy", false), at)
 
-	event, _ = SaveHoldLog(event, "stopLoss", gates.Hold{Reason: patternHold})
-	event.Trade.PositionType = "stopLoss"
+	event, _ = SaveHoldLog(event, "trailingBuy", gates.Hold{Reason: patternHold})
+	event.Trade.PositionType = "trailingBuy"
 	event.Timestamp = at.Add(15 * time.Minute).UnixMilli()
-	event, _ = SaveHoldLog(event, "stopLoss", gates.Hold{Reason: patternHold})
+	event, _ = SaveHoldLog(event, "trailingBuy", gates.Hold{Reason: patternHold})
 
 	if got := holdMessages(event.Trade); len(got) != 1 {
 		t.Fatalf("same reason 15 minutes apart must stay one row, got %v", got)
@@ -57,12 +57,12 @@ func TestSaveHoldLogCollapsesSameReason(t *testing.T) {
 // used to swallow a depth-spacing hold behind a pattern hold.
 func TestSaveHoldLogWritesReasonChange(t *testing.T) {
 	at := time.Date(2025, 10, 10, 21, 0, 0, 0, time.UTC)
-	event := holdLogEvent(testutil.NewHoldTrade("stopLoss", false), at)
+	event := holdLogEvent(testutil.NewHoldTrade("trailingBuy", false), at)
 
-	event, _ = SaveHoldLog(event, "stopLoss", gates.Hold{Reason: patternHold})
-	event.Trade.PositionType = "stopLoss"
+	event, _ = SaveHoldLog(event, "trailingBuy", gates.Hold{Reason: patternHold})
+	event.Trade.PositionType = "trailingBuy"
 	event.Timestamp = at.Add(time.Minute).UnixMilli()
-	event, _ = SaveHoldLog(event, "stopLoss", gates.Hold{Reason: spacingHold})
+	event, _ = SaveHoldLog(event, "trailingBuy", gates.Hold{Reason: spacingHold})
 
 	got := holdMessages(event.Trade)
 	if len(got) != 2 || !strings.Contains(got[1], "cooldown: depths too close") {
@@ -74,19 +74,19 @@ func TestSaveHoldLogWritesReasonChange(t *testing.T) {
 // blockade is readable as a sequence of dated rows.
 func TestSaveHoldLogRelogsAfterADay(t *testing.T) {
 	at := time.Date(2025, 10, 10, 21, 0, 0, 0, time.UTC)
-	event := holdLogEvent(testutil.NewHoldTrade("stopLoss", false), at)
+	event := holdLogEvent(testutil.NewHoldTrade("trailingBuy", false), at)
 
-	event, _ = SaveHoldLog(event, "stopLoss", gates.Hold{Reason: patternHold})
-	event.Trade.PositionType = "stopLoss"
+	event, _ = SaveHoldLog(event, "trailingBuy", gates.Hold{Reason: patternHold})
+	event.Trade.PositionType = "trailingBuy"
 	event.Timestamp = at.Add(holdRelogAfter - time.Minute).UnixMilli()
-	event, _ = SaveHoldLog(event, "stopLoss", gates.Hold{Reason: patternHold})
+	event, _ = SaveHoldLog(event, "trailingBuy", gates.Hold{Reason: patternHold})
 	if got := holdMessages(event.Trade); len(got) != 1 {
 		t.Fatalf("under a day the row must not repeat, got %v", got)
 	}
 
-	event.Trade.PositionType = "stopLoss"
+	event.Trade.PositionType = "trailingBuy"
 	event.Timestamp = at.Add(holdRelogAfter + time.Minute).UnixMilli()
-	event, _ = SaveHoldLog(event, "stopLoss", gates.Hold{Reason: patternHold})
+	event, _ = SaveHoldLog(event, "trailingBuy", gates.Hold{Reason: patternHold})
 	got := holdMessages(event.Trade)
 	if len(got) != 2 {
 		t.Fatalf("after a day the same reason must be written again, got %v", got)
@@ -98,13 +98,13 @@ func TestSaveHoldLogRelogsAfterADay(t *testing.T) {
 
 // Without any clock the rule is the plain same-message dedup.
 func TestSaveHoldLogWithoutClockNeverRelogs(t *testing.T) {
-	event := holdLogEvent(testutil.NewHoldTrade("stopLoss", false), time.Time{})
+	event := holdLogEvent(testutil.NewHoldTrade("trailingBuy", false), time.Time{})
 	event.Timestamp = 0
 	event.Trade.UpdatedAt = time.Time{}
 
-	event, _ = SaveHoldLog(event, "stopLoss", gates.Hold{Reason: patternHold})
-	event.Trade.PositionType = "stopLoss"
-	event, _ = SaveHoldLog(event, "stopLoss", gates.Hold{Reason: patternHold})
+	event, _ = SaveHoldLog(event, "trailingBuy", gates.Hold{Reason: patternHold})
+	event.Trade.PositionType = "trailingBuy"
+	event, _ = SaveHoldLog(event, "trailingBuy", gates.Hold{Reason: patternHold})
 
 	if got := holdMessages(event.Trade); len(got) != 1 {
 		t.Fatalf("no clock means no re-log, got %v", got)

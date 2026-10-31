@@ -8,7 +8,7 @@ import (
 	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown/depthspacing"
 	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown/firstfill"
 	"github.com/giovani-sirbu/mercury/strategies/gates/patterns"
-	"github.com/giovani-sirbu/mercury/strategies/gates/smarttakeloss"
+	"github.com/giovani-sirbu/mercury/strategies/gates/smartsell"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 	"github.com/giovani-sirbu/mercury/trades/tradelog"
 )
@@ -18,11 +18,11 @@ import (
 // event beside the row where the gate owns one. Every gate answers to exactly
 // one flag, flag first and payload second: a payload fetched for another
 // flag's sake switches no gate on (StrategyParams.NeedsSophos). The smart
-// take loss holds only the first fill here; on an open ladder it acts through
-// smarttakeloss.Apply, after the ladder decides. With every flag off nothing
+// sell holds only the first fill here; on an open ladder it acts through
+// smartsell.Apply, after the ladder decides. With every flag off nothing
 // holds and the ladder is stopped by funds alone.
 func ShouldHold(event events.Events) (events.Events, error) {
-	if event.Params.OldPosition == "new" {
+	if event.Params.OldPosition == aggragates.PositionNew {
 		return shouldHoldEntry(event)
 	}
 	return shouldHoldPosition(event)
@@ -30,10 +30,10 @@ func ShouldHold(event events.Events) (events.Events, error) {
 
 // shouldHoldEntry is the first fill, judged on the side aggragates.EntrySide
 // resolves (Inverse on spot, the ML verdict on futures). In order: the wallet
-// reserve (depth priority), the smart take loss entry holds (quiet decline,
+// reserve (depth priority), the smart sell entry holds (quiet decline,
 // flat market, then free fall prevention), the first-fill gate, then the
 // legacy AI veto. The wallet
-// reserve and the smart take loss run before the first-fill gate so a held
+// reserve and the smart sell run before the first-fill gate so a held
 // entry neither consumes nor records a first-fill verdict.
 func shouldHoldEntry(event events.Events) (events.Events, error) {
 	params := event.Trade.Strategy.Params
@@ -45,9 +45,9 @@ func shouldHoldEntry(event events.Events) (events.Events, error) {
 			return tradelog.SaveHoldLog(event, "entry", hold)
 		}
 	}
-	if params.SmartTakeLoss {
+	if params.SmartSell {
 		// No new ladder while a quiet decline, a flat market or a free fall reading stands.
-		if hold := smarttakeloss.EntryHold(event.Trade, side, event.Params.AIIndicators); hold.Held() {
+		if hold := smartsell.EntryHold(event.Trade, side, event.Params.AIIndicators); hold.Held() {
 			return tradelog.SaveHoldLog(event, "entry", hold)
 		}
 	}
@@ -61,14 +61,14 @@ func shouldHoldEntry(event events.Events) (events.Events, error) {
 	}
 	if params.UseAI {
 		if reason := ai.EntryHold(side, event.Params.AIIndicators); reason != "" {
-			return tradelog.SaveHoldLog(event, "entry", gates.Hold{Reason: reason})
+			return tradelog.SaveHoldLog(event, "entry", gates.Hold{Reason: reason, Key: aggragates.LogKeyHoldAI})
 		}
 	}
 	return event, nil
 }
 
 // shouldHoldPosition is every transition after the first fill: arming a depth
-// (stopLoss), arming the exit (takeProfit) and the force-trailing re-anchors
+// (trailingBuy), arming the exit (takeProfit) and the force-trailing re-anchors
 // of either. The first hold that speaks wins, in this order: the chart
 // patterns (UsePatterns), the legacy AI hold (UseAI), then under Cooldown the
 // wallet reserve (depth priority) and depth spacing, last because it has no
@@ -81,10 +81,10 @@ func shouldHoldPosition(event events.Events) (events.Events, error) {
 	// The market families first; both write the row alone.
 	var hold gates.Hold
 	if params.UsePatterns {
-		hold.Reason = patterns.HoldReason(event, position, indicators)
+		hold = patterns.PositionHold(event, position, indicators)
 	}
 	if !hold.Held() && params.UseAI {
-		hold.Reason = ai.LegacyHoldReason(event, position, indicators)
+		hold = gates.Hold{Reason: ai.LegacyHoldReason(event, position, indicators), Key: aggragates.LogKeyHoldAI}
 	}
 
 	if !hold.Held() && params.Cooldown {

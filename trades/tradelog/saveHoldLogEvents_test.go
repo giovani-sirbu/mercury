@@ -31,7 +31,7 @@ type heldNote struct {
 var (
 	// holdA and holdB own a strategy param, so they write a row and an event.
 	holdA = gates.Hold{Reason: "cooldown: reason A", Param: aggragates.StrategyParamCooldown, Gate: "depthSpacing", Data: heldNote{Event: gates.EventHeld, Note: "A"}}
-	holdB = gates.Hold{Reason: "smartTakeLoss: reason B", Param: aggragates.StrategyParamSmartTakeLoss, Gate: "entryHold", Data: heldNote{Event: gates.EventHeld, Note: "B"}}
+	holdB = gates.Hold{Reason: "smartSell: reason B", Param: aggragates.StrategyParamSmartSell, Gate: "entryHold", Data: heldNote{Event: gates.EventHeld, Note: "B"}}
 	// holdC is a market family's hold (usePatterns, useAI): the row alone.
 	holdC = gates.Hold{Reason: "pattern: reason C"}
 )
@@ -60,11 +60,11 @@ func (u *updates) updateTrade(event events.Events) (events.Events, error) {
 	return event, nil
 }
 
-// holdTick is a trade of id eventsTradeID on a stopLoss tick, ready to be held:
-// the engine's proposal is stopLoss at the tick price and the position it came
+// holdTick is a trade of id eventsTradeID on a trailingBuy tick, ready to be held:
+// the engine's proposal is trailingBuy at the tick price and the position it came
 // from is buy at 100. A zero now leaves the tick clock unknown.
 func holdTick(now time.Time, record *updates) events.Events {
-	trade := testutil.NewHoldTrade("stopLoss", false)
+	trade := testutil.NewHoldTrade("trailingBuy", false)
 	trade.ID = eventsTradeID
 	event := events.Events{
 		Trade:  trade,
@@ -77,16 +77,16 @@ func holdTick(now time.Time, record *updates) events.Events {
 	return event
 }
 
-// hold is one tick of the chain: the engine proposes stopLoss at the tick price
+// hold is one tick of the chain: the engine proposes trailingBuy at the tick price
 // on the clock `at` (zero: no clock), and the gate holds it.
 func hold(event events.Events, h gates.Hold, at time.Time) (events.Events, error) {
-	event.Trade.PositionType = "stopLoss"
+	event.Trade.PositionType = "trailingBuy"
 	event.Trade.PositionPrice = 98.5
 	event.Timestamp = 0
 	if !at.IsZero() {
 		event.Timestamp = at.UnixMilli()
 	}
-	return tradelog.SaveHoldLog(event, "stopLoss", h)
+	return tradelog.SaveHoldLog(event, "trailingBuy", h)
 }
 
 // sameEvent compares two events field by field: the times as instants, the
@@ -141,7 +141,7 @@ func TestSaveHoldLogWritesTheEventBesideItsRow(t *testing.T) {
 	assertCounts(t, "the hold", written.Trade, 2, 2)
 
 	row, stored := written.Trade.Logs[1], written.Trade.StrategyEvents[1]
-	if row.Message != "Hold stopLoss: "+holdA.Reason || row.Type != aggragates.LOG_INFO || row.TradeID != eventsTradeID {
+	if row.Message != "Hold trailingBuy: "+holdA.Reason || row.Type != aggragates.LOG_INFO || row.TradeID != eventsTradeID {
 		t.Fatalf("row = %+v, want the INFO hold row of the trade", row)
 	}
 	if row.Price != 98.5 || row.Quantity != 0.25 || row.Percentage != -2.5 {
@@ -185,7 +185,7 @@ func TestSaveHoldLogWithoutAParamWritesTheRowAlone(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 	assertCounts(t, "a hold without a param", written.Trade, 1, 1)
-	if written.Trade.Logs[0].Message != "Hold stopLoss: "+holdC.Reason || !written.Trade.Logs[0].CreatedAt.Equal(eventsDay) {
+	if written.Trade.Logs[0].Message != "Hold trailingBuy: "+holdC.Reason || !written.Trade.Logs[0].CreatedAt.Equal(eventsDay) {
 		t.Fatalf("row = %+v, want the hold row at the tick", written.Trade.Logs[0])
 	}
 	if !sameEvent(written.Trade.StrategyEvents[0], earlier) {
@@ -498,7 +498,7 @@ func TestEventsStayPairedWithTheirRowsOverARandomWalk(t *testing.T) {
 
 		paired := 0
 		for i, row := range model {
-			if event.Trade.Logs[i].Message != "Hold stopLoss: "+row.hold.Reason || !event.Trade.Logs[i].CreatedAt.Equal(row.at) {
+			if event.Trade.Logs[i].Message != "Hold trailingBuy: "+row.hold.Reason || !event.Trade.Logs[i].CreatedAt.Equal(row.at) {
 				t.Fatalf("seed %d: row %d = %q at %v, want %q at %v", seed, i, event.Trade.Logs[i].Message, event.Trade.Logs[i].CreatedAt, row.hold.Reason, row.at)
 			}
 			if row.hold.Param == "" {

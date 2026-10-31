@@ -56,8 +56,8 @@ func lastHoldRow(t *testing.T, event events.Events) string {
 // operator reads it: the human pattern name, the structural level in the
 // pair's price format, and the rung it prevented.
 func TestPatternHold_AscendingTriangleBlocksTheRung(t *testing.T) {
-	msg := lastHoldRow(t, patternHoldEvent(patternHoldTrade("stopLoss", 96500, true), ascendingTriangle()))
-	want := "Hold stopLoss: pattern: ascending triangle found (resistance 96000.00), preventing stopLoss"
+	msg := lastHoldRow(t, patternHoldEvent(patternHoldTrade("trailingBuy", 96500, true), ascendingTriangle()))
+	want := "Hold trailingBuy: pattern: ascending triangle found (resistance 96000.00), preventing the trailing buy"
 	if msg != want {
 		t.Fatalf("got %q, want %q", msg, want)
 	}
@@ -83,14 +83,14 @@ func TestPatternHold_FibonacciWaitsForABetterPrice(t *testing.T) {
 		FibSwingHigh: 110000,
 		FibLevels:    []float64{106180, 105000, 103820, 102140},
 	}
-	msg := lastHoldRow(t, patternHoldEvent(patternHoldTrade("stopLoss", 106500, true), fib))
-	want := "Hold stopLoss: fibonacci: waiting for a better price (next level 106180.00)"
+	msg := lastHoldRow(t, patternHoldEvent(patternHoldTrade("trailingBuy", 106500, true), fib))
+	want := "Hold trailingBuy: fibonacci: waiting for a better price (next level 106180.00)"
 	if msg != want {
 		t.Fatalf("got %q, want %q", msg, want)
 	}
 
 	// Within the tolerance band of the level the rung may arm.
-	atLevel := patternHoldEvent(patternHoldTrade("stopLoss", 106300, true), fib)
+	atLevel := patternHoldEvent(patternHoldTrade("trailingBuy", 106300, true), fib)
 	if _, err := actions.ShouldHold(atLevel); err != nil {
 		t.Fatalf("a price at the level must release the rung, got %v", err)
 	}
@@ -99,7 +99,7 @@ func TestPatternHold_FibonacciWaitsForABetterPrice(t *testing.T) {
 // The whole family answers to the flag: the same verdicts hold nothing when
 // usePatterns is off, and never on a first fill.
 func TestPatternHold_OwnedByUsePatterns(t *testing.T) {
-	off := patternHoldEvent(patternHoldTrade("stopLoss", 96500, false), ascendingTriangle())
+	off := patternHoldEvent(patternHoldTrade("trailingBuy", 96500, false), ascendingTriangle())
 	if held, err := actions.ShouldHold(off); err != nil {
 		t.Fatalf("usePatterns off must hold nothing, got %q", held.Trade.Logs[len(held.Trade.Logs)-1].Message)
 	}

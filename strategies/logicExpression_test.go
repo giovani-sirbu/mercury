@@ -13,12 +13,12 @@ import (
 // every branch GetPosition can take.
 func spotLogic() map[string]string {
 	return map[string]string{
-		"new":        "'buy'",
-		"buy":        "percentage <= -tradePercentage-tolerance ? 'stopLoss' : (percentage >= tradePercentage+tolerance ? 'takeProfit' : '')",
-		"sell":       "percentage < -tradePercentage-tolerance ? 'update_buy' : ''",
-		"takeProfit": "percentage < -tradePercentage-tolerance ? 'update_buy' : (percentage < -tolerance ? 'sell' : (percentage > trailingTakeProfit ? 'update_takeProfit' : ''))",
-		"stopLoss":   "percentage > tradePercentage+tolerance ? 'update_buy' : (percentage > tolerance ? 'buy' : (percentage < -trailingTakeProfit-tolerance ? 'update_stopLoss' : ''))",
-		"impasse":    "'impasse'",
+		"new":         "'buy'",
+		"buy":         "percentage <= -tradePercentage-tolerance ? 'trailingBuy' : (percentage >= tradePercentage+tolerance ? 'takeProfit' : '')",
+		"sell":        "percentage < -tradePercentage-tolerance ? 'update_buy' : ''",
+		"takeProfit":  "percentage < -tradePercentage-tolerance ? 'update_buy' : (percentage < -tolerance ? 'sell' : (percentage > trailingTakeProfit ? 'update_takeProfit' : ''))",
+		"trailingBuy": "percentage > tradePercentage+tolerance ? 'update_buy' : (percentage > tolerance ? 'buy' : (percentage < -trailingTakeProfit-tolerance ? 'update_trailingBuy' : ''))",
+		"impasse":     "'impasse'",
 	}
 }
 
@@ -84,8 +84,8 @@ func TestLogicExpressionCacheIsRaceFree(t *testing.T) {
 	wg.Wait()
 
 	for slot, got := range results {
-		if got != "stopLoss" {
-			t.Fatalf("goroutine %d saw %q, want stopLoss", slot, got)
+		if got != "trailingBuy" {
+			t.Fatalf("goroutine %d saw %q, want trailingBuy", slot, got)
 		}
 	}
 }

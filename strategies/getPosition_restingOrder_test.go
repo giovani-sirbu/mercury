@@ -35,7 +35,7 @@ func TestGetPositionBuyCancelsARunawayRestingAdd(t *testing.T) {
 		{"resting, a print just under one step (1.6%) over the order", true, 1.59, -17, ""},
 		{"resting, a print just over one step over the order", true, 1.61, -17, "update_buy"},
 		{"resting, a print 1.7% over the order, one step is 1.6%", true, 1.7, -17, "update_buy"},
-		{"resting, a print a step under the order still arms the next depth", true, -2, -17, "stopLoss"},
+		{"resting, a print a step under the order still arms the next depth", true, -2, -17, "trailingBuy"},
 		{"not resting, a print 10% over the last fill reads as before", false, 10, -17, ""},
 		{"not resting, the take profit still arms over break even", false, 1.7, 1.7, "takeProfit"},
 		{"resting, the take profit is behind the cancel", true, 1.7, 1.7, "update_buy"},

@@ -10,7 +10,7 @@ import (
 // TestHold_StopLossNoLongerHeldOnClassicSignal: cooldown is first-fill
 // only. A rebuy must proceed even when markers look expensive.
 func TestHold_StopLossNoLongerHeldOnClassicSignal(t *testing.T) {
-	trade := scenarioBuildTrade("stopLoss", 95000, false)
+	trade := scenarioBuildTrade("trailingBuy", 95000, false)
 	trade.Strategy.Params.Cooldown = true
 	scenarioAppendHistory(&trade, "BUY", 0.001, 100000, "", 0)
 
@@ -63,19 +63,19 @@ func TestHold_InverseFirstFillExpensiveBlocksEntry(t *testing.T) {
 
 // TestHold_AIHoldActionBlocksRebuyAllowsTakeProfit proves the explicit
 // AIAction=HOLD gate: HOLD means "no direction", so risk-adding positions
-// (stopLoss rebuys) are short-circuited while the profitable close
+// (trailingBuy rebuys) are short-circuited while the profitable close
 // (takeProfit) is allowed to execute, for spot and inverse alike.
 func TestHold_AIHoldActionBlocksRebuyAllowsTakeProfit(t *testing.T) {
-	stopLoss := scenarioBuildTrade("stopLoss", 95000, false)
-	stopLoss.Strategy.Params.UseAI = true
-	scenarioAppendHistory(&stopLoss, "BUY", 0.001, 100000, "", 0)
+	trailingBuy := scenarioBuildTrade("trailingBuy", 95000, false)
+	trailingBuy.Strategy.Params.UseAI = true
+	scenarioAppendHistory(&trailingBuy, "BUY", 0.001, 100000, "", 0)
 
-	event := scenarioBuildEvent(stopLoss, "BTC", "0.001")
+	event := scenarioBuildEvent(trailingBuy, "BTC", "0.001")
 	event.Params.OldPosition = "active"
 	event.Params.AIIndicators = aggragates.AIIndicators{AIAction: aggragates.ActionHold}
 
 	if _, err := actions.ShouldHold(event); err == nil {
-		t.Fatal("expected hold error on explicit AI HOLD action for stopLoss rebuy")
+		t.Fatal("expected hold error on explicit AI HOLD action for trailingBuy rebuy")
 	}
 
 	takeProfit := scenarioBuildTrade("takeProfit", 102000, false)

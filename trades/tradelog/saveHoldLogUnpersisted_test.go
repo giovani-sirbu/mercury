@@ -32,7 +32,7 @@ func TestSaveHoldLogPersistsTheFirstHold(t *testing.T) {
 	ran := false
 	at := time.Date(2026, time.September, 5, 12, 0, 0, 0, time.UTC)
 
-	_, err := SaveHoldLog(recordingHoldEvent(testutil.NewHoldTrade("stopLoss", false), at, &ran), "stopLoss", gates.Hold{Reason: holdReason})
+	_, err := SaveHoldLog(recordingHoldEvent(testutil.NewHoldTrade("trailingBuy", false), at, &ran), "trailingBuy", gates.Hold{Reason: holdReason})
 
 	if !ran {
 		t.Fatal("a hold that writes its row must run updateTrade")
@@ -52,17 +52,17 @@ func TestSaveHoldLogPersistsTheFirstHold(t *testing.T) {
 func TestSaveHoldLogFlagsTheCollapsedHoldAsUnpersisted(t *testing.T) {
 	at := time.Date(2026, time.September, 5, 12, 0, 0, 0, time.UTC)
 	first := false
-	event := recordingHoldEvent(testutil.NewHoldTrade("stopLoss", false), at, &first)
-	event, _ = SaveHoldLog(event, "stopLoss", gates.Hold{Reason: holdReason})
+	event := recordingHoldEvent(testutil.NewHoldTrade("trailingBuy", false), at, &first)
+	event, _ = SaveHoldLog(event, "trailingBuy", gates.Hold{Reason: holdReason})
 	if !first {
 		t.Fatal("setup: the first hold must persist")
 	}
 
 	second := false
-	event.Trade.PositionType = "stopLoss"
+	event.Trade.PositionType = "trailingBuy"
 	repeat := recordingHoldEvent(event.Trade, at.Add(time.Minute), &second)
 
-	_, err := SaveHoldLog(repeat, "stopLoss", gates.Hold{Reason: holdReason})
+	_, err := SaveHoldLog(repeat, "trailingBuy", gates.Hold{Reason: holdReason})
 
 	if second {
 		t.Fatal("a collapsed hold must not run updateTrade")
@@ -80,14 +80,14 @@ func TestSaveHoldLogFlagsTheCollapsedHoldAsUnpersisted(t *testing.T) {
 func TestSaveHoldLogPastTheRelogWindowIsPersistedAgain(t *testing.T) {
 	at := time.Date(2026, time.September, 5, 12, 0, 0, 0, time.UTC)
 	first := false
-	event := recordingHoldEvent(testutil.NewHoldTrade("stopLoss", false), at, &first)
-	event, _ = SaveHoldLog(event, "stopLoss", gates.Hold{Reason: holdReason})
+	event := recordingHoldEvent(testutil.NewHoldTrade("trailingBuy", false), at, &first)
+	event, _ = SaveHoldLog(event, "trailingBuy", gates.Hold{Reason: holdReason})
 
 	later := false
-	event.Trade.PositionType = "stopLoss"
+	event.Trade.PositionType = "trailingBuy"
 	repeat := recordingHoldEvent(event.Trade, at.Add(holdRelogAfter+time.Minute), &later)
 
-	_, err := SaveHoldLog(repeat, "stopLoss", gates.Hold{Reason: holdReason})
+	_, err := SaveHoldLog(repeat, "trailingBuy", gates.Hold{Reason: holdReason})
 
 	if !later {
 		t.Fatal("past the relog window the reason is written again")

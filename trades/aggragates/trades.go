@@ -69,9 +69,9 @@ type (
 		FibSwingLow  float64
 		FibSwingHigh float64
 		FibLevels    []float64
-		// SmartTakeLoss is the /patterns chart block the engines hand to
-		// gates/smarttakeloss.Apply; every zero field is inert.
-		SmartTakeLoss SmartTakeLossIndicators
+		// SmartSell is the /patterns chart block the engines hand to
+		// gates/smartsell.Apply; every zero field is inert.
+		SmartSell SmartSellIndicators
 		// DynamicParams is the SMC trend dashboard's reads a ladder opens on
 		// (dynamicparams.Opening); the zero block raises nothing.
 		DynamicParams DynamicParamsIndicators
@@ -105,5 +105,8 @@ type (
 		AvailableQuantity float64
 		// EntrySettings sizes the first entry when set (the raised rows); never persisted.
 		EntrySettings []StrategySettings
+		// OldStatus is the trade's status as the tick found it: set, tradelog.SaveHoldLog settles a
+		// held trade's status (SettledStatus); empty leaves the status untouched.
+		OldStatus Status
 	}
 )

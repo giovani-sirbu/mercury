@@ -13,7 +13,7 @@ type LadderFill struct {
 	At    time.Time
 }
 
-// LadderTrade is a trade under SmartTakeLoss on one ladder row, so that row's
+// LadderTrade is a trade under SmartSell on one ladder row, so that row's
 // settings govern every depth: one distinct entry order per fill (OrderId
 // i+1, one unit, CreatedAt = the fill's stamp), PositionType "buy" and
 // PositionPrice at the last fill. An inverse ladder holds the same fills as
@@ -26,7 +26,7 @@ func LadderTrade(inverse bool, fills ...LadderFill) aggragates.Trades {
 		Inverse:      inverse,
 		Status:       aggragates.Active,
 		Strategy: aggragates.Strategies{
-			Params: aggragates.StrategyParams{SmartTakeLoss: true},
+			Params: aggragates.StrategyParams{SmartSell: true},
 		},
 		StrategyPair: aggragates.StrategiesPairs{
 			TradeFilters: aggragates.TradeFilters{PriceFilter: 2},

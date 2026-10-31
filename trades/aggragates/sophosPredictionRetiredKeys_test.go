@@ -10,8 +10,8 @@ import (
 // decline's and the indecision's readings, the swing decline prefix on the series and the trend,
 // the low interest and non interest area bars — decode to nothing: a sophos still serving them
 // leaves every gate inert, never reading one field under another's name.
-func TestSophosPredictionIgnoresTheRetiredSmartTakeLossKeys(t *testing.T) {
-	retired := `{"smartTakeLoss":{
+func TestSophosPredictionIgnoresTheRetiredSmartSellKeys(t *testing.T) {
+	retired := `{"smartSell":{
 		"slowDeclineExit":true,"slowDeclineLegQuiet":true,"slowDeclineSmoothFrom":1,"slowDeclineFillBefore":2,
 		"slowDeclineExitReasons":["a"],"slowDeclineBreakReasons":["b"],"slowDeclineIndecision":true,
 		"slowDeclineRecentAt":3,"slowDeclineRecentFrom":4,"slowDeclineRecentReasons":["c"],
@@ -26,7 +26,7 @@ func TestSophosPredictionIgnoresTheRetiredSmartTakeLossKeys(t *testing.T) {
 	if err := json.Unmarshal([]byte(retired), &prediction); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got := prediction.Indicators().SmartTakeLoss; !reflect.DeepEqual(got, SmartTakeLossIndicators{}) {
+	if got := prediction.Indicators().SmartSell; !reflect.DeepEqual(got, SmartSellIndicators{}) {
 		t.Fatalf("the retired keys must decode to the zero block, got %+v", got)
 	}
 }

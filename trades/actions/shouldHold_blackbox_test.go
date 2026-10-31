@@ -10,7 +10,7 @@ import (
 func TestShouldHold(t *testing.T) {
 	t.Run("NoHold_NoIndicators", func(t *testing.T) {
 		trade := MakeTrade("ATOM/USDT", 5, false, nil)
-		trade.PositionType = "stopLoss"
+		trade.PositionType = "trailingBuy"
 		event := MakeEvent(trade, "USDT", "1000", []string{"shouldHold"})
 		event.Params.OldPosition = "active"
 		_, err := actions.ShouldHold(event)
@@ -52,7 +52,7 @@ func TestShouldHold(t *testing.T) {
 
 	t.Run("AI_StopLoss_BearishHolds", func(t *testing.T) {
 		trade := MakeTrade("ATOM/USDT", 5, false, nil)
-		trade.PositionType = "stopLoss"
+		trade.PositionType = "trailingBuy"
 		trade.Strategy.Params.UseAI = true
 		event := MakeEvent(trade, "USDT", "1000", []string{"shouldHold"})
 		event.Params.OldPosition = "active"
@@ -74,7 +74,7 @@ func TestShouldHold(t *testing.T) {
 
 	t.Run("AI_ExplicitHold", func(t *testing.T) {
 		trade := MakeTrade("ATOM/USDT", 5, false, nil)
-		trade.PositionType = "stopLoss"
+		trade.PositionType = "trailingBuy"
 		trade.Strategy.Params.UseAI = true
 		event := MakeEvent(trade, "USDT", "1000", []string{"shouldHold"})
 		event.Params.OldPosition = "active"
@@ -107,7 +107,7 @@ func TestShouldHold(t *testing.T) {
 
 	t.Run("AI_ExplicitHold_InverseStopLossHolds", func(t *testing.T) {
 		trade := MakeTrade("ATOM/USDT", 5, true, nil)
-		trade.PositionType = "stopLoss"
+		trade.PositionType = "trailingBuy"
 		trade.Strategy.Params.UseAI = true
 		event := MakeEvent(trade, "USDT", "1000", []string{"shouldHold"})
 		event.Params.OldPosition = "active"
@@ -118,7 +118,7 @@ func TestShouldHold(t *testing.T) {
 
 	t.Run("Classic_StopLoss_NoLongerHolds", func(t *testing.T) {
 		trade := MakeTrade("ATOM/USDT", 5, false, nil)
-		trade.PositionType = "stopLoss"
+		trade.PositionType = "trailingBuy"
 		trade.Strategy.Params.Cooldown = true
 		event := MakeEvent(trade, "USDT", "1000", []string{"shouldHold"})
 		event.Params.OldPosition = "active"
@@ -185,7 +185,7 @@ func TestShouldHold(t *testing.T) {
 
 	t.Run("Inverse_StopLoss_BullishHolds_AI", func(t *testing.T) {
 		trade := MakeTrade("ATOM/USDT", 5, true, nil)
-		trade.PositionType = "stopLoss"
+		trade.PositionType = "trailingBuy"
 		trade.Strategy.Params.UseAI = true
 		event := MakeEvent(trade, "USDT", "1000", []string{"shouldHold"})
 		event.Params.OldPosition = "active"

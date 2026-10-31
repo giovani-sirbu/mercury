@@ -20,7 +20,7 @@ import (
 	"github.com/giovani-sirbu/mercury/strategies/gates"
 	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown"
 	"github.com/giovani-sirbu/mercury/strategies/gates/dynamicparams"
-	"github.com/giovani-sirbu/mercury/strategies/gates/smarttakeloss"
+	"github.com/giovani-sirbu/mercury/strategies/gates/smartsell"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
 )
 
@@ -52,11 +52,11 @@ type filed struct {
 // The reasons carry the characters a JSON encoder escapes.
 func everyWriter(trade aggragates.Trades, at time.Time) []filed {
 	reasons := []string{"leg down 7.0% from its high close", `vol > 2x & <quiet> "bars" \ 日本`}
-	quiet := smarttakeloss.Finding{Feature: smarttakeloss.FeatureQuietDecline, Reasons: reasons}
-	swing := smarttakeloss.Finding{Feature: smarttakeloss.FeatureSwingDecline, Reasons: reasons}
-	latch := smarttakeloss.Finding{Feature: smarttakeloss.FeatureIndecision, Reasons: reasons}
-	fromRow := func(row smarttakeloss.Row) aggragates.TradesStrategyEvents {
-		_, event := smarttakeloss.Rows(trade, row, at)
+	quiet := smartsell.Finding{Feature: smartsell.FeatureQuietDecline, Reasons: reasons}
+	swing := smartsell.Finding{Feature: smartsell.FeatureSwingDecline, Reasons: reasons}
+	latch := smartsell.Finding{Feature: smartsell.FeatureIndecision, Reasons: reasons}
+	fromRow := func(row smartsell.Row) aggragates.TradesStrategyEvents {
+		_, event := smartsell.Rows(trade, row, at)
 		return event
 	}
 	fromOpened := func(opened dynamicparams.Opened) aggragates.TradesStrategyEvents {
@@ -66,7 +66,7 @@ func everyWriter(trade aggragates.Trades, at time.Time) []filed {
 	// What the gates before the merge wrote: no builder writes these any more, and
 	// the rows already in a database carry them.
 	legacy := func(gate, kind string, price float64) aggragates.TradesStrategyEvents {
-		return aggragates.NewStrategyEvent(trade.ID, aggragates.StrategyParamSmartTakeLoss, gate, map[string]any{"event": kind, "price": price, "reasons": reasons}, at)
+		return aggragates.NewStrategyEvent(trade.ID, aggragates.StrategyParamSmartSell, gate, map[string]any{"event": kind, "price": price, "reasons": reasons}, at)
 	}
 
 	return []filed{
@@ -76,16 +76,16 @@ func everyWriter(trade aggragates.Trades, at time.Time) []filed {
 		{"first fill verdict held", cooldown.NewFirstFillEvent(trade.ID, cooldown.FirstFillEvent{Event: cooldown.FirstFillVerdictHeld}, at), "cooldown", "firstFill", "verdictHeld"},
 		{"depth priority held", cooldown.NewDepthPriorityEvent(trade.ID, cooldown.DepthPriorityEvent{Event: gates.EventHeld, PrioritySymbol: "ETH/USDT", PriorityDepth: 5, PriorityMaxDepth: 8, Depth: 2, MaxDepth: 8}, at), "cooldown", "depthPriority", "held"},
 		{"depth spacing held", cooldown.NewDepthSpacingEvent(trade.ID, cooldown.DepthSpacingEvent{Event: gates.EventHeld, Depth: 3, Step: 2, Hold: 2 * time.Hour, Release: 97.4}, at), "cooldown", "depthSpacing", "held"},
-		{"slow decline pending row", fromRow(smarttakeloss.PendingRow(184.45, latch, quiet, swing)), "smartTakeLoss", "slowDecline", "pending"},
-		{"slow decline confirmed row", fromRow(smarttakeloss.ConfirmedRow(184.45, swing)), "smartTakeLoss", "slowDecline", "pending"},
-		{"slow decline cancelled row", fromRow(smarttakeloss.CancelledRow(179.78, quiet, swing)), "smartTakeLoss", "slowDecline", "cancelled"},
-		{"slow decline reset row", fromRow(smarttakeloss.ResetRow(179.78, quiet)), "smartTakeLoss", "slowDecline", "reset"},
-		{"indecision latched row", fromRow(smarttakeloss.LatchedRow(175.83, latch)), "smartTakeLoss", "slowDecline", "latched"},
-		{"slow decline sale held row", fromRow(smarttakeloss.SaleHeldRow(184.45, 3.1, smarttakeloss.FeatureQuietDecline, smarttakeloss.FeatureSwingDecline)), "smartTakeLoss", "slowDecline", "saleHeld"},
-		{"exit row", fromRow(smarttakeloss.ExitRow(trade, "a rule that sold", 175.39)), "smartTakeLoss", "slowDecline", "sold"},
-		{"legacy slow decline pending", legacy("slowDecline", "pending", 184.45), "smartTakeLoss", "slowDecline", "pending"},
-		{"legacy slow pattern pending", legacy("slowPattern", "pending", 184.45), "smartTakeLoss", "slowPattern", "pending"},
-		{"legacy indecision latched", legacy("indecision", "latched", 175.83), "smartTakeLoss", "indecision", "latched"},
+		{"slow decline pending row", fromRow(smartsell.PendingRow(184.45, latch, quiet, swing)), "smartSell", "slowDecline", "pending"},
+		{"slow decline confirmed row", fromRow(smartsell.ConfirmedRow(184.45, swing)), "smartSell", "slowDecline", "pending"},
+		{"slow decline cancelled row", fromRow(smartsell.CancelledRow(179.78, quiet, swing)), "smartSell", "slowDecline", "cancelled"},
+		{"slow decline reset row", fromRow(smartsell.ResetRow(179.78, quiet)), "smartSell", "slowDecline", "reset"},
+		{"indecision latched row", fromRow(smartsell.LatchedRow(175.83, latch)), "smartSell", "slowDecline", "latched"},
+		{"slow decline sale held row", fromRow(smartsell.SaleHeldRow(184.45, 3.1, smartsell.FeatureQuietDecline, smartsell.FeatureSwingDecline)), "smartSell", "slowDecline", "saleHeld"},
+		{"exit row", fromRow(smartsell.ExitRow(trade, "a rule that sold", 175.39)), "smartSell", "slowDecline", "sold"},
+		{"legacy slow decline pending", legacy("slowDecline", "pending", 184.45), "smartSell", "slowDecline", "pending"},
+		{"legacy slow pattern pending", legacy("slowPattern", "pending", 184.45), "smartSell", "slowPattern", "pending"},
+		{"legacy indecision latched", legacy("indecision", "latched", 175.83), "smartSell", "indecision", "latched"},
 		{"opened", fromOpened(dynamicparams.Opened{Points: 0.4, Depths: 1}), "dynamicParams", "opened", "opened"},
 		{"opened with no amount", fromOpened(dynamicparams.Opened{}), "dynamicParams", "opened", "opened"},
 	}
@@ -109,11 +109,11 @@ func storedEvents(trade aggragates.Trades, count int) []aggragates.TradesStrateg
 
 // carrying is a trade with count events and the log row beside each.
 func carrying(count int) aggragates.Trades {
-	trade := aggragates.Trades{ID: 7, Symbol: "LINK/USDT", PositionType: "stopLoss", PositionPrice: 184.45}
+	trade := aggragates.Trades{ID: 7, Symbol: "LINK/USDT", PositionType: "trailingBuy", PositionPrice: 184.45}
 	trade.StrategyEvents = storedEvents(trade, count)
 	for i, event := range trade.StrategyEvents {
 		trade.Logs = append(trade.Logs, aggragates.TradesLogs{
-			ID: uint(i + 1), TradeID: trade.ID, Message: fmt.Sprintf("Hold stopLoss: row %d", i), Type: aggragates.LOG_INFO,
+			ID: uint(i + 1), TradeID: trade.ID, Message: fmt.Sprintf("Hold trailingBuy: row %d", i), Type: aggragates.LOG_INFO,
 			Price: 184.45, CreatedAt: event.CreatedAt, UpdatedAt: event.CreatedAt,
 		})
 	}
@@ -325,7 +325,7 @@ func TestAnEventWithoutADocumentStaysInertOnEveryWire(t *testing.T) {
 // numbers of every shape, stamps present and absent.
 func TestRandomEventListsSurviveBothCodecs(t *testing.T) {
 	codec := cache.New(&cache.Options{})
-	params := []string{"cooldown", "smartTakeLoss", "dynamicParams", "", "other"}
+	params := []string{"cooldown", "smartSell", "dynamicParams", "", "other"}
 	kinds := []string{"activated", "armed", "entered", "held", "pending", "latched", "saleHeld", "opened", ""}
 	words := []string{"quiet", "leg > 60 bars", "a&b", "<b>", "naïve", " ", "日本", `"quoted"`, `back\slash`, "tab\there"}
 
@@ -539,23 +539,23 @@ func TestEveryWriterFilesAKindedDocument(t *testing.T) {
 func TestAWritersRowAndItsEventArePairedByTradeStampAndPrice(t *testing.T) {
 	trade := aggragates.Trades{ID: 7}
 	at := clockAt(4)
-	quiet := func(reasons ...string) smarttakeloss.Finding {
-		return smarttakeloss.Finding{Feature: smarttakeloss.FeatureQuietDecline, Reasons: reasons}
+	quiet := func(reasons ...string) smartsell.Finding {
+		return smartsell.Finding{Feature: smartsell.FeatureQuietDecline, Reasons: reasons}
 	}
-	for name, row := range map[string]smarttakeloss.Row{
-		"pending":   smarttakeloss.PendingRow(184.45, quiet("a")),
-		"confirmed": smarttakeloss.ConfirmedRow(184.45, quiet("a")),
-		"cancelled": smarttakeloss.CancelledRow(179.78, quiet()),
-		"reset":     smarttakeloss.ResetRow(179.78, quiet()),
-		"latched":   smarttakeloss.LatchedRow(175.83, smarttakeloss.Finding{Feature: smarttakeloss.FeatureIndecision, Reasons: []string{"b", "c"}}),
-		"saleHeld":  smarttakeloss.SaleHeldRow(184.45, 3.1, smarttakeloss.FeatureQuietDecline),
-		"exit":      smarttakeloss.ExitRow(trade, "a rule that sold", 175.39),
+	for name, row := range map[string]smartsell.Row{
+		"pending":   smartsell.PendingRow(184.45, quiet("a")),
+		"confirmed": smartsell.ConfirmedRow(184.45, quiet("a")),
+		"cancelled": smartsell.CancelledRow(179.78, quiet()),
+		"reset":     smartsell.ResetRow(179.78, quiet()),
+		"latched":   smartsell.LatchedRow(175.83, smartsell.Finding{Feature: smartsell.FeatureIndecision, Reasons: []string{"b", "c"}}),
+		"saleHeld":  smartsell.SaleHeldRow(184.45, 3.1, smartsell.FeatureQuietDecline),
+		"exit":      smartsell.ExitRow(trade, "a rule that sold", 175.39),
 	} {
-		logRow, event := smarttakeloss.Rows(trade, row, at)
+		logRow, event := smartsell.Rows(trade, row, at)
 		if logRow.TradeID != event.TradeID || !logRow.CreatedAt.Equal(event.CreatedAt) {
 			t.Errorf("%s: row (trade %d, %v) and event (trade %d, %v) are not a pair", name, logRow.TradeID, logRow.CreatedAt, event.TradeID, event.CreatedAt)
 		}
-		var data smarttakeloss.EventData
+		var data smartsell.EventData
 		if err := event.DecodeData(&data); err != nil || data.Price != logRow.Price || data.Price != row.Price {
 			t.Errorf("%s: the event's price %v and the row's %v must be the one price, %v", name, data.Price, logRow.Price, err)
 		}
@@ -578,7 +578,7 @@ func TestStrategyEventsOfKeepsSliceOrderAndFiltersByParamAndGate(t *testing.T) {
 	trade := aggragates.Trades{StrategyEvents: []aggragates.TradesStrategyEvents{
 		event(1, "cooldown", "firstFill", 50),
 		event(2, "cooldown", "depthSpacing", 40),
-		event(3, "smartTakeLoss", "firstFill", 30),
+		event(3, "smartSell", "firstFill", 30),
 		event(4, "cooldown", "firstFill", 10),
 		event(5, "cooldownX", "firstFill", 60),
 		event(6, "cooldown", "firstFillX", 60),
@@ -603,7 +603,7 @@ func TestStrategyEventsOfKeepsSliceOrderAndFiltersByParamAndGate(t *testing.T) {
 	if got := ids(trade.StrategyEventsOf("cooldown", "depthSpacing")); !reflect.DeepEqual(got, []uint{2}) {
 		t.Fatalf("StrategyEventsOf(cooldown, depthSpacing) = %v, want [2]", got)
 	}
-	if got := ids(trade.StrategyEventsOf("smartTakeLoss", "firstFill")); !reflect.DeepEqual(got, []uint{3}) {
+	if got := ids(trade.StrategyEventsOf("smartSell", "firstFill")); !reflect.DeepEqual(got, []uint{3}) {
 		t.Fatalf("the same gate name under another param is another gate, got %v", got)
 	}
 	for _, none := range [][2]string{{"cooldown", "opened"}, {"dynamicParams", "firstFill"}, {"cooldown", "FIRSTFILL"}} {
@@ -637,7 +637,7 @@ func TestAppendStrategyRowNeverWritesTheCallersArrays(t *testing.T) {
 	rowA := aggragates.TradesLogs{Message: "A", TradeID: 7}
 	eventA := aggragates.NewStrategyEvent(7, "cooldown", "firstFill", map[string]string{"event": "activated"}, clockAt(1))
 	rowB := aggragates.TradesLogs{Message: "B", TradeID: 7}
-	eventB := aggragates.NewStrategyEvent(7, "smartTakeLoss", "slowDecline", map[string]string{"event": "pending"}, clockAt(2))
+	eventB := aggragates.NewStrategyEvent(7, "smartSell", "slowDecline", map[string]string{"event": "pending"}, clockAt(2))
 
 	first := aggragates.AppendStrategyRow(trade, rowA, eventA)
 	second := aggragates.AppendStrategyRow(trade, rowB, eventB)

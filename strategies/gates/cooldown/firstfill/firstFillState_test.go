@@ -182,7 +182,7 @@ func TestFirstFillStateIgnoresWhatIsNotItsEvents(t *testing.T) {
 		{aggragates.StrategyParamCooldown, cooldown.GateDepthSpacing},
 		{aggragates.StrategyParamCooldown, cooldown.GateDepthPriority},
 		{aggragates.StrategyParamCooldown, ""},
-		{aggragates.StrategyParamSmartTakeLoss, cooldown.GateFirstFill},
+		{aggragates.StrategyParamSmartSell, cooldown.GateFirstFill},
 		{aggragates.StrategyParamDynamicParams, cooldown.GateFirstFill},
 		{"", cooldown.GateFirstFill},
 		{"", ""},
@@ -485,7 +485,7 @@ func TestFirstFillStateMatchesAnIndependentModelOnRandomEventLogs(t *testing.T) 
 	foreign := [][2]string{
 		{aggragates.StrategyParamCooldown, cooldown.GateDepthSpacing},
 		{aggragates.StrategyParamCooldown, cooldown.GateDepthPriority},
-		{aggragates.StrategyParamSmartTakeLoss, cooldown.GateFirstFill},
+		{aggragates.StrategyParamSmartSell, cooldown.GateFirstFill},
 		{aggragates.StrategyParamDynamicParams, cooldown.GateFirstFill},
 		{"", ""},
 	}

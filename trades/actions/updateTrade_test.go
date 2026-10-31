@@ -35,8 +35,8 @@ func TestUpdateTradeAppendsInfoLogAndProducesMessage(t *testing.T) {
 	if len(got.Trade.Logs) != 1 {
 		t.Fatalf("expected one log appended, got %d", len(got.Trade.Logs))
 	}
-	if got.Trade.Logs[0].Message != "NEW_TO_BUY" {
-		t.Errorf("log message = %q, want NEW_TO_BUY", got.Trade.Logs[0].Message)
+	if got.Trade.Logs[0].Message != "New position opened: first depth filled at 100 (qty 1)." || got.Trade.Logs[0].MessageKey != "NEW_TO_BUY" {
+		t.Errorf("log row = %q keyed %q, want the readable entry keyed NEW_TO_BUY", got.Trade.Logs[0].Message, got.Trade.Logs[0].MessageKey)
 	}
 	if got.Trade.Logs[0].Type != aggragates.LOG_INFO {
 		t.Errorf("log type = %q, want INFO", got.Trade.Logs[0].Type)
@@ -66,31 +66,30 @@ func TestUpdateTradeSkipsLogWhenPreventInfoLog(t *testing.T) {
 	}
 }
 
-func TestUpdateTradeSkipsDuplicateLogs(t *testing.T) {
+// A transition the trade's newest row already names is written again and published: every chain
+// that runs reaches agora, the trailing buy moved twice in a row included.
+func TestUpdateTradeWritesARepeatedTransition(t *testing.T) {
 	var produced []string
-	// UpdateTrade builds the message as "<OldPosition>_TO_<PositionType>" before
-	// uppercasing, and the dedupe check compares the pre-uppercase form against
-	// the last log message. Storing the lowercase form here exercises the
-	// duplicate short-circuit.
 	event := events.Events{
 		Broker: newBrokerWithRecorder(&produced),
 		Trade: aggragates.Trades{
-			PositionType: "buy",
+			PositionType:  "trailingBuy",
+			PositionPrice: 97.5,
 			Logs: []aggragates.TradesLogs{
-				{Message: "new_TO_buy"},
+				{Message: "Secured a better price for the next depth: trailing buy moved to 98.", MessageKey: "TRAILING_BUY_TO_TRAILING_BUY"},
 			},
 		},
-		Params: aggragates.Params{OldPosition: "new"},
+		Params: aggragates.Params{OldPosition: "trailingBuy"},
 	}
 
 	got, err := UpdateTrade(event)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(got.Trade.Logs) != 1 {
-		t.Fatalf("expected duplicate log to be skipped, got %d logs", len(got.Trade.Logs))
+	if len(got.Trade.Logs) != 2 || got.Trade.Logs[1].MessageKey != "TRAILING_BUY_TO_TRAILING_BUY" || got.Trade.Logs[1].Message != "Secured a better price for the next depth: trailing buy moved to 97.5." {
+		t.Fatalf("expected the repeated transition written again, got %+v", got.Trade.Logs)
 	}
-	if len(produced) != 0 {
-		t.Errorf("expected no message produced when duplicate, got %d", len(produced))
+	if len(produced) != 1 {
+		t.Errorf("expected the trade published, got %d", len(produced))
 	}
 }
