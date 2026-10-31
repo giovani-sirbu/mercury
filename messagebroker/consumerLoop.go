@@ -13,9 +13,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// listen opens a LISTEN connection for prefixedTopic, drains any pending
-// rows on startup, then loops on notifications and a ticker until the
-// connection drops or the context is cancelled.
+// listen opens a LISTEN connection for prefixedTopic, drains the backlog,
+// then claims on notifications and a ticker until the connection drops.
 func (m MessageBroker) listen(prefixedTopic string, handler ContextHandler) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -31,8 +30,7 @@ func (m MessageBroker) listen(prefixedTopic string, handler ContextHandler) erro
 		return fmt.Errorf("LISTEN: %w", err)
 	}
 
-	// Drain any backlog on startup (pre-subscription messages or
-	// messages left locked by a crashed worker past the stale-lock window).
+	// Drain the backlog on startup.
 	claimAndRun(ctx, prefixedTopic, m.ServiceName, handler)
 
 	ticker := time.NewTicker(pollInterval)
@@ -48,21 +46,15 @@ func (m MessageBroker) listen(prefixedTopic string, handler ContextHandler) erro
 			}
 		}()
 		for {
-			// Bound each wait so this goroutine wakes periodically to keep the
-			// connection warm (see listenKeepaliveInterval). A deadline-
-			// interrupted WaitForNotification leaves the connection usable —
-			// pgx aborts the read via SetDeadline and treats the timeout as
-			// non-fatal — so the SAME goroutine can ping. pgx.Conn is not safe
-			// for concurrent use, which is why the ping must run here and not
-			// from the select loop below.
+			// Each wait is bounded so this goroutine can ping the connection
+			// itself; pgx.Conn is not safe for concurrent use.
 			waitCtx, waitCancel := context.WithTimeout(ctx, listenKeepaliveInterval)
 			_, err := conn.WaitForNotification(waitCtx)
 			timedOut := waitCtx.Err() == context.DeadlineExceeded
 			waitCancel()
 
 			if err != nil {
-				// Our keepalive deadline fired while the parent is still alive:
-				// ping to put bytes on the wire, then resume waiting.
+				// The keepalive deadline fired: ping, then resume waiting.
 				if timedOut && ctx.Err() == nil {
 					pingCtx, pingCancel := context.WithTimeout(ctx, listenKeepalivePingTimeout)
 					pingErr := conn.Ping(pingCtx)
@@ -139,15 +131,9 @@ func claimBatch(ctx context.Context, topic, serviceName string, handler ContextH
 		id            int64
 		payload       []byte
 		correlationID string
-		// staleReclaim is true when this row had a non-NULL locked_at at
-		// claim time — meaning a previous worker locked it and never marked
-		// it processed within staleLockAfter. Used to emit the
-		// messagebroker_stale_lock_reclaimed_total counter so ops can see
-		// when handlers are crashing or hanging.
+		// staleReclaim is true when a previous worker locked the row and never marked it processed.
 		staleReclaim bool
-		// createdAt is the row's produce timestamp from message_queue. Used
-		// to observe BrokerE2ELag (produce → dispatch) per message so we
-		// can tell pipeline lag apart from handler latency.
+		// createdAt is the row's produce timestamp, observed as BrokerE2ELag.
 		createdAt time.Time
 	}
 	var claimed []claimedRow
@@ -192,8 +178,7 @@ func claimBatch(ctx context.Context, topic, serviceName string, handler ContextH
 		if r.staleReclaim {
 			metrics.BrokerStaleLockReclaimed.WithLabelValues(serviceName, topic).Inc()
 		}
-		// Observe produce→dispatch lag before handing off to runHandler so
-		// the metric reflects pipeline delay specifically — not handler work.
+		// Observed before the handler so the lag excludes handler work.
 		metrics.BrokerE2ELag.
 			WithLabelValues(serviceName, topic).
 			Observe(time.Since(r.createdAt).Seconds())
@@ -203,16 +188,10 @@ func claimBatch(ctx context.Context, topic, serviceName string, handler ContextH
 }
 
 func runHandler(ctx context.Context, topic string, id int64, correlationID string, payload []byte, handler ContextHandler) {
-	// Inject correlation id into the per-message context so the handler and
-	// anything it calls downstream (log, ProduceWithCorrelation, outbound HTTP)
-	// can fish it back out via log.CorrelationFromContext.
+	// The correlation id rides the per-message context.
 	ctx = commonLog.ContextWithCorrelation(ctx, correlationID)
 
-	// Time the handler call. `outcome` is set after the fact below — either
-	// "ok" on the success path or "panic" inside the recover. We observe in
-	// a deferred closure so a panic doesn't bypass the metric (a panic that
-	// skipped observation would leave the histogram silent during the very
-	// incidents observability is supposed to catch).
+	// Observed in a deferred closure so a panic cannot skip the metric.
 	start := time.Now()
 	outcome := "ok"
 

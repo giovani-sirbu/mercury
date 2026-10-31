@@ -8,21 +8,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// pendingSampleInterval is how often the sampler refreshes the per-topic
-// pending-message gauge. Postgres COUNT(*) over message_queue with the
-// existing `idx_mq_pending` index is fast (single-digit ms even at millions
-// of rows), but no need to hammer it — 30s is more than fine for alerts.
+// pendingSampleInterval is how often the per-topic pending gauge is refreshed.
 const pendingSampleInterval = 30 * time.Second
 
-// runPendingSampler refreshes messagebroker_pending_messages{topic} on a
-// fixed cadence. Without this gauge, "broker is falling behind" only shows
-// up as user-visible delay; with it, Grafana plots queue depth per topic and
-// alerts fire before users notice.
-//
-// Runs forever — no shutdown signal is needed because the goroutine just
-// exits when the process exits. If the pool is closed (graceful shutdown via
-// messagebroker.Close), the query returns an error which we swallow and
-// retry next tick.
+// runPendingSampler refreshes messagebroker_pending_messages per topic forever;
+// a query error is retried next tick.
 func runPendingSampler(pool *pgxpool.Pool, serviceName string) {
 	t := time.NewTicker(pendingSampleInterval)
 	defer t.Stop()
@@ -45,10 +35,7 @@ func samplePending(pool *pgxpool.Pool, serviceName string) {
 	}
 	defer rows.Close()
 
-	// Track which topics the query returned so we can emit 0 for known
-	// topics that are absent from the result (empty queue for that topic).
-	// Without this fallback a brand-new or fully-drained topic never
-	// surfaces a series and the Grafana panel shows "No data".
+	// Known topics absent from the result are reported as 0.
 	seen := make(map[string]struct{})
 	for rows.Next() {
 		var topic string

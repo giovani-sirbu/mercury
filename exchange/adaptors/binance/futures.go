@@ -6,13 +6,7 @@ import (
 	"github.com/giovani-sirbu/mercury/exchange/aggregates"
 )
 
-// GetFuturesBinanceActions builds the FuturesActions function-bag surface
-// the rest of mercury consumes. The individual method groups live in sibling
-// files:
-//
-//   - futuresOrders.go     — Create / List / Get / Cancel / Modify orders
-//   - futuresPositions.go  — GetSymbolPosition / SetSymbolLeverage
-//   - futuresMetadata.go   — GetFuturesExchangeInfo / GetIncomeHistory / GetFuturesBalance
+// GetFuturesBinanceActions builds the FuturesActions function bag.
 func GetFuturesBinanceActions(e aggregates.Exchange) aggregates.FuturesActions {
 	b := Binance{e}
 	return aggregates.FuturesActions{
@@ -30,9 +24,7 @@ func GetFuturesBinanceActions(e aggregates.Exchange) aggregates.FuturesActions {
 	}
 }
 
-// InitFuturesExchange constructs an authenticated futures client. TestNet
-// toggles the library-level global, so the same one-network-at-a-time
-// constraint as InitExchange applies here.
+// InitFuturesExchange constructs an authenticated futures client; TestNet toggles a library-level global.
 func InitFuturesExchange(exchange Binance) (*futures.Client, *common.APIError) {
 	if exchange.TestNet {
 		futures.UseTestnet = true

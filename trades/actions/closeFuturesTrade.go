@@ -2,60 +2,14 @@ package actions
 
 import (
 	"fmt"
-	"github.com/adshao/go-binance/v2/futures"
+	binanceFutures "github.com/adshao/go-binance/v2/futures"
 	"github.com/giovani-sirbu/mercury/events"
 	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/futures"
 	"math"
-	"sort"
 	"strconv"
 	"time"
 )
-
-func GetLatestIncome(event events.Events, timeWindow time.Duration) (float64, error) {
-	// Init futures client
-	client, clientError := event.Exchange.FuturesClient()
-	if clientError != nil {
-		return 0, clientError
-	}
-
-	// Fetch income history for the symbol
-	income, incomeErr := client.GetIncomeHistory(event.Trade.Symbol)
-	if incomeErr != nil {
-		return 0, incomeErr
-	}
-
-	if len(income) == 0 {
-		return 0, fmt.Errorf("couldn't fetch income")
-	}
-
-	// Sort income records by timestamp (descending, most recent first)
-	sort.Slice(income, func(i, j int) bool {
-		return income[i].Time > income[j].Time
-	})
-
-	// Group records within the same time window for the latest closed position
-	var totalPNL float64
-	latestTime := time.UnixMilli(income[0].Time) // Convert int64 to time.Time
-	for _, record := range income {
-		recordTime := time.UnixMilli(record.Time) // Convert int64 to time.Time
-		// Only include records within the time window of the latest record
-		if latestTime.Sub(recordTime) <= timeWindow {
-			pnl, err := strconv.ParseFloat(record.Income, 64)
-			if err != nil {
-				return 0, fmt.Errorf("failed to parse PNL: %v", err)
-			}
-			totalPNL += pnl
-		} else {
-			break // Exit once we go beyond the time window
-		}
-	}
-
-	if totalPNL == 0 {
-		return 0, fmt.Errorf("no realized PNL found in the time window")
-	}
-
-	return totalPNL, nil
-}
 
 func CloseFuturesTrade(event events.Events) (events.Events, error) {
 	// Init futures client
@@ -96,20 +50,20 @@ func CloseFuturesTrade(event events.Events) (events.Events, error) {
 		}
 
 		// Determine close side
-		closeSide := futures.SideTypeSell
+		closeSide := binanceFutures.SideTypeSell
 		if posAmt < 0 {
-			closeSide = futures.SideTypeBuy
+			closeSide = binanceFutures.SideTypeBuy
 		}
 
 		absQty := math.Abs(posAmt)
 		qtyStr := fmt.Sprintf("%.*f", event.Trade.StrategyPair.TradeFilters.LotSize, absQty)
 
 		// Step 3: Close the position
-		_, closeThePositionErr = client.CreateFuturesOrder(string(closeSide), string(futures.OrderTypeMarket), event.Trade.Symbol, qtyStr, "", true)
-		fmt.Println("CloseFuturesTrade, close position", string(closeSide), string(futures.OrderTypeMarket), event.Trade.Symbol, qtyStr)
+		_, closeThePositionErr = client.CreateFuturesOrder(string(closeSide), string(binanceFutures.OrderTypeMarket), event.Trade.Symbol, qtyStr, "", true)
+		fmt.Println("CloseFuturesTrade, close position", string(closeSide), string(binanceFutures.OrderTypeMarket), event.Trade.Symbol, qtyStr)
 	}
 
-	pnl, incomeErr := GetLatestIncome(event, 2*time.Second)
+	pnl, incomeErr := futures.GetLatestIncome(event, 2*time.Second)
 
 	if incomeErr != nil {
 		return events.Events{}, incomeErr

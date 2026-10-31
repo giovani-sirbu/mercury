@@ -1,0 +1,45 @@
+package tradelog
+
+import (
+	"github.com/giovani-sirbu/mercury/internal/testutil"
+	"github.com/giovani-sirbu/mercury/strategies/gates"
+	"testing"
+	"time"
+)
+
+// Two reasons alternating tick by tick collapse to one row per reason per
+// window: compared with the last row only, a trade that flips between two
+// reasons writes a row on every tick.
+func TestSaveHoldLogCollapsesAlternatingReasonsWithinWindow(t *testing.T) {
+	at := time.Date(2025, 10, 10, 21, 0, 0, 0, time.UTC)
+	const reasonA = patternHold
+	const reasonB = spacingHold
+	event := holdLogEvent(testutil.NewHoldTrade("trailingBuy", false), at)
+
+	step := func(reason string, offset time.Duration) {
+		event.Trade.PositionType = "trailingBuy"
+		event.Timestamp = at.Add(offset).UnixMilli()
+		event, _ = SaveHoldLog(event, "trailingBuy", gates.Hold{Reason: reason})
+	}
+
+	step(reasonA, 0)
+	step(reasonB, 15*time.Minute)
+	step(reasonA, 30*time.Minute)
+	step(reasonB, 45*time.Minute)
+	if got := holdMessages(event.Trade); len(got) != 2 {
+		t.Fatalf("A-B-A-B within the window must be two rows, got %v", got)
+	}
+
+	step(reasonA, holdRelogAfter+time.Minute)
+	if got := holdMessages(event.Trade); len(got) != 3 {
+		t.Fatalf("A a day later must be written again, got %v", got)
+	}
+	step(reasonB, holdRelogAfter+2*time.Minute)
+	if got := holdMessages(event.Trade); len(got) != 3 {
+		t.Fatalf("B's row is 23h47m old and must still collapse, got %v", got)
+	}
+	step(reasonB, holdRelogAfter+16*time.Minute)
+	if got := holdMessages(event.Trade); len(got) != 4 {
+		t.Fatalf("B a day after its row must be written again, got %v", got)
+	}
+}

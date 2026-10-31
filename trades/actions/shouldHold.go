@@ -2,85 +2,102 @@ package actions
 
 import (
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/strategies/gates"
+	"github.com/giovani-sirbu/mercury/strategies/gates/ai"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown/depthpriority"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown/depthspacing"
+	"github.com/giovani-sirbu/mercury/strategies/gates/cooldown/firstfill"
+	"github.com/giovani-sirbu/mercury/strategies/gates/patterns"
+	"github.com/giovani-sirbu/mercury/strategies/gates/smartsell"
+	"github.com/giovani-sirbu/mercury/trades/aggragates"
+	"github.com/giovani-sirbu/mercury/trades/tradelog"
 )
 
-const (
-	ActionHold  = "HOLD"
-	ActionLong  = "LONG"
-	ActionShort = "SHORT"
-)
-
-// ShouldHold blocks the action chain when the AI (or the classic cooldown
-// fallback) advises against acting on the current position. Holds are
-// recorded by saveHoldLog as INFO trade-log entries.
+// ShouldHold blocks the action chain when a strategy flag advises against
+// acting; a hold is recorded by tradelog.SaveHoldLog, with the gate's strategy
+// event beside the row where the gate owns one. Every gate answers to exactly
+// one flag, flag first and payload second: a payload fetched for another
+// flag's sake switches no gate on (StrategyParams.NeedsSophos). The smart
+// sell holds only the first fill here; on an open ladder it acts through
+// smartsell.Apply, after the ladder decides. With every flag off nothing
+// holds and the ladder is stopped by funds alone.
 func ShouldHold(event events.Events) (events.Events, error) {
-	cool := event.Params.CoolDownIndicators
-	ai := event.Params.AIIndicators
-
-	// A trade that has not entered yet is gated only on a clearly opposing
-	// signal.
-	if event.Params.OldPosition == "new" {
-		if ai.UseAI {
-			isBearishSignal := ai.AIMarketBearish || ai.AIAction == ActionShort
-			isBullishSignal := ai.AIMarketBullish || ai.AIAction == ActionLong
-
-			if !event.Trade.Inverse && isBearishSignal {
-				return saveHoldLog(event, "entry", "AI market is bearish")
-			}
-			if event.Trade.Inverse && isBullishSignal {
-				return saveHoldLog(event, "entry", "AI market is bullish")
-			}
-		}
-		return event, nil
+	if event.Params.OldPosition == aggragates.PositionNew {
+		return shouldHoldEntry(event)
 	}
+	return shouldHoldPosition(event)
+}
 
-	holdReason := ""
+// shouldHoldEntry is the first fill, judged on the side aggragates.EntrySide
+// resolves (Inverse on spot, the ML verdict on futures). In order: the wallet
+// reserve (depth priority), the smart sell entry holds (quiet decline,
+// flat market, then free fall prevention), the first-fill gate, then the
+// legacy AI veto. The wallet
+// reserve and the smart sell run before the first-fill gate so a held
+// entry neither consumes nor records a first-fill verdict.
+func shouldHoldEntry(event events.Events) (events.Events, error) {
+	params := event.Trade.Strategy.Params
+	side := aggragates.EntrySide(event.Trade, event.Params.AIIndicators)
 
-	if ai.UseAI {
-		if event.Trade.Inverse {
-			if event.Trade.PositionType == "stopLoss" && ai.AIMarketBullish {
-				holdReason = "AI market is bullish"
-			}
-			if event.Trade.PositionType == "takeProfit" && ai.AIMarketBearish {
-				holdReason = "AI market is bearish"
-			}
-		} else {
-			if event.Trade.PositionType == "stopLoss" && ai.AIMarketBearish {
-				holdReason = "AI market is bearish"
-			}
-			if event.Trade.PositionType == "takeProfit" && ai.AIMarketBullish {
-				holdReason = "AI market is bullish"
-			}
-		}
-
-		// Explicit HOLD means "no direction", so it gates only positions that
-		// add risk (rebuys/averaging). A profitable close reduces exposure and
-		// is allowed to execute — same rule for inverse trades, where
-		// takeProfit is still the profitable close.
-		if holdReason == "" && ai.AIAction == ActionHold && event.Trade.PositionType != "takeProfit" {
-			holdReason = "AI recommends HOLD"
-		}
-	} else {
-		if event.Trade.Inverse {
-			if event.Trade.PositionType == "stopLoss" && cool.MarketBullish {
-				holdReason = "cooldown market is bullish"
-			}
-			if event.Trade.PositionType == "takeProfit" && cool.MarketBearish {
-				holdReason = "cooldown market is bearish"
-			}
-		} else {
-			if event.Trade.PositionType == "stopLoss" && cool.MarketBearish {
-				holdReason = "cooldown market is bearish"
-			}
-			if event.Trade.PositionType == "takeProfit" && cool.MarketBullish {
-				holdReason = "cooldown market is bullish"
-			}
+	if params.Cooldown {
+		// Before the first-fill gate so a held entry records no verdict.
+		if hold := depthpriority.DepthPriorityHold(event, event.Trade.PositionType); hold.Held() {
+			return tradelog.SaveHoldLog(event, "entry", hold)
 		}
 	}
+	if params.SmartSell {
+		// No new ladder while a quiet decline, a flat market or a free fall reading stands.
+		if hold := smartsell.EntryHold(event.Trade, side, event.Params.AIIndicators); hold.Held() {
+			return tradelog.SaveHoldLog(event, "entry", hold)
+		}
+	}
+	if params.Cooldown {
+		// The gate hands the event back with the entered row firstfill.NextDepthDoubled reads.
+		var hold gates.Hold
+		event, hold = firstfill.FirstFillHold(event, side)
+		if hold.Held() {
+			return tradelog.SaveHoldLog(event, "entry", hold)
+		}
+	}
+	if params.UseAI {
+		if reason := ai.EntryHold(side, event.Params.AIIndicators); reason != "" {
+			return tradelog.SaveHoldLog(event, "entry", gates.Hold{Reason: reason, Key: aggragates.LogKeyHoldAI})
+		}
+	}
+	return event, nil
+}
 
-	if holdReason != "" {
-		return saveHoldLog(event, event.Trade.PositionType, holdReason)
+// shouldHoldPosition is every transition after the first fill: arming a depth
+// (trailingBuy), arming the exit (takeProfit) and the force-trailing re-anchors
+// of either. The first hold that speaks wins, in this order: the chart
+// patterns (UsePatterns), the legacy AI hold (UseAI), then under Cooldown the
+// wallet reserve (depth priority) and depth spacing, last because it has no
+// view of the market.
+func shouldHoldPosition(event events.Events) (events.Events, error) {
+	params := event.Trade.Strategy.Params
+	indicators := event.Params.AIIndicators
+	position := gates.PositionType(event.Trade.PositionType)
+
+	// The market families first; both write the row alone.
+	var hold gates.Hold
+	if params.UsePatterns {
+		hold = patterns.PositionHold(event, position, indicators)
+	}
+	if !hold.Held() && params.UseAI {
+		hold = gates.Hold{Reason: ai.LegacyHoldReason(event, position, indicators), Key: aggragates.LogKeyHoldAI}
 	}
 
+	if !hold.Held() && params.Cooldown {
+		hold = depthpriority.DepthPriorityHold(event, position)
+	}
+
+	if !hold.Held() && params.Cooldown {
+		// Last: depth spacing has no view of the market.
+		hold = depthspacing.DepthSpacingHold(event, position)
+	}
+
+	if hold.Held() {
+		return tradelog.SaveHoldLog(event, event.Trade.PositionType, hold)
+	}
 	return event, nil
 }

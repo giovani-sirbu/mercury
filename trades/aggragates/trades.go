@@ -29,10 +29,12 @@ type (
 		PendingOrder    int64           `gorm:"index" bson:"pendingOrder" json:"pendingOrder"`
 		History         []TradesHistory `gorm:"foreignKey:TradeID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" bson:"history" json:"history"`
 		Logs            []TradesLogs    `gorm:"foreignKey:TradeID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" bson:"logs" json:"logs"`
-		Status          Status          `gorm:"default:active;index;index:idx_dashboard_stats,priority:3;index:idx_user_status,priority:2;" bson:"status" json:"status"`
-		CreatedAt       time.Time       `form:"createdAt" json:"createdAt" xml:"createdAt"`
-		UpdatedAt       time.Time       `gorm:"index;index:idx_dashboard_stats,priority:4" form:"updatedAt" json:"updatedAt" xml:"updatedAt"`
-		DeletedAt       gorm.DeletedAt  `gorm:"index" form:"deletedAt" json:"-" xml:"deletedAt"`
+		// StrategyEvents is the state of the strategy gates, one event per gate execution, append-only.
+		StrategyEvents []TradesStrategyEvents `gorm:"foreignKey:TradeID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"strategyEvents"`
+		Status         Status                 `gorm:"default:active;index;index:idx_dashboard_stats,priority:3;index:idx_user_status,priority:2;" bson:"status" json:"status"`
+		CreatedAt      time.Time              `form:"createdAt" json:"createdAt" xml:"createdAt"`
+		UpdatedAt      time.Time              `gorm:"index;index:idx_dashboard_stats,priority:4" form:"updatedAt" json:"updatedAt" xml:"updatedAt"`
+		DeletedAt      gorm.DeletedAt         `gorm:"index" form:"deletedAt" json:"-" xml:"deletedAt"`
 	}
 	UsedAmountResult struct {
 		UsedAmount    float64 `json:"usedAmount"`
@@ -40,9 +42,9 @@ type (
 	}
 
 	CoolDownIndicators struct {
-		VolatilityScore float64 `json:"volatilityScore"`
-		MarketBullish   bool    `json:"marketBullish"`
-		MarketBearish   bool    `json:"marketBearish"`
+		HasFirstFillVerdict bool `json:"hasFirstFillVerdict"`
+		AllowLongEntry      bool `json:"allowLongEntry"`
+		AllowShortEntry     bool `json:"allowShortEntry"`
 	}
 
 	AIIndicators struct {
@@ -51,7 +53,34 @@ type (
 		AIAction         string
 		AISignalStrength float64
 		StayOutReasons   []string
-		UseAI            bool
+		// PatternAction is the /patterns side, kept apart from AIAction.
+		PatternAction string
+		// The chart-pattern verdict from /patterns; zero values mean no pattern.
+		PatternName        string
+		PatternDisplayName string
+		PatternDirection   string
+		PatternScore       float64
+		PatternLevel       float64
+		PatternLevelKind   string
+		PatternStopLoss    float64
+		PatternTakeProfit  float64
+		PatternInterval    string
+		// Fibonacci retracement of the last up-swing; empty means no swing.
+		FibSwingLow  float64
+		FibSwingHigh float64
+		FibLevels    []float64
+		// SmartSell is the /patterns chart block the engines hand to
+		// gates/smartsell.Apply; every zero field is inert.
+		SmartSell SmartSellIndicators
+		// DynamicParams is the SMC trend dashboard's reads a ladder opens on
+		// (dynamicparams.Opening); the zero block raises nothing.
+		DynamicParams DynamicParamsIndicators
+	}
+
+	// AssetFree is one asset's free balance on the wallet, as of the tick.
+	AssetFree struct {
+		Asset string  `json:"asset"`
+		Free  float64 `json:"free"`
 	}
 
 	Params struct {
@@ -65,5 +94,19 @@ type (
 		InverseUsedAmount  []UsedAmountResult
 		CoolDownIndicators CoolDownIndicators
 		AIIndicators       AIIndicators
+		// WalletLadders is every active parent ladder of this wallet, set by the
+		// engines only on ticks depthpriority.DepthPriorityApplies allows; nil holds nothing.
+		WalletLadders []LadderDepth
+		// WalletFree is the wallet's free balance per asset on the same ticks;
+		// an asset with no entry is unknown and holds nothing.
+		WalletFree []AssetFree
+		// AvailableQuantity is the balance the entry must not exceed, set by
+		// HasFunds when it waives a shortfall.
+		AvailableQuantity float64
+		// EntrySettings sizes the first entry when set (the raised rows); never persisted.
+		EntrySettings []StrategySettings
+		// OldStatus is the trade's status as the tick found it: set, tradelog.SaveHoldLog settles a
+		// held trade's status (SettledStatus); empty leaves the status untouched.
+		OldStatus Status
 	}
 )

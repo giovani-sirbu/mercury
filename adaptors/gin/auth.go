@@ -11,10 +11,7 @@ import (
 	"github.com/giovani-sirbu/mercury/metrics"
 )
 
-// authServiceName is the value used for the `service` label on the auth
-// metrics. Read from the same SERVICE_NAME env var the rest of mercury
-// uses for self-identification, falling back to "unknown" so a missing
-// env doesn't dump everything into an empty label.
+// authServiceName is the service label of the auth metrics, from SERVICE_NAME.
 func authServiceName() string {
 	if v := os.Getenv("SERVICE_NAME"); v != "" {
 		return v
@@ -27,10 +24,7 @@ func stringToUint(s string) uint {
 	return uint(i)
 }
 
-// extractBearerToken returns the token from an `Authorization: Bearer <token>` header.
-// It returns ok=false when the header is missing or malformed so callers can reject
-// the request without indexing into an out-of-range slice (the prior version panicked
-// on headers that did not contain a space).
+// extractBearerToken returns the token of an Authorization: Bearer header; ok is false when missing or malformed.
 func extractBearerToken(c *gin.Context) (string, bool) {
 	authHeader := c.Request.Header["Authorization"]
 	if len(authHeader) < 1 || authHeader[0] == "" {
@@ -72,9 +66,7 @@ func IsAuth(c *gin.Context) {
 			return
 		}
 		if userInfo.Id != userId && userInfo.Role != "admin" {
-			// Token is valid but targets another user's resource — the
-			// strongest cross-tenant-attack signal we have. Tracking it
-			// separately from "invalid" so alerts can fire only on this.
+			// A valid token targeting another user's resource.
 			metrics.JWTValidationFailures.WithLabelValues(svc, "forbidden").Inc()
 			c.Abort()
 			Response(c, http.StatusForbidden, "ACCESS_FORBIDDEN")

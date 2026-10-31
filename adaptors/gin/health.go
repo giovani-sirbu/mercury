@@ -13,50 +13,26 @@ import (
 	"gorm.io/gorm"
 )
 
-// readyCheckTimeout caps how long any single dependency check is allowed to
-// hang. The whole readiness probe should complete inside the k8s probe
-// timeout (typically 1s) — keep this generous enough for healthy systems
-// but short enough that a stuck downstream is flagged quickly.
+// readyCheckTimeout caps one dependency check.
 const readyCheckTimeout = 2 * time.Second
 
-// HealthCheck is a single dependency check. Returning a non-nil error marks
-// the service as not-ready. Implementations should be fast (sub-second) —
-// the readiness probe is called on a tight cadence by k8s.
+// HealthCheck is one dependency check; a non-nil error marks the service not ready.
 type HealthCheck func() error
 
-// Liveness returns a gin handler suitable for the `/healthz` endpoint.
-// Liveness only proves the process is running and the gin loop is responsive —
-// it intentionally does NOT touch DB / Redis / broker, because those failures
-// should NOT cause the pod to be killed and restarted. Use Readiness for that.
-//
-// Pair with k8s livenessProbe so a deadlocked process gets restarted but a
-// transient downstream blip does not.
+// Liveness is the /healthz handler: it proves the process runs and touches no dependency.
 func Liveness() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "alive"})
 	}
 }
 
-// Readiness returns a gin handler suitable for the `/readyz` endpoint.
-// Runs each check sequentially; returns 503 with the failing check name on
-// the first error. All checks pass → 200.
-//
-// k8s should call this on readinessProbe — pods that fail readiness are
-// pulled out of the Service endpoint list but not restarted.
-//
-// Each service passes the checks for its real dependencies:
-//
-//	r.GET("/readyz", adapter.Readiness(
-//	    adapter.Check("db", func() error { return server.DB.Exec("SELECT 1").Error }),
-//	    adapter.Check("redis", server.Cache.Ping),
-//	    adapter.Check("broker", func() error { return server.Broker.Ping(ctx) }),
-//	))
+// Readiness is the /readyz handler: the checks run in order and the first
+// failure answers 503 with its name.
 func Readiness(checks ...NamedCheck) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		for _, nc := range checks {
 			if err := nc.Check(); err != nil {
-				// Log the raw dependency error server-side; do not leak internal
-				// error details (DSNs, host names, driver messages) to the caller.
+				// Logged server-side; never leaked to the caller.
 				commonLog.Error(err.Error(), "Readiness", nc.Name)
 				c.JSON(http.StatusServiceUnavailable, gin.H{
 					"status": "not ready",
@@ -69,25 +45,18 @@ func Readiness(checks ...NamedCheck) gin.HandlerFunc {
 	}
 }
 
-// NamedCheck binds a check function to a human-readable name so the readyz
-// response can identify which dependency is down.
+// NamedCheck binds a check to the name the readyz response reports.
 type NamedCheck struct {
 	Name  string
 	Check HealthCheck
 }
 
-// Check is a small constructor for NamedCheck so call sites read like data:
-//
-//	adapter.Readiness(
-//	    adapter.Check("db", dbPing),
-//	    adapter.Check("redis", redisPing),
-//	)
+// Check builds a NamedCheck.
 func Check(name string, check HealthCheck) NamedCheck {
 	return NamedCheck{Name: name, Check: check}
 }
 
-// DBCheck builds a readiness check that pings the underlying sql.DB inside a
-// short timeout. Pass nil to skip — useful for services without a DB (hermes).
+// DBCheck pings the sql.DB inside readyCheckTimeout; nil skips.
 func DBCheck(db *gorm.DB) NamedCheck {
 	return NamedCheck{
 		Name: "db",
@@ -106,8 +75,7 @@ func DBCheck(db *gorm.DB) NamedCheck {
 	}
 }
 
-// CacheCheck builds a readiness check that pings Redis through mercury's
-// Memory wrapper.
+// CacheCheck pings Redis through the Memory wrapper.
 func CacheCheck(cache *memory.Memory) NamedCheck {
 	return NamedCheck{
 		Name: "redis",
@@ -115,9 +83,7 @@ func CacheCheck(cache *memory.Memory) NamedCheck {
 			if cache == nil {
 				return nil
 			}
-			// memory.Memory.Ping has no context variant, so cap it with a
-			// timeout here for parity with DBCheck/BrokerCheck — a stuck Redis
-			// must not hang the readiness probe past readyCheckTimeout.
+			// Ping has no context variant, so cap it here.
 			done := make(chan error, 1)
 			go func() { done <- cache.Ping() }()
 			select {
@@ -130,9 +96,7 @@ func CacheCheck(cache *memory.Memory) NamedCheck {
 	}
 }
 
-// BrokerCheck builds a readiness check that pings the shared messagebroker
-// pool. The pool is package-level state inside mercury/messagebroker, so no
-// argument is needed.
+// BrokerCheck pings the shared messagebroker pool.
 func BrokerCheck() NamedCheck {
 	return NamedCheck{
 		Name: "broker",

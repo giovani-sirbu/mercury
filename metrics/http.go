@@ -5,18 +5,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// HTTPRequestDuration is the per-request server-side histogram, observed by
-// the gin middleware in mercury/adaptors/gin. Use `histogram_quantile(0.99,
-// rate(http_request_duration_seconds_bucket{service="agora"}[5m]))` for a
-// per-service p99 latency line in Grafana.
-//
-// Labels are deliberately bounded:
-//   - service: agora / hermes / hellenes / iris / sophos
-//   - method:  GET / POST / etc. (always a small set)
-//   - route:   gin's c.FullPath() — the template, NOT the realised URL. This
-//              keeps cardinality at O(routes) instead of O(unique URLs).
-//              Empty for routes that didn't match (NoRoute / 404 path).
-//   - status:  HTTP status code as string ("200", "404", "500", ...)
+// HTTPRequestDuration times server requests; route is gin's template, never the realised URL.
 var HTTPRequestDuration = promauto.With(Registry).NewHistogramVec(
 	prometheus.HistogramOpts{
 		Name:    "http_request_duration_seconds",
@@ -26,9 +15,7 @@ var HTTPRequestDuration = promauto.With(Registry).NewHistogramVec(
 	[]string{"service", "method", "route", "status"},
 )
 
-// HTTPRequestsTotal complements the histogram with a plain counter so request
-// rate is queryable without going through `_count` math on the histogram.
-// Same label set so the two can be cross-referenced.
+// HTTPRequestsTotal counts server requests with the histogram's label set.
 var HTTPRequestsTotal = promauto.With(Registry).NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "http_requests_total",
@@ -37,16 +24,7 @@ var HTTPRequestsTotal = promauto.With(Registry).NewCounterVec(
 	[]string{"service", "method", "route", "status"},
 )
 
-// HTTPInFlight tracks the current number of in-flight HTTP requests per
-// service. Incremented on middleware entry, decremented on exit via defer
-// so it stays accurate even if a handler panics.
-//
-// Why this matters even when we have duration + RPS: latency can climb
-// either because individual requests are slow OR because requests are
-// queuing behind a saturated worker. RPS + latency look the same in both
-// cases; in-flight count tells them apart. A spike in in-flight without a
-// matching duration spike = a flood of concurrent traffic; durations
-// rising while in-flight stays flat = handlers genuinely slowing down.
+// HTTPInFlight is the number of requests currently being served per service.
 var HTTPInFlight = promauto.With(Registry).NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "http_in_flight_requests",

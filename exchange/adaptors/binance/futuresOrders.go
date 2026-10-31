@@ -89,14 +89,8 @@ func (e Binance) CancelOrders(symbol string, orderId int64) (aggregates.CancelFu
 	return cancelOrder, ApiError(err)
 }
 
-// ModifyFuturesOrderPrice replaces a STOP_MARKET order's trigger price by
-// cancelling the original and placing a new one. Binance has no in-place
-// modify for STOP_MARKET, so this sequence (cancel -> validate vs mark price
-// -> derive ReduceOnly from current position -> recreate) is deliberate.
-//
-// The validation step guards against accidentally placing a stop on the
-// wrong side of the current price, which binance would accept and trigger
-// instantly.
+// ModifyFuturesOrderPrice replaces a STOP_MARKET order's trigger price:
+// cancel, validate against the mark price, derive ReduceOnly, recreate.
 func (e Binance) ModifyFuturesOrderPrice(symbol string, orderId int64, newPrice string) (aggregates.CreateOrderResponse, *common.APIError) {
 	var updateResponse aggregates.CreateOrderResponse
 

@@ -1,160 +1,87 @@
 package actions
 
 import (
-	"errors"
 	"fmt"
+
 	"github.com/giovani-sirbu/mercury/events"
-	"github.com/giovani-sirbu/mercury/exchange/aggregates"
-	"github.com/giovani-sirbu/mercury/trades"
-	"github.com/giovani-sirbu/mercury/trades/aggragates"
-	"strconv"
-	"strings"
+	"github.com/giovani-sirbu/mercury/helpers"
+	"github.com/giovani-sirbu/mercury/trades/funds"
+	"github.com/giovani-sirbu/mercury/trades/ladder"
+	"github.com/giovani-sirbu/mercury/trades/quantities"
+	"github.com/giovani-sirbu/mercury/trades/tradelog"
 )
 
-func GetAssetBudget(assets []aggregates.UserAssetRecord, assetSymbol string) float64 {
-	var remainedQuantity float64 // Init needed quantity
+// AllowRoundedQuantityPercentage is how far under the quantity an entry needs
+// the wallet may sit and still place that entry for what it holds, as a share
+// of the needed quantity; a wider shortfall blocks. Zero turns the waiver off.
+const AllowRoundedQuantityPercentage = 10.0
 
-	// Check if account has remaining balance for pair
-	for _, balance := range assets {
-		if balance.Asset == assetSymbol {
-			floatQuantity, _ := strconv.ParseFloat(balance.Free, 64)
-			remainedQuantity = floatQuantity
-		}
-	}
-
-	return remainedQuantity
-}
-
-func GetUsedQuantities(event events.Events) float64 {
-	buyQty, sellQty := GetGrossQuantities(event)
-	// Literal asset fees only: see sell.go for the rationale (BNB and other
-	// third-asset fees do not reduce base or quote wallet balances).
-	feeInBase, _ := CalculateFees(event)
-	quantity := buyQty - sellQty - feeInBase
-
-	if event.Trade.Inverse {
-		sellInQuote := trades.GetQuantityInQuote(event.Trade.History, "BUY")
-		buyInQuote := trades.GetQuantityInQuote(event.Trade.History, "SELL")
-		quantity = sellInQuote - buyInQuote
-		quantity = quantity / event.Trade.PositionPrice
-		quantity = quantity - feeInBase
-	}
-
-	quantity = ToFixed(quantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
-	return quantity
-}
-
-func GetFundsQuantities(event events.Events) (float64, float64, string, error) {
-	client, clientErr := event.Exchange.Client()
-	if clientErr != nil {
-		return 0, 0, "", clientErr
-	}
-
-	// get user assets (and check IP restrictions if any)
-	assets, assetsErr := client.GetUserAssets() // Get user balance
-	sellAction := false
-	if assetsErr != nil {
-		return 0, 0, "", assetsErr
-	}
-
-	// check if spot & margin trading is enabled
-	permissions, permissionsErr := client.APIKeyPermission()
-	if permissionsErr != nil {
-		return 0, 0, "", permissionsErr
-	}
-	if !permissions.EnableSpotAndMarginTrading {
-		return 0, 0, "", errors.New("Spot & Margin Trading is not enabled")
-	}
-
-	// check if symbol is whitelisted
-	priceInString := strconv.FormatFloat(event.Trade.PositionPrice, 'f', -1, 64)
-	_, err := client.Sell(event.Trade.Symbol, 0, priceInString)
-	if err != nil {
-		// -2010 is code for whitelisted symbol
-		if err.Code == -2010 {
-			return 0, 0, "", err
-		}
-	}
-
-	strategySettings := event.Trade.StrategyPair.StrategySettings
-	filledEntries := trades.CountFilledEntries(event.Trade)
-	// Same row-selection contract as Buy: entry N reads row N-1, missing rows
-	// fall back to the base row 0.
-	settingsIndex := trades.SettingsIndexOrBase(strategySettings, filledEntries)
-
-	pairSymbols := strings.Split(event.Trade.Symbol, "/")
-	multiplier := strategySettings[settingsIndex].Multiplier
-
-	var assetSymbol string
-	var neededQuantity float64
-
-	if event.Trade.PositionType == "sell" || event.Trade.PositionType == "takeProfit" || event.Trade.PositionType == "sellParent" {
-		sellAction = true
-	}
-
-	if sellAction {
-		buyQty, sellQty := GetGrossQuantities(event)
-		assetSymbol = pairSymbols[0]
-		neededQuantity = buyQty - sellQty
-
-		// Literal asset fees only — see sell.go for the rationale.
-		feeInBase, feeInQuote := CalculateFees(event)
-		neededQuantity -= feeInBase
-
-		if event.Trade.Inverse {
-			neededQuantity = (sellQty - buyQty - feeInQuote) * event.Trade.PositionPrice
-			assetSymbol = pairSymbols[1]
-		}
-	} else {
-		assetSymbol = pairSymbols[1]
-		quantityType := "BUY"
-		if event.Trade.Inverse {
-			quantityType = "SELL"
-			assetSymbol = pairSymbols[0]
-		}
-		neededQuantity = trades.GetLatestQuantityByHistory(event.Trade.History, quantityType) * multiplier
-		if !event.Trade.Inverse {
-			neededQuantity *= event.Trade.PositionPrice
-		}
-	}
-
-	remainedQuantity := GetAssetBudget(assets, assetSymbol)
-
-	if !event.Trade.Inverse {
-		remainedQuantity = remainedQuantity - aggragates.FindUsedAmount(event.Params.InverseUsedAmount, assetSymbol)
-		neededQuantity = ToFixed(neededQuantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
-	}
-
-	return remainedQuantity, neededQuantity, assetSymbol, nil
-}
-
+// HasFunds checks the wallet covers the next order. A small entry shortfall
+// is waived (AllowsRoundedQuantity) and Buy trims the entry to the wallet; a
+// ladder with fills under the Impasse flag flips to impasse when a fresh
+// ladder could be sized from what it used; anything else blocks the trade
+// with an insufficient-funds error.
 func HasFunds(event events.Events) (events.Events, error) {
-	remainedQuantity, neededQuantity, assetSymbol, err := GetFundsQuantities(event)
+	remainedQuantity, neededQuantity, assetSymbol, err := funds.GetFundsQuantities(event)
 
 	if err != nil {
 		return events.Events{}, err
 	}
 
 	if remainedQuantity < neededQuantity {
-		// enter take loss mode if this feature is activated for this strategy; takes precedence over impasse
-		if event.Trade.Strategy.Params.TakeLoss && event.Trade.ParentID == 0 {
-			// message must not contain "Insufficient funds" so SaveError keeps the trade active instead of blocking it
-			msg := fmt.Sprintf("Take loss mode activated: budget (%f %s) is below the required %f %s for the next %s.", remainedQuantity, assetSymbol, neededQuantity, assetSymbol, event.Trade.PositionType)
-			event.Trade.PositionType = "takeLoss"
-			return SaveError(event, fmt.Errorf(msg))
+		// A marginal shortfall buys what the wallet affords; Buy reads the amount off Params.
+		if AllowsRoundedQuantity(event, remainedQuantity, neededQuantity) {
+			event.Params.AvailableQuantity = remainedQuantity
+			return event, nil
 		}
 
-		// set trade to impasse if this feature is activated for this strategy
-		if event.Trade.Strategy.Params.Impasse && event.Trade.ParentID == 0 {
-			usedAmount := GetUsedQuantities(event) * event.Trade.PositionPrice
-			_, hasFundsError := trades.CalculateInitialBid(usedAmount, event.Trade, 0)
+		// A first entry has no position to average down, so impasse never applies to it.
+		firstEntry := len(event.Trade.History) == 0
+		// The impasse check sizes a ladder from the trade's own rows, never Params.EntrySettings.
+		if !firstEntry && event.Trade.Strategy.Params.Impasse && event.Trade.ParentID == 0 {
+			usedAmount := quantities.GetUsedQuantities(event) * event.Trade.PositionPrice
+			_, hasFundsError := ladder.CalculateInitialBid(usedAmount, event.Trade, 0)
 			if hasFundsError == nil {
 				event.Trade.PositionType = "impasse"
 			}
 		}
 
-		return SaveError(event, fmt.Errorf("Insufficient funds (%f %s) for the requested action (%s). You need at least %f %s to resume this trade.", remainedQuantity, assetSymbol, event.Trade.PositionType, neededQuantity, assetSymbol))
+		return tradelog.SaveError(event, fmt.Errorf("Insufficient funds (%f %s) for the requested action (%s). You need at least %f %s to resume this trade.", remainedQuantity, assetSymbol, event.Trade.PositionType, neededQuantity, assetSymbol))
 	}
 
 	return event, nil
+}
+
+// AllowsRoundedQuantity reports whether the wallet sits close enough under the
+// quantity the next entry needs for that entry to be placed for the wallet's
+// amount instead of blocking. Entries only: a short close is a missing
+// position, not a missing budget, and a trimmed close would leave a remainder
+// under the exchange minimum. Exported because the sisyphus backtest's own
+// HasFunds must answer it the same way.
+func AllowsRoundedQuantity(event events.Events, remainedQuantity, neededQuantity float64) bool {
+	if AllowRoundedQuantityPercentage <= 0 {
+		return false
+	}
+
+	// A needed quantity of zero is no shortfall to round off.
+	if neededQuantity <= 0 || remainedQuantity <= 0 || event.Trade.PositionPrice <= 0 {
+		return false
+	}
+
+	if funds.IsSellAction(event.Trade.PositionType) {
+		return false
+	}
+
+	if neededQuantity-remainedQuantity > neededQuantity*AllowRoundedQuantityPercentage/100 {
+		return false
+	}
+
+	// The affordable entry must still clear the exchange minimum, or Buy raises it back over the wallet.
+	affordableQuantity := remainedQuantity
+	if !event.Trade.Inverse {
+		affordableQuantity = remainedQuantity / event.Trade.PositionPrice
+	}
+	affordableQuantity = helpers.ToFixed(affordableQuantity, int(event.Trade.StrategyPair.TradeFilters.LotSize))
+
+	return affordableQuantity >= quantities.CalculateMinOrderQty(event.Trade)
 }

@@ -9,8 +9,7 @@ import (
 	"github.com/jinzhu/copier"
 )
 
-// GetFuturesExchangeInfo returns the /exchangeInfo payload for the futures
-// market (all symbols). Callers filter client-side.
+// GetFuturesExchangeInfo returns the futures /exchangeInfo payload, all symbols.
 func (e Binance) GetFuturesExchangeInfo() (aggregates.ExchangeInfo, *common.APIError) {
 	var exchangeInfo aggregates.ExchangeInfo
 	client, initErr := InitFuturesExchange(e)
@@ -22,13 +21,8 @@ func (e Binance) GetFuturesExchangeInfo() (aggregates.ExchangeInfo, *common.APIE
 	return exchangeInfo, ApiError(err)
 }
 
-// GetIncomeHistory returns REALIZED_PNL and COMMISSION entries combined for
-// a single symbol. Binance splits income by type in the API; callers that
-// compute P&L need both, so we fetch them in sequence and concatenate.
-//
-// Note: if fees error but income succeeds we still return the income list
-// with the fees error surfaced — matches the original behaviour where the
-// caller only sees a single error.
+// GetIncomeHistory returns a symbol's REALIZED_PNL and COMMISSION entries
+// together; a fees error is surfaced beside the income list.
 func (e Binance) GetIncomeHistory(symbol string) ([]aggregates.IncomeHistory, *common.APIError) {
 	var incomeHistory []aggregates.IncomeHistory
 	client, initErr := InitFuturesExchange(e)

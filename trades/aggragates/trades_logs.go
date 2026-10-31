@@ -8,10 +8,13 @@ const LOG_INFO = "INFO"
 const LOG_WARNING = "WARNING"
 const LOG_ERROR = "ERROR"
 
+// TradesLogs is one row of a trade's log: Message the readable text, MessageKey its code
+// (TransitionKey, a LogKey constant or a smartSell row's key), empty on rows written before the key.
 type TradesLogs struct {
 	ID         uint      `gorm:"primaryKey" form:"id" json:"id" xml:"id"`
 	TradeID    uint      `gorm:"index:idx_trade_id_type,priority:1" form:"tradeId" json:"tradeId" xml:"tradeId"`
 	Message    string    `bson:"message" json:"message"`
+	MessageKey string    `gorm:"type:varchar(64);index" bson:"messageKey" json:"messageKey"`
 	Type       string    `gorm:"index:idx_trade_id_type,priority:2" bson:"type" json:"type"`
 	Quantity   float64   `bson:"quantity" json:"quantity"`
 	Price      float64   `bson:"price" json:"price"`

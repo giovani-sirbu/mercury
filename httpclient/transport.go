@@ -1,8 +1,4 @@
-// Package httpclient provides a small RoundTripper wrapper that emits the
-// HTTPClientRequestDuration + HTTPClientRequestsTotal metrics on every
-// outbound request. Designed to be dropped in by replacing a client's
-// Transport field — zero changes at the call sites of an existing
-// http.Client.
+// Package httpclient is a RoundTripper wrapper that emits the outbound HTTP client metrics.
 package httpclient
 
 import (
@@ -13,18 +9,7 @@ import (
 	"github.com/giovani-sirbu/mercury/metrics"
 )
 
-// InstrumentTransport wraps base so each round-trip emits client metrics.
-// If base is nil, http.DefaultTransport is used.
-//
-// Typical use in a service's externalRequest.go:
-//
-//	sharedHTTPClient := &http.Client{Timeout: 5 * time.Second}
-//	sharedHTTPClient.Transport = httpclient.InstrumentTransport(
-//	    sharedHTTPClient.Transport, "agora")
-//
-// The service label is fixed (the caller's name). target_host comes from
-// req.URL.Host on each call so a single client used to talk to multiple
-// downstreams is broken down naturally.
+// InstrumentTransport wraps base so each round trip emits client metrics; nil base is the default transport.
 func InstrumentTransport(base http.RoundTripper, serviceName string) http.RoundTripper {
 	if base == nil {
 		base = http.DefaultTransport
@@ -42,9 +27,6 @@ func (m *measuringRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 	resp, err := m.base.RoundTrip(req)
 	elapsed := time.Since(start).Seconds()
 
-	// status_class buckets requests into 5 stable values regardless of
-	// the exact code. Keeps cardinality bounded across hundreds of
-	// distinct downstream status codes.
 	var statusClass string
 	if err != nil {
 		statusClass = "transport_error"
@@ -68,9 +50,7 @@ func (m *measuringRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 	return resp, err
 }
 
-// classify maps a numeric HTTP status into a low-cardinality class label.
-// Same scheme used elsewhere in the platform (see exchange instrumentation)
-// so dashboards can reuse the same drilldown vocabulary.
+// classify maps an HTTP status onto its class label.
 func classify(code int) string {
 	switch {
 	case code >= 500:

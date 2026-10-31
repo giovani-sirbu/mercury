@@ -2,6 +2,7 @@ package actions
 
 import (
 	"github.com/giovani-sirbu/mercury/events"
+	"github.com/giovani-sirbu/mercury/trades/tradelog"
 )
 
 func CancelPendingOrder(event events.Events) (events.Events, error) {
@@ -13,7 +14,7 @@ func CancelPendingOrder(event events.Events) (events.Events, error) {
 		_, err := client.CancelOrder(event.Trade.PendingOrder, event.Trade.Symbol)
 
 		if err != nil {
-			return SaveError(event, err)
+			return tradelog.SaveError(event, err)
 		}
 		event.Trade.PendingOrder = 0
 		return event, nil
